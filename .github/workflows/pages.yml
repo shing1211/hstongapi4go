@@ -19,9 +19,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - uses: peaceiris/actions-mkdocs-gh-pages@v4
+
+      - name: Install dependencies
+        run: pip install --quiet -r requirements-docs.txt
+
+      - name: Build site
+        run: mkdocs build --strict
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
         with:
-          devtools: false
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./site
