@@ -1,0 +1,39 @@
+T02 — Repo/CI scaffolding — evidence
+Run: 2026-09-21-hstong-full-surface
+Status: done
+Role: devops
+
+Files created/modified
+- go.mod (module github.com/shing1211/hstongapi4go, go 1.26, no deps)
+- doc.go (SPDX header, package hstongapi4go)
+- Makefile (18 targets: help tools build fmt vet test test-race test-integration
+  coverage check money-check proto proto-verify docs-check license license-check
+  mock-gateway clean; SHELL := /bin/bash; .DEFAULT_GOAL := help)
+- .golangci.yml (v2 schema; excludes gen/, *.pb.go, proto/)
+- .editorconfig
+- .gitignore (modified: coverage, dist/, site/, .venv/, __pycache__,
+  archive extensions, /华盛通OpenAPI-*)
+- NOTICE, DISCLAIMER.md, THIRD_PARTY_NOTICES.md
+- scripts/check_money.py
+- .github/workflows/ci.yml (jobs: build, lint)
+
+Commands run + results
+- go build ./...                 -> exit 0
+- go vet ./...                   -> exit 0
+- gofmt -l . / gofmt -s -l .     -> empty
+- go test ./...                  -> no test files, exit 0
+- go test -race -count=1 ./...   -> no test files, exit 0
+- python scripts/check_money.py  -> "money-check OK: pkg/ does not exist yet", exit 0
+- golangci-lint run ./...        -> 0 issues (v2.9.0, Go 1.26.8)
+- yaml.safe_load(ci.yml)         -> OK; jobs [build, lint]
+- check_money positive probe     -> exit 1 (correctly flagged float money fields)
+- git check-ignore archive       -> /华盛通OpenAPI-* ignored
+- git check-ignore proto/example -> NOT ignored (required)
+
+Environment notes
+- `make` unavailable on this Windows host; recipes verified by inspection and
+  underlying commands run directly. CI (ubuntu-latest) has make.
+- `python3` resolves to the WindowsApps stub locally; verified with `python`;
+  CI uses real python3.
+- Placeholder phase mapping: proto/proto-verify -> P01, docs-check -> P11,
+  mock-gateway -> P09, test-integration -> P12.

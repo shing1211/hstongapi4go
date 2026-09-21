@@ -1,0 +1,145 @@
+P10 fixes — push flake + public hardening aliases
+Date: 2026-09-21
+Environment: Windows, go1.26.8 windows/amd64, GOTMPDIR=C:\Users\Tchan\AppData\Local\Temp\opencode
+
+================================================================
+Defect 1 — internal/push flaky under -race under load
+================================================================
+
+Reproduction (before fix)
+
+  go test -race -count=5 ./...
+  --- FAIL: TestClientDecodesTypedNotifications (0.01s)
+      client_test.go:271: OrderBook payload = &notify.TradeStockDeliverNotify{...} (ok=false)
+  --- FAIL: TestClientDecodesTypedNotifications (0.03s)
+      client_test.go:265: Ticker payload = &notify.OrderBookFullNotify{...} (ok=false)
+  --- FAIL: TestClientDecodesTypedNotifications (0.03s)
+      client_test.go:277: Broker payload = &notify.TradeStockDeliverNotify{...} (ok=false)
+  FAIL
+  FAIL	github.com/shing1211/hstongapi4go/internal/push	3.221s
+
+Root cause (test timing, not a production bug)
+
+  TestClientDecodesTypedNotifications registered one handler per notify type
+  (5 dispatchers), wrote 5 frames, and then asserted the notifications arrived
+  in the same cross-type order as the writes. Delivery order *across* types is
+  undefined by design: SubscribeTypes gives every notify type its own
+  dispatcher goroutine (internal/push/client.go), so five independent
+  goroutines race to enqueue into the shared `got` channel. Under CPU load the
+  arrival order changes and the positional assertions fail. No production bug:
+  per-type FIFO is preserved; only cross-type ordering was (wrongly) assumed.
+
+Fixes (test only)
+  - internal/push/client_test.go
+    * Added waitNotificationsByType, which collects exactly N notifications and
+      indexes them by notify type (5s timeout, duplicate detection).
+    * TestClientDecodesTypedNotifications now looks each payload up by type
+      instead of by arrival position.
+    * TestClientIgnoresHeartbeat: removed the "no extra event after 100ms
+      sleep" assertion. It now writes a second real notification and asserts the
+      two subscribed notifications arrive in wire order; since the read loop
+      processes frames sequentially, any heartbeat-derived notification would
+      have to arrive before the first push, which the first ID check rejects.
+  - internal/push/verify_test.go
+    * TestClientVerificationDropsTamperedFrame: removed the 150ms
+      absence-after-sleep check. After the signature-mismatch error it writes a
+      valid frame and requires that frame to be the next notification; a dropped
+      frame cannot be delivered later because the read loop is sequential.
+
+Confirmation (after fix)
+
+  go test ./internal/push/... -race -count=20 -parallel 16
+  ok  	github.com/shing1211/hstongapi4go/internal/push	5.702s
+  (20 runs, 0 failures)
+
+  go test -race -count=5 ./...   # exact previously-failing scenario
+  ok  	github.com/shing1211/hstongapi4go/client	5.324s
+  ok  	github.com/shing1211/hstongapi4go/internal/push	2.858s
+  ... (all packages ok)
+
+================================================================
+Defect 2 — public client options exposed internal types
+================================================================
+
+New file: client/hardening.go (SPDX + godoc per alias)
+
+  type Recorder = metrics.Recorder
+  type RetryPolicy = resilience.Policy
+  type RateLimiter = resilience.Limiter
+  type CircuitBreaker = resilience.Breaker
+
+Signatures updated in client/options.go (source-compatible aliases):
+  func WithMetrics(rec Recorder) Option
+  func WithRetryPolicy(p RetryPolicy) Option
+  func WithRateLimiter(l *RateLimiter) Option
+  func WithCircuitBreaker(b *CircuitBreaker) Option
+  Config fields Metrics/RetryPolicy/RateLimiter/CircuitBreaker now name the
+  public aliases too; internal/metrics and internal/resilience imports moved to
+  client/hardening.go.
+
+New external-package compile-time test: client/hardening_test.go (package
+client_test)
+
+  var (
+      _ client.Recorder        = externalRecorder{}
+      _ client.RetryPolicy     = client.RetryPolicy{}
+      _ *client.RateLimiter    = nil
+      _ *client.CircuitBreaker = nil
+  )
+
+Docs updated (stale "internal type" paragraphs only):
+  - docs/configuration.md  (option table rows for the four options)
+  - docs/observability.md  (Recorder availability blockquote)
+  - docs/rate-limiting.md  (RetryPolicy/RateLimiter intros, Availability
+                            section, application-retry paragraph)
+
+================================================================
+Verification (exact commands + results)
+================================================================
+
+  gofmt -l .
+  (no output)
+
+  go build ./...
+  (no output)
+
+  go vet ./...
+  (no output)
+
+  go test ./internal/push/... -race -count=20 -parallel 16
+  ok  	github.com/shing1211/hstongapi4go/internal/push	5.702s
+
+  go test -race -count=3 ./...
+  ok  	github.com/shing1211/hstongapi4go/client	4.153s
+  ok  	github.com/shing1211/hstongapi4go/examples	1.611s
+  ok  	github.com/shing1211/hstongapi4go/internal/crypto	1.447s
+  ok  	github.com/shing1211/hstongapi4go/internal/errs	1.448s
+  ok  	github.com/shing1211/hstongapi4go/internal/logging	1.494s
+  ok  	github.com/shing1211/hstongapi4go/internal/metrics	1.535s
+  ok  	github.com/shing1211/hstongapi4go/internal/push	2.579s
+  ok  	github.com/shing1211/hstongapi4go/internal/resilience	1.766s
+  ok  	github.com/shing1211/hstongapi4go/internal/session	1.580s
+  ok  	github.com/shing1211/hstongapi4go/internal/transport	2.728s
+  ok  	github.com/shing1211/hstongapi4go/pkg/hstong	2.816s
+  ok  	github.com/shing1211/hstongapi4go/pkg/hstong/algo	2.509s
+  ok  	github.com/shing1211/hstongapi4go/pkg/hstong/future	2.572s
+  ok  	github.com/shing1211/hstongapi4go/pkg/hstong/market	2.418s
+  ok  	github.com/shing1211/hstongapi4go/pkg/hstong/stream	2.344s
+  ok  	github.com/shing1211/hstongapi4go/pkg/hstong/trade	2.618s
+  ok  	github.com/shing1211/hstongapi4go/test/e2e	2.646s
+  ok  	github.com/shing1211/hstongapi4go/test/integration	1.970s
+  ok  	github.com/shing1211/hstongapi4go/test/mockgateway	2.892s
+  (19 packages with tests, 0 failures)
+
+  go test -race -count=5 ./...
+  (all packages ok; the previously-failing TestClientDecodesTypedNotifications
+   passed in all 5 iterations)
+
+  python scripts/check_money.py
+  money-check OK: no float money/quantity fields in pkg/
+
+Notes / scope
+  - No production code was changed for Defect 1 (test-only fix).
+  - No new dependencies; go.mod untouched.
+  - No files outside the allowed set were modified; the only docs/runs file
+    written is this evidence file.

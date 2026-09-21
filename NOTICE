@@ -1,0 +1,12 @@
+hstongapi4go
+Copyright 2026 shing1211
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+This product is an unofficial, community-maintained SDK. It is not affiliated
+with, endorsed by, or supported by HStong / 华盛 (Huasheng) or any of its
+affiliates. See DISCLAIMER.md.
+
+This product vendors protobuf definitions published in the official HStong
+Quant OpenAPI SDK distribution. See THIRD_PARTY_NOTICES.md for third-party
+components and their licenses.

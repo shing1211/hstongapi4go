@@ -1,0 +1,5 @@
+# Documentation build dependencies (GitHub Pages / MkDocs Material).
+# Install with: pip install -r requirements-docs.txt
+# Build locally with: mkdocs build --strict
+mkdocs==1.6.1
+mkdocs-material==9.7.7

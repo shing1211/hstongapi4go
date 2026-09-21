@@ -1,0 +1,206 @@
+# P12 — T35 integration tests: written, NOT executed
+
+- Run: 2026-09-21-hstong-full-surface
+- Task: T35 (env-gated integration tests + wire validation)
+- Host: Windows · Go 1.26 windows/amd64
+- Repo: github.com/shing1211/hstongapi4go
+- Status: **written, not executed here** — no real Gateway and no
+  credentials/account are available in this environment.
+
+## Important: this is a "written, not run" evidence file
+
+The integration suite under `test/integration` compiles, vets, and skips by
+default. It has **not** been executed against a real HStong Gateway. The wire
+assumptions in ADR 0007 and the P09 findings remain **unconfirmed** until you run
+the command below on a machine with the Gateway installed, running, and logged
+in, during the test window (Mon–Fri 09:00–18:00).
+
+## The exact command to run
+
+Windows PowerShell:
+
+```powershell
+$env:HSTONG_INTEGRATION    = "1"
+$env:HSTONG_GATEWAY_URL    = "http://127.0.0.1:11111"   # optional (default)
+$env:HSTONG_PUSH_ADDR      = "127.0.0.1:11112"          # optional (default)
+$env:HSTONG_TRADE_PASSWORD = "<your trade password>"    # required for session/trade
+$env:HSTONG_TEST_SYMBOL    = "00700.HK"                 # optional (default)
+$env:HSTONG_TEST_EXCHANGE  = "K"                        # optional (default)
+
+go test ./test/integration/... -count=1 -v
+```
+
+bash:
+
+```sh
+HSTONG_INTEGRATION=1 \
+HSTONG_TRADE_PASSWORD='<your trade password>' \
+go test ./test/integration/... -count=1 -v
+```
+
+Opt-in order mutation (place + cancel one far-from-market limit order):
+
+```powershell
+$env:HSTONG_PLACE_ORDERS = "1"
+go test ./test/integration/... -count=1 -v -run TestIntegration_PlaceAndCancelOrder
+```
+
+## Environment matrix
+
+| Variable | Required | Default | Purpose |
+|----------|----------|---------|---------|
+| `HSTONG_INTEGRATION` | yes | — | Gate; must be `1`. |
+| `HSTONG_GATEWAY_URL` | no | `http://127.0.0.1:11111` | Gateway HTTP root. |
+| `HSTONG_PUSH_ADDR` | no | `127.0.0.1:11112` | Gateway TCP push address. |
+| `HSTONG_TRADE_PASSWORD` | for session/trade | — | Plaintext trade password; never logged. |
+| `HSTONG_TEST_SYMBOL` | no | `00700.HK` | Instrument under test. |
+| `HSTONG_TEST_EXCHANGE` | no | `K` | Market: `K`/`P`/`v`/`t`. |
+| `HSTONG_VERIFY_PUSH` | no | off | Enable push-signature verification. |
+| `HSTONG_PLACE_ORDERS` | no | off | Must be `1` to enable the mutation test. |
+
+## Wire assumptions that stay UNCONFIRMED until this runs
+
+1. **Market `int64` representation (ADR 0007).** `basicQot[].volume`,
+   `ticker[].volume`, and `ticker[].timestamp` are assumed to be JSON **numbers**
+   because `pkg/hstong/market` decodes with `encoding/json` over generated
+   `int64` DTO fields. A quoted string would be a real-Gateway/ADR mismatch.
+2. **`volumeStr`.** Assumed JSON **string** when present.
+3. **`/trade/TradeQueryMaxAvailableAsset` envelope.** The SDK's
+   `maxAvailableAssetResponse` expects the asset at `data.data`. If the Gateway
+   returns it directly under `data`, the SDK decodes zeros; the test flags it.
+4. **`/trade/TradeQueryHoldsList` shape.** Wrapped `{"holdsList":[...]}`, bare
+   array, or single inline row (the reference documentation's form). The SDK
+   tolerates all three; the test records which one is real.
+5. **Push path.** That a real `/hq/Subscribe` + TCP push yields a decoded `Event`
+   within 10s (mock framing is shared with the SDK, so the mock cannot prove the
+   live frame).
+6. **Market-pull entitlements.** Which of the nine pull endpoints the account may
+   call; missing entitlements (`1006`) are reported as skips, not failures.
+7. **Mutation single-attempt + entrust id.** That `TradeEntrust` returns a
+   non-empty entrust id and issues exactly one outbound attempt (ADR 0003), then
+   cancels cleanly.
+
+## Verification executed here (compile / skip / offline only)
+
+### gofmt -l .
+
+```
+(no output; exit 0)
+```
+
+### go build ./...
+
+```
+build exit=0
+```
+
+### go vet ./...
+
+```
+vet exit=0
+```
+
+### go test ./test/integration/... -count=1 -v  (must SKIP, not fail)
+
+```
+=== RUN   TestIntegration_Session
+    integration_test.go:277: integration test skipped: set HSTONG_INTEGRATION=1 and run a local Gateway (see test/integration/README.md)
+--- SKIP: TestIntegration_Session (0.00s)
+=== RUN   TestIntegration_WireCodecProbe
+    integration_test.go:311: integration test skipped: set HSTONG_INTEGRATION=1 and run a local Gateway (see test/integration/README.md)
+--- SKIP: TestIntegration_WireCodecProbe (0.00s)
+=== RUN   TestIntegration_EnvelopeNesting
+    integration_test.go:352: integration test skipped: set HSTONG_INTEGRATION=1 and run a local Gateway (see test/integration/README.md)
+--- SKIP: TestIntegration_EnvelopeNesting (0.00s)
+=== RUN   TestIntegration_MarketPull
+    integration_test.go:435: integration test skipped: set HSTONG_INTEGRATION=1 and run a local Gateway (see test/integration/README.md)
+--- SKIP: TestIntegration_MarketPull (0.00s)
+=== RUN   TestIntegration_Streaming
+    integration_test.go:518: integration test skipped: set HSTONG_INTEGRATION=1 and run a local Gateway (see test/integration/README.md)
+--- SKIP: TestIntegration_Streaming (0.00s)
+=== RUN   TestIntegration_TradeReads
+    integration_test.go:566: integration test skipped: set HSTONG_INTEGRATION=1 and run a local Gateway (see test/integration/README.md)
+--- SKIP: TestIntegration_TradeReads (0.00s)
+=== RUN   TestIntegration_PlaceAndCancelOrder
+    integration_test.go:604: integration test skipped: set HSTONG_INTEGRATION=1 and run a local Gateway (see test/integration/README.md)
+--- SKIP: TestIntegration_PlaceAndCancelOrder (0.00s)
+PASS
+ok  	github.com/shing1211/hstongapi4go/test/integration	0.432s
+```
+
+Gate behaviour also checked: with `HSTONG_INTEGRATION=1` but
+`HSTONG_TRADE_PASSWORD` unset, the session/trade tests still skip:
+
+```
+=== RUN   TestIntegration_Session
+    integration_test.go:278: integration test skipped: HSTONG_TRADE_PASSWORD is required for session and trade calls
+--- SKIP: TestIntegration_Session (0.00s)
+=== RUN   TestIntegration_TradeReads
+    integration_test.go:567: integration test skipped: HSTONG_TRADE_PASSWORD is required for session and trade calls
+--- SKIP: TestIntegration_TradeReads (0.00s)
+=== RUN   TestIntegration_PlaceAndCancelOrder
+    integration_test.go:605: integration test skipped: HSTONG_TRADE_PASSWORD is required for session and trade calls
+--- SKIP: TestIntegration_PlaceAndCancelOrder (0.00s)
+PASS
+```
+
+### go test -race -count=1 ./...  (integration skipped, full suite green)
+
+```
+?   	github.com/shing1211/hstongapi4go	[no test files]
+ok  	github.com/shing1211/hstongapi4go/client	2.309s
+?   	github.com/shing1211/hstongapi4go/cmd/hstong-mock-gateway	[no test files]
+ok  	github.com/shing1211/hstongapi4go/examples	1.358s
+?   	github.com/shing1211/hstongapi4go/examples/algo	[no test files]
+?   	github.com/shing1211/hstongapi4go/examples/futures	[no test files]
+?   	github.com/shing1211/hstongapi4go/examples/market-data	[no test files]
+?   	github.com/shing1211/hstongapi4go/examples/quickstart	[no test files]
+?   	github.com/shing1211/hstongapi4go/examples/streaming	[no test files]
+?   	github.com/shing1211/hstongapi4go/examples/trading	[no test files]
+?   	github.com/shing1211/hstongapi4go/gen/common/constant	[no test files]
+?   	github.com/shing1211/hstongapi4go/gen/common/msg	[no test files]
+?   	github.com/shing1211/hstongapi4go/gen/hq/dto	[no test files]
+?   	github.com/shing1211/hstongapi4go/gen/hq/notify	[no test files]
+?   	github.com/shing1211/hstongapi4go/gen/trade/notify	[no test files]
+ok  	github.com/shing1211/hstongapi4go/internal/crypto	1.358s
+ok  	github.com/shing1211/hstongapi4go/internal/errs	1.387s
+ok  	github.com/shing1211/hstongapi4go/internal/logging	1.372s
+ok  	github.com/shing1211/hstongapi4go/internal/metrics	1.357s
+ok  	github.com/shing1211/hstongapi4go/internal/push	1.778s
+ok  	github.com/shing1211/hstongapi4go/internal/resilience	1.449s
+ok  	github.com/shing1211/hstongapi4go/internal/session	1.360s
+ok  	github.com/shing1211/hstongapi4go/internal/transport	2.132s
+ok  	github.com/shing1211/hstongapi4go/pkg/hstong	1.974s
+ok  	github.com/shing1211/hstongapi4go/pkg/hstong/algo	2.003s
+ok  	github.com/shing1211/hstongapi4go/pkg/hstong/future	2.183s
+ok  	github.com/shing1211/hstongapi4go/pkg/hstong/market	2.107s
+ok  	github.com/shing1211/hstongapi4go/pkg/hstong/stream	2.074s
+ok  	github.com/shing1211/hstongapi4go/pkg/hstong/trade	2.155s
+?   	github.com/shing1211/hstongapi4go/pkg/types	[no test files]
+ok  	github.com/shing1211/hstongapi4go/test/e2e	1.773s
+ok  	github.com/shing1211/hstongapi4go/test/integration	1.601s
+ok  	github.com/shing1211/hstongapi4go/test/mockgateway	1.820s
+race exit=0
+```
+
+### python scripts/check_money.py
+
+```
+money-check OK: no float money/quantity fields in pkg/
+money exit=0
+```
+
+## Artifacts
+
+- `test/integration/doc.go`
+- `test/integration/integration_test.go`
+- `test/integration/README.md`
+- `docs/testing.md` (integration section rewritten to link the README + env matrix)
+
+## Next step for T35 close-out
+
+Run the command above on a machine with the Gateway, capture the `-v` output into
+this file (or a sibling), and record the observed `volume`/`timestamp`
+representation, the `TradeQueryMaxAvailableAsset` shape, and the `HoldsList`
+shape. If any wire assumption fails, apply the ADR 0007 fallback in
+`pkg/hstong/market/market.go` (or update the ADR) before the phase gate.

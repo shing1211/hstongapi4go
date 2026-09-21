@@ -1,0 +1,68 @@
+T09 — Core tests + goleak + public Codec alias — evidence
+Run: 2026-09-21-hstong-full-surface · Status: done · Role: tester
+
+Files created
+- client/codec.go                     (new: public `type Codec = transport.Codec`)
+- client/routes_e2e_test.go           (51-route end-to-end table test, both codecs)
+- client/leak_test.go                 (100-client concurrent-Do + create/close leak test)
+- client/extra_test.go                (Codec alias, resolveHTTPClient arms, fallback transport, push host)
+- internal/transport/leak_test.go     (TestMain with goleak.VerifyTestMain)
+- internal/transport/extra_test.go    (read/build/decode failure arms, timeout, snippets)
+- internal/errs/leak_test.go          (TestMain with goleak.VerifyTestMain)
+- internal/errs/extra_test.go         (Wrap + Error fallback + CategoryOf)
+
+Files modified
+- client/client.go    Do/JSON/ProtoJSON now name the public `Codec` alias (source-compatible)
+- client/doc.go       documents Codec and that JSONCodec/ProtoJSONCodec come from JSON()/ProtoJSON()
+
+Coverage (go test -count=1 -coverprofile=coverage.txt ./...)
+                        before    after
+  client                 93.2%    100.0%
+  internal/errs          89.6%    100.0%
+  internal/transport     88.3%     99.1%
+  internal/crypto        87.5%     87.5%  (unchanged; T08 package, not in T09 scope)
+
+  Remaining uncovered: internal/crypto/aes.go EncryptTradePassword (key-decode error arm) and
+  encryptECB (aes.NewCipher error arm) — unreachable with the fixed protocol key; and
+  internal/transport/transport.go:171 json.Marshal(request) — cannot fail for int + RawMessage.
+  gen/** and pkg/types are 0.0% (no tests own them in P01; exercised from later phases).
+
+Per-function core coverage (go tool cover -func=coverage.txt)
+  client/client.go      New/resolveHTTPClient/cloneDefaultTransport/Do/JSON/ProtoJSON/Close ... 100.0%
+  client/env.go         applyEnv/recordErr/validateBaseURL/validatePushAddr               ... 100.0%
+  client/routes.go      Path/String/Validate/Routes/NormalizePath                         ... 100.0%
+  internal/errs         every exported function                                          ... 100.0%
+  internal/transport    every function 100.0% except Do 97.2% (unreachable marshal arm)   ... 99.1%
+
+Verification (exact commands, host: Windows, `make` unavailable, `python` used)
+  gofmt -l .                                   -> (empty)
+  go build ./...                               -> exit 0
+  go vet ./...                                 -> exit 0
+  go test -race -count=1 ./...                 -> ok client / internal/crypto / internal/errs / internal/transport
+  go test -count=1 -coverprofile=coverage.txt ./... -> package percentages above
+  go tool cover -func=coverage.txt             -> total 28.9% (module-wide incl. gen/** 0%)
+  python scripts/check_money.py                -> money-check OK: no float money/quantity fields in pkg/
+
+  GOTMPDIR was pointed at a non-scanned temp directory to avoid a known Windows file-lock
+  flake (`go build`/`go test` intermittently failing with "file is being used by another
+  process"); see AGENTS.md. No code change was needed.
+
+goleak
+  - client: TestMain in client_test.go uses goleak.VerifyTestMain(m); TestClients_NoLeaksUnderConcurrentDo
+    additionally calls goleak.VerifyNone(t) after 100 clients × 8 sequential Do calls and Close.
+  - internal/transport: new TestMain with goleak.VerifyTestMain(m).
+  - internal/errs: new TestMain with goleak.VerifyTestMain(m).
+  - Full `-race` run is green; no goroutine-leak or DATA RACE report.
+
+Routes
+  TestRoutesE2E_AllCanonicalRoutes drives client.New(...).Do for all 51 canonical routes
+  (51/51 subtests PASS) through one httptest server, asserting on every request: POST,
+  Content-Type: application/json, path == canonical route.Path(), numeric timeout_sec,
+  and a params JSON object; JSON codec for the trade/futures/algo/assets/session surfaces
+  and ProtoJSON with gen/hq/dto.Security for /hq/BasicQot. TestRoutesE2E_InvalidRoutesSendNothing
+  proves unknown and alias routes send zero requests.
+
+Public API (docs/DESIGN.md §6)
+  client.Codec is a type alias for the transport codec interface, and Do/JSON/ProtoJSON now
+  name it. The only remaining use of internal/transport in client is an unexported struct
+  field and constant values; no internal type appears in a public signature.

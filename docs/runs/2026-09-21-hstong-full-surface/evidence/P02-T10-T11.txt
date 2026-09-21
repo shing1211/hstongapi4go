@@ -1,0 +1,45 @@
+T10 + T11 — Session manager + tests — evidence
+Run: 2026-09-21-hstong-full-surface · Status: done · Role: backend (merged session)
+
+Files
+- internal/session/state.go, internal/session/state_test.go
+- pkg/hstong/doc.go, pkg/hstong/session.go, pkg/hstong/session_test.go
+
+Public API
+    package hstong
+    const DefaultKeepAliveInterval = 30 * time.Minute
+    type SessionOption func(*sessionConfig)
+    func WithKeepAliveInterval(time.Duration) SessionOption
+    func WithKeepAliveRoute(client.Route) SessionOption
+    type SessionManager
+    func NewSessionManager(*client.Client, ...SessionOption) *SessionManager
+    (s) Login(ctx) error
+    (s) Logout(ctx) error
+    (s) IsLoggedIn() bool
+    (s) EnsureLoggedIn(ctx) error
+    (s) ReLogin(ctx, cause error) (handled bool, err error)
+    (s) StartKeepAlive(ctx) / (s) StopKeepAlive()
+
+    package session (pure, I/O-free)
+    type State int (LoggedOut, LoggingIn, LoggedIn)
+    type Machine; State, BeginLogin, LoginSucceeded, LoginFailed, Logout
+
+Single-flight
+- EnsureLoggedIn: winner of BeginLogin performs the HTTP call outside the lock;
+  waiters block on a sync.Cond and receive the leader's exact result.
+- Proven: 32 concurrent callers -> server observed exactly 1 /trade/TradeLogin.
+- internal/session BeginLogin: 128 racing goroutines -> exactly 1 winner.
+
+Verification
+- gofmt -l . -> clean; go build/vet -> exit 0
+- go test -race -count=1 ./... -> ok client, crypto, errs, session, transport, pkg/hstong
+- coverage: internal/session 96.2%, pkg/hstong 84.7%
+- goleak.VerifyTestMain in both new packages; keep-alive stops on StopKeepAlive and
+  on context cancel (request count stops growing)
+- password safety: request carries the AES-encrypted value, never the plaintext;
+  no logging in session.go; missing password errors before any request
+- python scripts/check_money.py -> OK
+
+Follow-up (P12/T35)
+- Whether a Gateway read actually extends the 3h token is unverified offline;
+  keep-alive is a conservative best-effort poll (default 30m).

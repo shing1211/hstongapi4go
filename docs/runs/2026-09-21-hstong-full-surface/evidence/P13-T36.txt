@@ -1,0 +1,177 @@
+P13 / T36 — Full documentation sync — measured evidence
+Run: 2026-09-21-hstong-full-surface
+Date: 2026-09-21
+Host: Windows (win32), Go 1.26.8, Python 3.11.8, mkdocs 1.6.1 (mkdocs-material 9.7.7)
+
+NOTE: `make` is unavailable on the host and `python3` is a broken Microsoft Store
+stub, so the underlying commands were run directly: `python` instead of
+`python3`, `mkdocs` on PATH. GOTMPDIR was set for every Go command.
+
+================================================================================
+1. Relative Markdown link check
+================================================================================
+$ python scripts/check_links.py
+check_links: scanned 55 Markdown files, 0 unresolved link(s)
+exit: 0
+
+================================================================================
+2. mkdocs.yml parses as YAML
+================================================================================
+$ python -c "import yaml; yaml.safe_load(open('mkdocs.yml')); print('ok')"
+ok
+exit: 0
+
+================================================================================
+3. MkDocs strict build
+================================================================================
+$ mkdocs build --strict
+INFO    -  Cleaning site directory
+INFO    -  Building documentation to directory: D:\github\hstongapi4go\site
+INFO    -  The following pages exist in the docs directory, but are not
+           included in the "nav" configuration:
+  - DESIGN.md
+INFO    -  Doc file 'DESIGN.md' contains a link to
+           'runs/2026-09-21-hstong-full-surface/plan.md' which is excluded from
+           the built site.
+INFO    -  Doc file 'adr/0001-gateway-transport.md' contains a link to
+           'runs/2026-09-21-hstong-full-surface/plan.md' which is excluded from
+           the built site.
+INFO    -  Doc file 'adr/0002-hybrid-codec.md' contains a link to
+           'runs/2026-09-21-hstong-full-surface/plan.md' which is excluded from
+           the built site.
+INFO    -  Doc file 'adr/0003-no-auto-retry-orders.md' contains a link to
+           'runs/2026-09-21-hstong-full-surface/plan.md' which is excluded from
+           the built site.
+INFO    -  Doc file 'adr/0004-minimal-dependencies.md' contains a link to
+           'runs/2026-09-21-hstong-full-surface/plan.md' which is excluded from
+           the built site.
+INFO    -  Doc file 'adr/0005-key-model-and-push-verification.md' contains a
+           link to 'runs/2026-09-21-hstong-full-surface/plan.md' which is
+           excluded from the built site.
+INFO    -  Doc file 'adr/0006-test-dependencies.md' contains a link to
+           'runs/2026-09-21-hstong-full-surface/plan.md' which is excluded from
+           the built site.
+INFO    -  Doc file 'adr/0007-http-json-codec.md' contains a link to
+           'runs/2026-09-21-hstong-full-surface/phases/P03-market-pull.md' which
+           is excluded from the built site.
+INFO    -  Doc file 'adr/0007-http-json-codec.md' contains a link to
+           'runs/2026-09-21-hstong-full-surface/plan.md' which is excluded from
+           the built site.
+INFO    -  Documentation built in 0.86 seconds
+exit: 0
+
+(The `runs/` links are informational: docs/runs is intentionally excluded from
+the published site via mkdocs.yml `exclude_docs`, and strict mode does not fail
+on them. All in-docs links resolve.)
+
+================================================================================
+4. Go build / vet / gofmt
+================================================================================
+$ go build ./...
+exit: 0
+
+$ go vet ./...
+exit: 0
+
+$ gofmt -l .
+(no output)
+exit: 0
+
+================================================================================
+5. Offline unit + e2e test suite
+================================================================================
+$ go test -count=1 ./...
+?   	github.com/shing1211/hstongapi4go	[no test files]
+ok  	github.com/shing1211/hstongapi4go/client	1.378s
+?   	github.com/shing1211/hstongapi4go/cmd/hstong-mock-gateway	[no test files]
+ok  	github.com/shing1211/hstongapi4go/examples	0.375s
+?   	github.com/shing1211/hstongapi4go/examples/algo	[no test files]
+?   	github.com/shing1211/hstongapi4go/examples/futures	[no test files]
+?   	github.com/shing1211/hstongapi4go/examples/market-data	[no test files]
+?   	github.com/shing1211/hstongapi4go/examples/quickstart	[no test files]
+?   	github.com/shing1211/hstongapi4go/examples/streaming	[no test files]
+?   	github.com/shing1211/hstongapi4go/examples/trading	[no test files]
+?   	github.com/shing1211/hstongapi4go/gen/common/constant	[no test files]
+?   	github.com/shing1211/hstongapi4go/gen/common/msg	[no test files]
+?   	github.com/shing1211/hstongapi4go/gen/hq/dto	[no test files]
+?   	github.com/shing1211/hstongapi4go/gen/hq/notify	[no test files]
+?   	github.com/shing1211/hstongapi4go/gen/trade/notify	[no test files]
+ok  	github.com/shing1211/hstongapi4go/internal/crypto	0.341s
+ok  	github.com/shing1211/hstongapi4go/internal/errs	0.348s
+ok  	github.com/shing1211/hstongapi4go/internal/logging	0.366s
+ok  	github.com/shing1211/hstongapi4go/internal/metrics	0.358s
+ok  	github.com/shing1211/hstongapi4go/internal/push	0.771s
+ok  	github.com/shing1211/hstongapi4go/internal/resilience	0.598s
+ok  	github.com/shing1211/hstongapi4go/internal/session	0.577s
+ok  	github.com/shing1211/hstongapi4go/internal/transport	0.878s
+ok  	github.com/shing1211/hstongapi4go/pkg/hstong	1.447s
+ok  	github.com/shing1211/hstongapi4go/pkg/hstong/algo	1.252s
+ok  	github.com/shing1211/hstongapi4go/pkg/hstong/future	1.077s
+ok  	github.com/shing1211/hstongapi4go/pkg/hstong/market	1.054s
+ok  	github.com/shing1211/hstongapi4go/pkg/hstong/stream	1.069s
+ok  	github.com/shing1211/hstongapi4go/pkg/hstong/trade	1.278s
+?   	github.com/shing1211/hstongapi4go/pkg/types	[no test files]
+ok  	github.com/shing1211/hstongapi4go/test/e2e	1.318s
+ok  	github.com/shing1211/hstongapi4go/test/integration	0.774s
+ok  	github.com/shing1211/hstongapi4go/test/mockgateway	1.105s
+exit: 0
+
+================================================================================
+6. Count consistency (SPEC is canonical)
+================================================================================
+$ python -c "import pathlib; spec=pathlib.Path('docs/SPEC.md').read_text(encoding='utf-8'); readme=pathlib.Path('README.md').read_text(encoding='utf-8'); print('SPEC mentions 51:', '51' in spec, '| README mentions 51:', '51' in readme)"
+SPEC mentions 51: True | README mentions 51: True
+
+$ Select-String ... '\b(\d+)\s+(HTTP\s+)?(endpoints?|topics?|routes?)' (all *.md except SPEC.md, runs/, gen/, proto/)
+docs\adr\0001-gateway-transport.md:23: ... 51 HTTP endpoints plus 11 market push topics ...
+docs\DESIGN.md:53: ... Mock HTTP (51 routes) + TCP push server ...
+docs\DESIGN.md:80: ### 3.2 Route aliases            <- false positive (heading, no count)
+docs\LEGACY.md:108: ... 51 HTTP endpoints, 11 market push topics ...
+docs\mock-gateway.md:17: ... serving 51 endpoints ...
+examples\mock-gateway\README.md:22: ... serving 51 endpoints ...
+CHANGELOG.md:23: ... 51 HTTP endpoints and 11 market push topics ...
+CHANGELOG.md:79: ... all 51 routes ...
+README.md:47: | Market data pull (9 endpoints) | Implemented |
+README.md:48: | Market subscription + TCP push (11 topics) | Implemented |
+README.md:52: | Futures (11 endpoints + push) | Implemented |
+README.md:53: | Algo / strategy (7 endpoints) | Implemented |
+README.md:55: | Mock Gateway (51 HTTP routes + TCP push) ... |
+README.md:62: All 51 HTTP endpoints and 11 market push topics are implemented ...
+
+Result: every observed count (9, 2, 11, 5, 13, 2, 7, 11, 51) matches
+docs/SPEC.md. No endpoint/topic count outside the SPEC values was found.
+
+================================================================================
+7. Files created / updated by T36
+================================================================================
+created:
+  CHANGELOG.md
+  CONTRIBUTING.md
+  SECURITY.md
+  scripts/check_links.py
+  docs/runs/index.md
+  docs/runs/2026-09-21-hstong-full-surface/docs-plan.md
+  docs/runs/2026-09-21-hstong-full-surface/evidence/P13-T36.txt  (this file)
+updated:
+  README.md                 (replaced 2-line stub with canonical README)
+  AGENTS.md                 (stale "planned, T03/T34" removed; docs-check documented)
+  Makefile                  (docs-check target only)
+  docs/DESIGN.md            (live SPEC/LEGACY links)
+  docs/adr/0001-gateway-transport.md  (live LEGACY link)
+  docs/adr/0002-hybrid-codec.md       (live SPEC link)
+  docs/CONTRIBUTING.md      (docs-check description)
+left unchanged:
+  every other .md (see docs-plan.md for the per-file reason)
+
+================================================================================
+8. Known limitations / unverified claims
+================================================================================
+- The live, credentialed integration suite was not run (it requires a real
+  HStong Gateway and is skipped by default); the README/status table states this
+  as "written and env-gated; live confirmation pending a user run".
+- The scripts/check_links.py check runs on the Windows host with a
+  case-insensitive filesystem; a link that differs only in case could pass here
+  and fail on the Linux CI runner. No such link exists in the current tree.
+- `make docs-check` itself could not be executed on this host (`make` absent,
+  `python3` stubbed); its two underlying commands were run directly and both
+  exit 0.

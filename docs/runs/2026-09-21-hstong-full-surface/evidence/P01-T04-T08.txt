@@ -1,0 +1,39 @@
+﻿P01 core verification — 2026-09-21T12:16:29.8609705+08:00
+
+## go build ./...
+
+exit=0
+## go vet ./...
+
+exit=0
+## gofmt -l .
+(empty - clean)
+## go test ./... -count=1
+?   	github.com/shing1211/hstongapi4go	[no test files]
+?   	github.com/shing1211/hstongapi4go/gen/common/constant	[no test files]
+?   	github.com/shing1211/hstongapi4go/gen/common/msg	[no test files]
+?   	github.com/shing1211/hstongapi4go/gen/hq/dto	[no test files]
+?   	github.com/shing1211/hstongapi4go/gen/hq/notify	[no test files]
+?   	github.com/shing1211/hstongapi4go/gen/trade/notify	[no test files]
+ok  	github.com/shing1211/hstongapi4go/internal/crypto	0.224s
+?   	github.com/shing1211/hstongapi4go/pkg/types	[no test files]
+
+## go test -race ./... -count=1
+?   	github.com/shing1211/hstongapi4go	[no test files]
+?   	github.com/shing1211/hstongapi4go/gen/common/constant	[no test files]
+?   	github.com/shing1211/hstongapi4go/gen/common/msg	[no test files]
+?   	github.com/shing1211/hstongapi4go/gen/hq/dto	[no test files]
+?   	github.com/shing1211/hstongapi4go/gen/hq/notify	[no test files]
+?   	github.com/shing1211/hstongapi4go/gen/trade/notify	[no test files]
+ok  	github.com/shing1211/hstongapi4go/internal/crypto	1.058s
+?   	github.com/shing1211/hstongapi4go/pkg/types	[no test files]
+
+## python scripts/check_money.py
+money-check OK: no float money/quantity fields in pkg/
+
+## proto_verify.sh
+proto-verify: regenerating into /tmp/tmp.9LGjzJgUV6/gen
+proto-verify: gen/ matches proto/ (no drift)
+
+## gen .pb.go count
+17 expected / actual 17

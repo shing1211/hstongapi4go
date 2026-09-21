@@ -1,0 +1,99 @@
+# MkDocs configuration for the hstongapi4go documentation site.
+#
+# The site is built from docs/ and published to GitHub Pages by the pages
+# workflow. Only public documentation belongs here; internal run artifacts under
+# docs/runs/ are excluded below.
+
+site_name: hstongapi4go
+site_description: Idiomatic Go SDK for the HStong (Huasheng) Quant OpenAPI local Gateway.
+site_url: https://shing1211.github.io/hstongapi4go/
+repo_url: https://github.com/shing1211/hstongapi4go
+repo_name: shing1211/hstongapi4go
+copyright: Copyright &copy; hstongapi4go contributors &mdash; Apache-2.0
+
+docs_dir: docs
+
+# Internal run artifacts (docs/runs/**) are workspace-only and must never be
+# published. `exclude_docs` requires MkDocs >= 1.5.
+exclude_docs: |
+  runs/
+
+# docs/SPEC.md links to repository files outside docs_dir (for example
+# ../proto/PROVENANCE.md), which MkDocs cannot resolve. The hook rewrites only
+# those links to GitHub URLs so strict link validation stays on for every
+# in-docs link.
+hooks:
+  - scripts/mkdocs_hooks.py
+
+theme:
+  name: material
+  language: en
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - Installation: getting-started.md
+      - Configuration: configuration.md
+      - Authentication: authentication.md
+  - Protocol:
+      - Transport and Codec: protocol.md
+      - Error Codes: errors.md
+  - Market Data: market-data.md
+  - Trading: trading.md
+  - Futures: futures.md
+  - Algo: algo.md
+  - Streaming: streaming.md
+  - Mock Gateway: mock-gateway.md
+  - Quality:
+      - Testing: testing.md
+      - Observability: observability.md
+      - Rate Limiting: rate-limiting.md
+      - Security: security.md
+  - Legacy Protocol: LEGACY.md
+  - Contributing: CONTRIBUTING.md
+  - Architecture Decisions:
+      - Overview: adr/README.md
+      - "0001: Target the local Gateway": adr/0001-gateway-transport.md
+      - "0002: Hybrid codec": adr/0002-hybrid-codec.md
+      - "0003: Never auto-retry order mutations": adr/0003-no-auto-retry-orders.md
+      - "0004: Minimal dependency set": adr/0004-minimal-dependencies.md
+      - "0005: Key model and push verification": adr/0005-key-model-and-push-verification.md
+      - "0006: Test-only dependencies": adr/0006-test-dependencies.md
+      - "0007: Gateway HTTP bodies are plain JSON": adr/0007-http-json-codec.md
+  - API Reference: SPEC.md
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.superfences
+
+plugins:
+  - search

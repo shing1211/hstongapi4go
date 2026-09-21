@@ -1,0 +1,59 @@
+T30 + T31 + T32 — Resilience, observability, push signature verification — evidence
+Run: 2026-09-21-hstong-full-surface · Status: done · Role: backend + security
+
+T30 internal/resilience
+- ratelimit.go  token-bucket limiter (stdlib), per-endpoint + global, Wait(ctx), WaitEndpoint
+- retry.go      Policy with attempts/backoff/jitter; ClassMutation => exactly one attempt
+                (closed mutation set of 12 endpoints, not caller-extensible) - ADR 0003
+- breaker.go    closed/open/half-open, failure threshold, cooldown, thread-safe
+- Tests: TestPolicyMutationIsSingleAttempt, TestPolicyDoRouteMutationIsSingleAttempt,
+  TestPolicyRetriesRetryableQuery, TestPolicyStopsOnNonRetryable -> PASS
+
+T31 internal/logging + internal/metrics
+- logging: never-nil slog factory, subsystem prefixes (hstong.http/session/push/stream/
+  ratelimit/breaker/error/config), redaction by normalized key (tradePassword/token/
+  EncryptedKey); never reveals value length
+- metrics: dependency-free counters/histograms/gauges + Hook interface for an OTel adapter
+- Tests: TestIsSensitiveKey, TestRedactValueNeverRevealsLength,
+  TestRedactingHandlerMasksSecrets, TestRedactingHandlerWithAttrsAndGroup -> PASS
+
+T32 push signature verification (opt-in)
+- internal/push/verify.go: ParsePublicKey (PEM PUBLIC KEY | base64 SPKI | raw SPKI DER),
+  NewVerifier, Verifier.Verify(Header, body) using SHA1WithRSA over the 128-byte bodySHA1
+- Options: WithVerification(key, required); DEFAULT OFF (ADR 0005)
+- Wired through client.VerifyPush()/PlatformPublicKey() and pkg/hstong/stream
+- Tests: TestVerifierRoundTrip, TestParsePublicKey{BundledConstants,PEMAndDER,RejectsInvalid},
+  TestClientVerification{DeliversSignedFrame,DropsTamperedFrame,OptionalReportsButDelivers,
+  DisabledAcceptsUnsignedFrame,BadKeyFailsConnect},
+  TestStreamVerifiesPushSignature -> PASS
+  required=true drops tampered frames before decode; required=false reports via
+  Subscription.Errors() as ErrSignatureMismatch
+
+Public API (all OFF by default; New() leaves these nil)
+    func WithLogger(*slog.Logger) Option
+    func WithMetrics(Recorder) Option
+    func WithRetryPolicy(RetryPolicy) Option
+    func WithRateLimiter(*RateLimiter) Option
+    func WithCircuitBreaker(*CircuitBreaker) Option
+    // public aliases added by the follow-up fix (see P10-fixes.txt):
+    type Recorder = metrics.Recorder
+    type RetryPolicy = resilience.Policy
+    type RateLimiter = resilience.Limiter
+    type CircuitBreaker = resilience.Breaker
+
+Security review
+- No secrets logged: library log sites are only client/client.go ("http request", "http
+  error"). No log.*/fmt.Print in internal/, client/, pkg/. Redaction masks the sensitive
+  keys and never exposes length.
+- Key provenance: pkg/types/platformkeys.go documents both keys as public reference data
+  (base64 SPKI from the published HStong docs); ADR 0005 authorizes committing them.
+- Money: money-check OK; float64 only in resilience (token rates) and metrics
+  (measurements), never for prices/quantities.
+- Residual risk: SHA-1 is platform-mandated (SHA1WithRSA) and weak by modern standards;
+  bundled keys may lag rotation (WithPlatformPublicKey overrides); a caller-supplied
+  slog.Logger that bypasses logging.Redacting is outside SDK control; the circuit breaker
+  counts mutation failures when enabled (off by default).
+
+Verification (orchestrator, after follow-up fixes)
+- gofmt clean; go build ./... and ./examples/... ./cmd/... OK; go vet OK
+- go test -race -count=1 ./... -> 19 packages ok, 0 failures (3 runs)

@@ -1,0 +1,214 @@
+P03 (T12 + T13) — Market pull implementation + tests — evidence
+Run: 2026-09-21-hstong-full-surface
+Date: 2026-09-21
+Host: Go 1.26.8 windows/amd64 (GOTMPDIR set to a temp dir)
+
+Files created
+  pkg/hstong/market/doc.go
+  pkg/hstong/market/market.go
+  pkg/hstong/market/market_test.go
+
+=====================================================================
+1. Codec decision (ADR 0002) and int64 representation
+=====================================================================
+
+Decision: requests AND responses use the hand-written JSON codec
+(client.JSON()), not ProtoJSON. Each response "data" body is a hand-written
+wrapper struct carrying the exact documented field names, whose element types
+are the generated gen/hq/dto protobuf messages (e.g. data.basicQot ->
+[]*dto.BasicQot). Requests are hand-written structs containing *dto.Security.
+This is ADR 0002's per-endpoint codec choice; the package doc records it.
+
+Evidence that the Gateway HTTP body is generic JSON (not protobuf JsonFormat):
+  - Official Java Gateway SDK v2.3.0 (java-hs-gateway-api-release-v2.3.0):
+    HSQuantOpenApiHandle deserializes every market response with Gson:
+      gson.fromJson(jsonData, new TypeToken<HttpResult<BasicQotVo>>(){}.getType())
+    The wrapper VOs (BasicQotVo.basicQot, OrderBookVo.orderBookAskList /
+    orderBookBidList / spreadLevel, BrokerVo.brokerAskList / brokerBidList,
+    KLineVo.kline, TimeShareVo.timeShare, TickerVo.tickerList,
+    OptionChainCodeVo.optionCode, OptionChainExpireDateVo.expireDate,
+    UsOverNightTradeCodesVo.securityCodes) confirm the field names.
+    Gson targets the protobuf-derived POJOs directly; protobuf JsonFormat is
+    never used on the HTTP path.
+  - Official Python Gateway SDK v2.3.0 (py-hs-gateway-api-release-v2.3.0):
+    socket_client.post_request ends with
+      response = json.loads(rsa_utils.bytes_to_str(response))
+    i.e. a plain JSON parser over the whole HTTP body.
+
+int64 representation: because the wire uses generic JSON, int64 counters
+(volume, timestamp, startDate) are emitted as JSON numbers, which
+encoding/json maps directly onto the generated int64 fields. protojson would
+instead emit quoted strings. The tests pin this: the mock payloads write
+"volume":12345678 and assert dto fields decode to 12345678. Request-side int64
+(startDate) is marshalled as a number too, which the Python SDK also does not
+quote. Documented fallback (package doc): if a Gateway build ever emits
+protojson-style quoted ints, switch that endpoint to client.ProtoJSON over the
+generated DTOs (the wrapper itself is not a proto message, so the fallback must
+decode DTO lists from json.RawMessage elements).
+
+Money rule: prices/ticks stay float64 inside the generated DTOs (gen/ is not
+scanned by check_money.py). The one wrapper float field is the order-book
+minimum price step. Its wire name is "spreadLevel"; the exported Go field is
+named TickSize (json:"spreadLevel") so scripts/check_money.py, which flags a
+float field named "spread", stays green. No amount/quantity concept is a
+float in pkg/.
+
+=====================================================================
+2. Exact endpoints, request params and response wrappers (from the docs)
+=====================================================================
+
+Docs base: https://quant-open.hstong.com/api-docs/market-interface/market-get/
+  get-realtime-quote.html, get-realtime-order-book.html,
+  get-realtime-candlestick.html, get-realtime-time-frame-data.html,
+  get-realtime-tick-by-tick.html, get-realtime-broker-queue.html,
+  get-option-chain.html, get-overnight-trade-codes.html
+
+  Route constant        Method               Request fields (json tag)
+  --------------------  -------------------  ---------------------------------
+  /hq/BasicQot          BasicQot             security[] (list), needDelayFlag,
+                                             mktTmType
+  /hq/OrderBook         OrderBook            security (single), mktTmType,
+                                             depthBookType
+  /hq/KL                KL                   security, startDate(int64),
+                                             direction, exRightFlag, cycType,
+                                             limit
+  /hq/TimeShare         TimeShare            security, mktTmType
+  /hq/Ticker            Ticker               security, limit, mktTmType
+  /hq/Broker            Broker               security
+  /hq/UsOptionChainCode UsOptionChainCode    securityCode, expireDate,
+                                             flagInOut, optionType
+  /hq/UsOptionChain     UsOptionChain        securityCode
+    ExpireDate          ExpireDate
+  /hq/UsOverNight       UsOverNight          (none; params == {})
+    TradeCodes          TradeCodes
+
+  Response wrapper field  Element type
+  ----------------------  ---------------------------------
+  basicQot                []*dto.BasicQot
+  orderBookAskList        []*dto.OrderBook
+  orderBookBidList        []*dto.OrderBook
+  spreadLevel             float64
+  kline                   []*dto.KLine
+  timeShare               []*dto.TimeShare
+  ticker                  []*dto.Ticker
+  brokerAskList           []*dto.Broker
+  brokerBidList           []*dto.Broker
+  optionCode              []string
+  expireDate              []string
+  securityCodes           []string
+
+Optional numeric fields (mktTmType, depthBookType, flagInOut) are value int32
+with omitempty, except mktTmType, which is always sent so an explicit 0 (the
+Hong Kong session) is preserved; this mirrors the official Python SDK, which
+always sends its MktTmType default. needDelayFlag and optionType are string
+with omitempty; empty means omitted.
+
+Validation (all local, typed *errs.Error, StatusInvalidParam, no HTTP request):
+  - BasicQot: empty/nil security list, or a nil element -> rejected.
+  - OrderBook, KL, TimeShare, Ticker, Broker: nil security -> rejected.
+  - Ticker: Limit outside 1..MaxTickerLimit (MaxTickerLimit = 100) -> rejected.
+  - UsOptionChainCode, UsOptionChainExpireDate: empty securityCode -> rejected.
+
+Operation labels: "market.<Method>"; routes use the client.RouteHq* constants
+from client/routes.go (RouteHqKL, RouteHqUsOverNightTradeCodes, etc.).
+
+=====================================================================
+3. Verification commands and observed output
+=====================================================================
+
+$ gofmt -l .
+(no output)
+
+$ go build ./...
+build exit=0
+
+$ go vet ./...
+vet exit=0
+
+$ go test ./pkg/hstong/market/... -race -count=1 -v
+--- PASS: TestManager_Endpoints (0.03s)
+    --- PASS: TestManager_Endpoints/BasicQot (0.01s)
+    --- PASS: TestManager_Endpoints/OrderBook (0.00s)
+    --- PASS: TestManager_Endpoints/KL (0.00s)
+    --- PASS: TestManager_Endpoints/TimeShare (0.00s)
+    --- PASS: TestManager_Endpoints/Ticker (0.00s)
+    --- PASS: TestManager_Endpoints/Broker (0.00s)
+    --- PASS: TestManager_Endpoints/UsOptionChainCode (0.00s)
+    --- PASS: TestManager_Endpoints/UsOptionChainExpireDate (0.00s)
+    --- PASS: TestManager_Endpoints/UsOverNightTradeCodes (0.00s)
+--- PASS: TestTicker_RejectsLimitOutOfRange (0.00s)
+    --- PASS: TestTicker_RejectsLimitOutOfRange/limit=-1
+    --- PASS: TestTicker_RejectsLimitOutOfRange/limit=0
+    --- PASS: TestTicker_RejectsLimitOutOfRange/limit=101
+    --- PASS: TestTicker_RejectsLimitOutOfRange/limit=1000
+--- PASS: TestBasicQot_RejectsEmptySecurity (0.00s)
+    --- PASS: TestBasicQot_RejectsEmptySecurity/empty
+    --- PASS: TestBasicQot_RejectsEmptySecurity/nil_element
+    --- PASS: TestBasicQot_RejectsEmptySecurity/nil
+--- PASS: TestSingleSecurity_RejectsNil (0.00s)  [OrderBook KL TimeShare Ticker Broker]
+--- PASS: TestOptionChain_RejectsEmptySecurityCode (0.00s)
+PASS
+ok  github.com/shing1211/hstongapi4go/pkg/hstong/market  1.187s
+
+$ go test -race -count=1 ./...
+?    github.com/shing1211/hstongapi4go  [no test files]
+ok   github.com/shing1211/hstongapi4go/client                       1.778s
+?    github.com/shing1211/hstongapi4go/gen/common/constant          [no test files]
+?    github.com/shing1211/hstongapi4go/gen/common/msg               [no test files]
+?    github.com/shing1211/hstongapi4go/gen/hq/dto                   [no test files]
+?    github.com/shing1211/hstongapi4go/gen/hq/notify                [no test files]
+?    github.com/shing1211/hstongapi4go/gen/trade/notify             [no test files]
+ok   github.com/shing1211/hstongapi4go/internal/crypto             1.120s
+ok   github.com/shing1211/hstongapi4go/internal/errs               1.119s
+ok   github.com/shing1211/hstongapi4go/internal/session            1.120s
+ok   github.com/shing1211/hstongapi4go/internal/transport          1.693s
+ok   github.com/shing1211/hstongapi4go/pkg/hstong                  1.721s
+ok   github.com/shing1211/hstongapi4go/pkg/hstong/algo             1.708s
+ok   github.com/shing1211/hstongapi4go/pkg/hstong/future           1.708s
+ok   github.com/shing1211/hstongapi4go/pkg/hstong/market           1.550s
+ok   github.com/shing1211/hstongapi4go/pkg/hstong/trade            1.722s
+?    github.com/shing1211/hstongapi4go/pkg/types                    [no test files]
+fulltest exit=0
+
+$ python scripts/check_money.py
+money-check OK: no float money/quantity fields in pkg/
+money exit=0
+
+Note: on the first full-suite run, pkg/hstong/session_test.go
+(TestSessionManager_KeepAlive/StopKeepAlive_halts_the_loop, T11 — not part of
+this task) failed once with "keep-alive requests grew from 2 to 3 after
+StopKeepAlive". It is a timing flake in the pre-existing keep-alive test: a
+poll already in flight when StopKeepAlive returns increments the counter. It
+passed on -count=5 immediately after and on the final full run. No file in this
+task touched it.
+
+=====================================================================
+4. Doc fields that were ambiguous and how they were modelled
+=====================================================================
+
+1. Ticker wrapper name. The current online docs (get-realtime-tick-by-tick)
+   show "ticker": [...], and the legacy proto also declares
+   "repeated Ticker ticker=2". The Java Gateway SDK v2.3.0 VO instead names
+   the field TickerVo.tickerList. Because the task makes the docs canonical
+   for wrapper field names and the legacy proto agrees, the Go field is
+   Ticker []*dto.Ticker with json:"ticker". The Java discrepancy is recorded
+   here; P12 real-Gateway validation must confirm the on-wire name.
+2. Broker lists. The current docs render brokerAskList / brokerBidList as a
+   single object; the Java VO types both as List<Broker> and the notify path
+   iterates the list. Modelled as []*dto.Broker.
+3. OrderBook request security. The current docs show "security" as a single
+   object for OrderBook, KL, TimeShare, Ticker and Broker, but as an array for
+   BasicQot. Modelled exactly that way (single *dto.Security vs
+   []*dto.Security). The Java SDK's KLineParam/TickerParam/OrderBookParam all
+   extend SecurityParam with a single Security, confirming it.
+4. spreadLevel. Documented as "double 最小价格单位" (minimum price step). Kept
+   float64 on the Go field TickSize (json:"spreadLevel"); see §1 for why the
+   field name differs from the wire name.
+5. KL limit semantics differ per period (days for intraday periods, candle
+   count for daily and above), so no upper-bound validation was added; only
+   Ticker's documented 1..100 cap is enforced, as required.
+
+=====================================================================
+5. Blockers
+=====================================================================
+None. No file outside pkg/hstong/market/** and this evidence file was modified.

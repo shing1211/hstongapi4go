@@ -1,0 +1,344 @@
+# P09 — T28 + T29 verification evidence
+
+- Run: 2026-09-21-hstong-full-surface
+- Tasks: T28 (mock HTTP(51) + TCP push server), T29 (all-endpoint e2e + coverage)
+- Host: Windows 10/11 · Go 1.26.8 windows/amd64
+- Repo: github.com/shing1211/hstongapi4go · Base commit 461f219
+
+## Summary
+
+- 51/51 canonical endpoints are registered in the mock and exercised through
+  the real SDK managers. Asserted twice:
+  1. `test/mockgateway` maps `client.Routes()` (which the SDK's own
+     `routes_e2e_test.go` pins at 51) to a fixture per route; the test fails if
+     `len(routes) != 51`, if any route lacks a fixture, or if the fixture table
+     has anything other than 51 paths.
+  2. `test/e2e`'s endpoint table has exactly 51 rows and fails if
+     `len(cases) != 51`; `-v` prints 51 `TestE2E_AllEndpoints/POST_/...`
+     subtests (measured count below = 51).
+- `test/mockgateway` statement coverage: **78.6%**.
+- All commands exit 0; `gofmt -l .` is empty; full `-race` suite green.
+
+## Commands and output
+
+```
+### gofmt -l .
+gofmt exit=0 (no files listed above = clean)
+
+### go build ./...
+build exit=0
+### go build ./cmd/...
+cmd build exit=0
+### go vet ./...
+vet exit=0
+```
+
+```
+### go test ./test/mockgateway/... -race -count=1 -v
+=== RUN   TestAllRoutesRegisteredAndRespond
+=== RUN   TestAllRoutesRegisteredAndRespond//hq/BasicQot
+=== RUN   TestAllRoutesRegisteredAndRespond//hq/Broker
+=== RUN   TestAllRoutesRegisteredAndRespond//hq/KL
+=== RUN   TestAllRoutesRegisteredAndRespond//hq/OrderBook
+=== RUN   TestAllRoutesRegisteredAndRespond//hq/Subscribe
+=== RUN   TestAllRoutesRegisteredAndRespond//hq/Ticker
+=== RUN   TestAllRoutesRegisteredAndRespond//hq/TimeShare
+=== RUN   TestAllRoutesRegisteredAndRespond//hq/Unsubscribe
+=== RUN   TestAllRoutesRegisteredAndRespond//hq/UsOptionChainCode
+=== RUN   TestAllRoutesRegisteredAndRespond//hq/UsOptionChainExpireDate
+=== RUN   TestAllRoutesRegisteredAndRespond//hq/UsOverNightTradeCodes
+=== RUN   TestAllRoutesRegisteredAndRespond//hs/rate/queryList
+=== RUN   TestAllRoutesRegisteredAndRespond//trade/AlgoActionOrder
+=== RUN   TestAllRoutesRegisteredAndRespond//trade/AlgoAddOrder
+=== RUN   TestAllRoutesRegisteredAndRespond//trade/AlgoCancelEntrust
+=== RUN   TestAllRoutesRegisteredAndRespond//trade/AlgoCancelOrder
+=== RUN   TestAllRoutesRegisteredAndRespond//trade/AlgoChangeOrder
+=== RUN   TestAllRoutesRegisteredAndRespond//trade/AlgoQueryEntrustIdList
+=== RUN   TestAllRoutesRegisteredAndRespond//trade/AlgoQueryOrderList
+=== RUN   TestAllRoutesRegisteredAndRespond//trade/FuturesCancelEntrust
+=== RUN   TestAllRoutesRegisteredAndRespond//trade/FuturesEntrust
+=== RUN   TestAllRoutesRegisteredAndRespond//trade/FuturesModifyEntrust
+=== RUN   TestAllRoutesRegisteredAndRespond//trade/FuturesQueryFundInfo
+=== RUN   TestAllRoutesRegisteredAndRespond//trade/FuturesQueryHistoryDeliverList
+=== RUN   TestAllRoutesRegisteredAndRespond//trade/FuturesQueryHistoryEntrustList
+=== RUN   TestAllRoutesRegisteredAndRespond//trade/FuturesQueryHoldsList
+=== RUN   TestAllRoutesRegisteredAndRespond//trade/FuturesQueryMaxBuySellAmount
+=== RUN   TestAllRoutesRegisteredAndRespond//trade/FuturesQueryProductInfo
+=== RUN   TestAllRoutesRegisteredAndRespond//trade/FuturesQueryRealDeliverList
+=== RUN   TestAllRoutesRegisteredAndRespond//trade/FuturesQueryRealEntrustList
+=== RUN   TestAllRoutesRegisteredAndRespond//trade/TradeBatchCancelEntrust
+=== RUN   TestAllRoutesRegisteredAndRespond//trade/TradeCancelEntrust
+=== RUN   TestAllRoutesRegisteredAndRespond//trade/TradeChangeEntrust
+=== RUN   TestAllRoutesRegisteredAndRespond//trade/TradeEntrust
+=== RUN   TestAllRoutesRegisteredAndRespond//trade/TradeLogin
+=== RUN   TestAllRoutesRegisteredAndRespond//trade/TradeLogout
+=== RUN   TestAllRoutesRegisteredAndRespond//trade/TradeQueryBeforeAndAfterSupport
+=== RUN   TestAllRoutesRegisteredAndRespond//trade/TradeQueryHistoryCondOrderList
+=== RUN   TestAllRoutesRegisteredAndRespond//trade/TradeQueryHistoryDeliverList
+=== RUN   TestAllRoutesRegisteredAndRespond//trade/TradeQueryHistoryEntrustList
+=== RUN   TestAllRoutesRegisteredAndRespond//trade/TradeQueryHistoryFundJourList
+=== RUN   TestAllRoutesRegisteredAndRespond//trade/TradeQueryHoldsList
+=== RUN   TestAllRoutesRegisteredAndRespond//trade/TradeQueryMarginFullInfo
+=== RUN   TestAllRoutesRegisteredAndRespond//trade/TradeQueryMarginFundInfo
+=== RUN   TestAllRoutesRegisteredAndRespond//trade/TradeQueryMaxAvailableAsset
+=== RUN   TestAllRoutesRegisteredAndRespond//trade/TradeQueryRealCondOrderList
+=== RUN   TestAllRoutesRegisteredAndRespond//trade/TradeQueryRealDeliverList
+=== RUN   TestAllRoutesRegisteredAndRespond//trade/TradeQueryRealEntrustList
+=== RUN   TestAllRoutesRegisteredAndRespond//trade/TradeQueryRealFundJourList
+=== RUN   TestAllRoutesRegisteredAndRespond//trade/TradeSubscribe
+=== RUN   TestAllRoutesRegisteredAndRespond//trade/TradeUnsubscribe
+--- PASS: TestAllRoutesRegisteredAndRespond (0.05s)
+    --- PASS: TestAllRoutesRegisteredAndRespond//hq/BasicQot (0.00s)
+    --- PASS: TestAllRoutesRegisteredAndRespond//hq/Broker (0.00s)
+    --- PASS: TestAllRoutesRegisteredAndRespond//hq/KL (0.00s)
+    --- PASS: TestAllRoutesRegisteredAndRespond//hq/OrderBook (0.00s)
+    --- PASS: TestAllRoutesRegisteredAndRespond//hq/Subscribe (0.00s)
+    --- PASS: TestAllRoutesRegisteredAndRespond//hq/Ticker (0.00s)
+    --- PASS: TestAllRoutesRegisteredAndRespond//hq/TimeShare (0.00s)
+    --- PASS: TestAllRoutesRegisteredAndRespond//hq/Unsubscribe (0.00s)
+    --- PASS: TestAllRoutesRegisteredAndRespond//hq/UsOptionChainCode (0.00s)
+    --- PASS: TestAllRoutesRegisteredAndRespond//hq/UsOptionChainExpireDate (0.00s)
+    --- PASS: TestAllRoutesRegisteredAndRespond//hq/UsOverNightTradeCodes (0.00s)
+    --- PASS: TestAllRoutesRegisteredAndRespond//hs/rate/queryList (0.00s)
+    --- PASS: TestAllRoutesRegisteredAndRespond//trade/AlgoActionOrder (0.00s)
+    --- PASS: TestAllRoutesRegisteredAndRespond//trade/AlgoAddOrder (0.00s)
+    --- PASS: TestAllRoutesRegisteredAndRespond//trade/AlgoCancelEntrust (0.00s)
+    --- PASS: TestAllRoutesRegisteredAndRespond//trade/AlgoCancelOrder (0.00s)
+    --- PASS: TestAllRoutesRegisteredAndRespond//trade/AlgoChangeOrder (0.00s)
+    --- PASS: TestAllRoutesRegisteredAndRespond//trade/AlgoQueryEntrustIdList (0.00s)
+    --- PASS: TestAllRoutesRegisteredAndRespond//trade/AlgoQueryOrderList (0.00s)
+    --- PASS: TestAllRoutesRegisteredAndRespond//trade/FuturesCancelEntrust (0.00s)
+    --- PASS: TestAllRoutesRegisteredAndRespond//trade/FuturesEntrust (0.00s)
+    --- PASS: TestAllRoutesRegisteredAndRespond//trade/FuturesModifyEntrust (0.00s)
+    --- PASS: TestAllRoutesRegisteredAndRespond//trade/FuturesQueryFundInfo (0.00s)
+    --- PASS: TestAllRoutesRegisteredAndRespond//trade/FuturesQueryHistoryDeliverList (0.00s)
+    --- PASS: TestAllRoutesRegisteredAndRespond//trade/FuturesQueryHistoryEntrustList (0.00s)
+    --- PASS: TestAllRoutesRegisteredAndRespond//trade/FuturesQueryHoldsList (0.00s)
+    --- PASS: TestAllRoutesRegisteredAndRespond//trade/FuturesQueryMaxBuySellAmount (0.00s)
+    --- PASS: TestAllRoutesRegisteredAndRespond//trade/FuturesQueryProductInfo (0.00s)
+    --- PASS: TestAllRoutesRegisteredAndRespond//trade/FuturesQueryRealDeliverList (0.00s)
+    --- PASS: TestAllRoutesRegisteredAndRespond//trade/FuturesQueryRealEntrustList (0.00s)
+    --- PASS: TestAllRoutesRegisteredAndRespond//trade/TradeBatchCancelEntrust (0.00s)
+    --- PASS: TestAllRoutesRegisteredAndRespond//trade/TradeCancelEntrust (0.00s)
+    --- PASS: TestAllRoutesRegisteredAndRespond//trade/TradeChangeEntrust (0.00s)
+    --- PASS: TestAllRoutesRegisteredAndRespond//trade/TradeEntrust (0.00s)
+    --- PASS: TestAllRoutesRegisteredAndRespond//trade/TradeLogin (0.00s)
+    --- PASS: TestAllRoutesRegisteredAndRespond//trade/TradeLogout (0.00s)
+    --- PASS: TestAllRoutesRegisteredAndRespond//trade/TradeQueryBeforeAndAfterSupport (0.00s)
+    --- PASS: TestAllRoutesRegisteredAndRespond//trade/TradeQueryHistoryCondOrderList (0.00s)
+    --- PASS: TestAllRoutesRegisteredAndRespond//trade/TradeQueryHistoryDeliverList (0.00s)
+    --- PASS: TestAllRoutesRegisteredAndRespond//trade/TradeQueryHistoryEntrustList (0.00s)
+    --- PASS: TestAllRoutesRegisteredAndRespond//trade/TradeQueryHistoryFundJourList (0.00s)
+    --- PASS: TestAllRoutesRegisteredAndRespond//trade/TradeQueryHoldsList (0.00s)
+    --- PASS: TestAllRoutesRegisteredAndRespond//trade/TradeQueryMarginFullInfo (0.00s)
+    --- PASS: TestAllRoutesRegisteredAndRespond//trade/TradeQueryMarginFundInfo (0.00s)
+    --- PASS: TestAllRoutesRegisteredAndRespond//trade/TradeQueryMaxAvailableAsset (0.00s)
+    --- PASS: TestAllRoutesRegisteredAndRespond//trade/TradeQueryRealCondOrderList (0.00s)
+    --- PASS: TestAllRoutesRegisteredAndRespond//trade/TradeQueryRealDeliverList (0.00s)
+    --- PASS: TestAllRoutesRegisteredAndRespond//trade/TradeQueryRealEntrustList (0.00s)
+    --- PASS: TestAllRoutesRegisteredAndRespond//trade/TradeQueryRealFundJourList (0.00s)
+    --- PASS: TestAllRoutesRegisteredAndRespond//trade/TradeSubscribe (0.00s)
+    --- PASS: TestAllRoutesRegisteredAndRespond//trade/TradeUnsubscribe (0.00s)
+=== RUN   TestUnknownAndAliasRoutes
+--- PASS: TestUnknownAndAliasRoutes (0.01s)
+=== RUN   TestNonPostRejected
+--- PASS: TestNonPostRejected (0.01s)
+=== RUN   TestCursorPagination
+--- PASS: TestCursorPagination (0.04s)
+=== RUN   TestErrorInjection
+--- PASS: TestErrorInjection (0.01s)
+=== RUN   TestSubscriptionsRecorded
+--- PASS: TestSubscriptionsRecorded (0.01s)
+=== RUN   TestPushEmit
+--- PASS: TestPushEmit (0.00s)
+=== RUN   TestCloseIdempotent
+--- PASS: TestCloseIdempotent (0.00s)
+PASS
+ok  	github.com/shing1211/hstongapi4go/test/mockgateway	1.401s
+mockgateway test exit=0
+```
+
+```
+### go test ./test/e2e/... -race -count=1 -v
+=== RUN   TestE2E_AllEndpoints
+=== RUN   TestE2E_AllEndpoints/POST_/hq/BasicQot
+=== RUN   TestE2E_AllEndpoints/POST_/hq/OrderBook
+=== RUN   TestE2E_AllEndpoints/POST_/hq/KL
+=== RUN   TestE2E_AllEndpoints/POST_/hq/TimeShare
+=== RUN   TestE2E_AllEndpoints/POST_/hq/Ticker
+=== RUN   TestE2E_AllEndpoints/POST_/hq/Broker
+=== RUN   TestE2E_AllEndpoints/POST_/hq/UsOptionChainCode
+=== RUN   TestE2E_AllEndpoints/POST_/hq/UsOptionChainExpireDate
+=== RUN   TestE2E_AllEndpoints/POST_/hq/UsOverNightTradeCodes
+=== RUN   TestE2E_AllEndpoints/POST_/hq/Subscribe
+=== RUN   TestE2E_AllEndpoints/POST_/hq/Unsubscribe
+=== RUN   TestE2E_AllEndpoints/POST_/trade/TradeLogin
+=== RUN   TestE2E_AllEndpoints/POST_/trade/TradeLogout
+=== RUN   TestE2E_AllEndpoints/POST_/trade/TradeQueryMarginFundInfo
+=== RUN   TestE2E_AllEndpoints/POST_/trade/TradeQueryHoldsList
+=== RUN   TestE2E_AllEndpoints/POST_/trade/TradeQueryRealFundJourList
+=== RUN   TestE2E_AllEndpoints/POST_/trade/TradeQueryHistoryFundJourList
+=== RUN   TestE2E_AllEndpoints/POST_/hs/rate/queryList
+=== RUN   TestE2E_AllEndpoints/POST_/trade/TradeEntrust
+=== RUN   TestE2E_AllEndpoints/POST_/trade/TradeCancelEntrust
+=== RUN   TestE2E_AllEndpoints/POST_/trade/TradeBatchCancelEntrust
+=== RUN   TestE2E_AllEndpoints/POST_/trade/TradeChangeEntrust
+=== RUN   TestE2E_AllEndpoints/POST_/trade/TradeQueryMaxAvailableAsset
+=== RUN   TestE2E_AllEndpoints/POST_/trade/TradeQueryRealEntrustList
+=== RUN   TestE2E_AllEndpoints/POST_/trade/TradeQueryRealDeliverList
+=== RUN   TestE2E_AllEndpoints/POST_/trade/TradeQueryRealCondOrderList
+=== RUN   TestE2E_AllEndpoints/POST_/trade/TradeQueryHistoryEntrustList
+=== RUN   TestE2E_AllEndpoints/POST_/trade/TradeQueryHistoryDeliverList
+=== RUN   TestE2E_AllEndpoints/POST_/trade/TradeQueryHistoryCondOrderList
+=== RUN   TestE2E_AllEndpoints/POST_/trade/TradeQueryMarginFullInfo
+=== RUN   TestE2E_AllEndpoints/POST_/trade/TradeQueryBeforeAndAfterSupport
+=== RUN   TestE2E_AllEndpoints/POST_/trade/TradeSubscribe
+=== RUN   TestE2E_AllEndpoints/POST_/trade/TradeUnsubscribe
+=== RUN   TestE2E_AllEndpoints/POST_/trade/AlgoAddOrder
+=== RUN   TestE2E_AllEndpoints/POST_/trade/AlgoCancelOrder
+=== RUN   TestE2E_AllEndpoints/POST_/trade/AlgoCancelEntrust
+=== RUN   TestE2E_AllEndpoints/POST_/trade/AlgoChangeOrder
+=== RUN   TestE2E_AllEndpoints/POST_/trade/AlgoActionOrder
+=== RUN   TestE2E_AllEndpoints/POST_/trade/AlgoQueryOrderList
+=== RUN   TestE2E_AllEndpoints/POST_/trade/AlgoQueryEntrustIdList
+=== RUN   TestE2E_AllEndpoints/POST_/trade/FuturesQueryProductInfo
+=== RUN   TestE2E_AllEndpoints/POST_/trade/FuturesQueryMaxBuySellAmount
+=== RUN   TestE2E_AllEndpoints/POST_/trade/FuturesQueryFundInfo
+=== RUN   TestE2E_AllEndpoints/POST_/trade/FuturesQueryHoldsList
+=== RUN   TestE2E_AllEndpoints/POST_/trade/FuturesEntrust
+=== RUN   TestE2E_AllEndpoints/POST_/trade/FuturesCancelEntrust
+=== RUN   TestE2E_AllEndpoints/POST_/trade/FuturesModifyEntrust
+=== RUN   TestE2E_AllEndpoints/POST_/trade/FuturesQueryRealEntrustList
+=== RUN   TestE2E_AllEndpoints/POST_/trade/FuturesQueryHistoryEntrustList
+=== RUN   TestE2E_AllEndpoints/POST_/trade/FuturesQueryRealDeliverList
+=== RUN   TestE2E_AllEndpoints/POST_/trade/FuturesQueryHistoryDeliverList
+--- PASS: TestE2E_AllEndpoints (0.06s)
+    --- PASS: TestE2E_AllEndpoints/POST_/hq/BasicQot (0.00s)
+    --- PASS: TestE2E_AllEndpoints/POST_/hq/OrderBook (0.00s)
+    --- PASS: TestE2E_AllEndpoints/POST_/hq/KL (0.00s)
+    --- PASS: TestE2E_AllEndpoints/POST_/hq/TimeShare (0.00s)
+    --- PASS: TestE2E_AllEndpoints/POST_/hq/Ticker (0.00s)
+    --- PASS: TestE2E_AllEndpoints/POST_/hq/Broker (0.00s)
+    --- PASS: TestE2E_AllEndpoints/POST_/hq/UsOptionChainCode (0.00s)
+    --- PASS: TestE2E_AllEndpoints/POST_/hq/UsOptionChainExpireDate (0.00s)
+    --- PASS: TestE2E_AllEndpoints/POST_/hq/UsOverNightTradeCodes (0.00s)
+    --- PASS: TestE2E_AllEndpoints/POST_/hq/Subscribe (0.00s)
+    --- PASS: TestE2E_AllEndpoints/POST_/hq/Unsubscribe (0.00s)
+    --- PASS: TestE2E_AllEndpoints/POST_/trade/TradeLogin (0.00s)
+    --- PASS: TestE2E_AllEndpoints/POST_/trade/TradeLogout (0.00s)
+    --- PASS: TestE2E_AllEndpoints/POST_/trade/TradeQueryMarginFundInfo (0.00s)
+    --- PASS: TestE2E_AllEndpoints/POST_/trade/TradeQueryHoldsList (0.00s)
+    --- PASS: TestE2E_AllEndpoints/POST_/trade/TradeQueryRealFundJourList (0.00s)
+    --- PASS: TestE2E_AllEndpoints/POST_/trade/TradeQueryHistoryFundJourList (0.00s)
+    --- PASS: TestE2E_AllEndpoints/POST_/hs/rate/queryList (0.00s)
+    --- PASS: TestE2E_AllEndpoints/POST_/trade/TradeEntrust (0.00s)
+    --- PASS: TestE2E_AllEndpoints/POST_/trade/TradeCancelEntrust (0.00s)
+    --- PASS: TestE2E_AllEndpoints/POST_/trade/TradeBatchCancelEntrust (0.00s)
+    --- PASS: TestE2E_AllEndpoints/POST_/trade/TradeChangeEntrust (0.00s)
+    --- PASS: TestE2E_AllEndpoints/POST_/trade/TradeQueryMaxAvailableAsset (0.00s)
+    --- PASS: TestE2E_AllEndpoints/POST_/trade/TradeQueryRealEntrustList (0.01s)
+    --- PASS: TestE2E_AllEndpoints/POST_/trade/TradeQueryRealDeliverList (0.00s)
+    --- PASS: TestE2E_AllEndpoints/POST_/trade/TradeQueryRealCondOrderList (0.00s)
+    --- PASS: TestE2E_AllEndpoints/POST_/trade/TradeQueryHistoryEntrustList (0.00s)
+    --- PASS: TestE2E_AllEndpoints/POST_/trade/TradeQueryHistoryDeliverList (0.00s)
+    --- PASS: TestE2E_AllEndpoints/POST_/trade/TradeQueryHistoryCondOrderList (0.00s)
+    --- PASS: TestE2E_AllEndpoints/POST_/trade/TradeQueryMarginFullInfo (0.00s)
+    --- PASS: TestE2E_AllEndpoints/POST_/trade/TradeQueryBeforeAndAfterSupport (0.00s)
+    --- PASS: TestE2E_AllEndpoints/POST_/trade/TradeSubscribe (0.00s)
+    --- PASS: TestE2E_AllEndpoints/POST_/trade/TradeUnsubscribe (0.00s)
+    --- PASS: TestE2E_AllEndpoints/POST_/trade/AlgoAddOrder (0.00s)
+    --- PASS: TestE2E_AllEndpoints/POST_/trade/AlgoCancelOrder (0.00s)
+    --- PASS: TestE2E_AllEndpoints/POST_/trade/AlgoCancelEntrust (0.00s)
+    --- PASS: TestE2E_AllEndpoints/POST_/trade/AlgoChangeOrder (0.00s)
+    --- PASS: TestE2E_AllEndpoints/POST_/trade/AlgoActionOrder (0.00s)
+    --- PASS: TestE2E_AllEndpoints/POST_/trade/AlgoQueryOrderList (0.00s)
+    --- PASS: TestE2E_AllEndpoints/POST_/trade/AlgoQueryEntrustIdList (0.00s)
+    --- PASS: TestE2E_AllEndpoints/POST_/trade/FuturesQueryProductInfo (0.00s)
+    --- PASS: TestE2E_AllEndpoints/POST_/trade/FuturesQueryMaxBuySellAmount (0.00s)
+    --- PASS: TestE2E_AllEndpoints/POST_/trade/FuturesQueryFundInfo (0.00s)
+    --- PASS: TestE2E_AllEndpoints/POST_/trade/FuturesQueryHoldsList (0.00s)
+    --- PASS: TestE2E_AllEndpoints/POST_/trade/FuturesEntrust (0.00s)
+    --- PASS: TestE2E_AllEndpoints/POST_/trade/FuturesCancelEntrust (0.00s)
+    --- PASS: TestE2E_AllEndpoints/POST_/trade/FuturesModifyEntrust (0.00s)
+    --- PASS: TestE2E_AllEndpoints/POST_/trade/FuturesQueryRealEntrustList (0.00s)
+    --- PASS: TestE2E_AllEndpoints/POST_/trade/FuturesQueryHistoryEntrustList (0.00s)
+    --- PASS: TestE2E_AllEndpoints/POST_/trade/FuturesQueryRealDeliverList (0.00s)
+    --- PASS: TestE2E_AllEndpoints/POST_/trade/FuturesQueryHistoryDeliverList (0.00s)
+=== RUN   TestE2E_SessionReLogin
+--- PASS: TestE2E_SessionReLogin (0.01s)
+=== RUN   TestE2E_ErrorMapping
+=== RUN   TestE2E_ErrorMapping/1011_retryable
+=== RUN   TestE2E_ErrorMapping/1014_re-login_required
+--- PASS: TestE2E_ErrorMapping (0.01s)
+    --- PASS: TestE2E_ErrorMapping/1011_retryable (0.00s)
+    --- PASS: TestE2E_ErrorMapping/1014_re-login_required (0.00s)
+=== RUN   TestE2E_Push
+--- PASS: TestE2E_Push (0.01s)
+PASS
+ok  	github.com/shing1211/hstongapi4go/test/e2e	1.409s
+e2e test exit=0
+
+### e2e endpoint subtests = TestE2E_AllEndpoints/* count
+count=51 (want 51)
+
+### go test -race -count=1 ./...
+?   	github.com/shing1211/hstongapi4go	[no test files]
+ok  	github.com/shing1211/hstongapi4go/client	1.573s
+?   	github.com/shing1211/hstongapi4go/cmd/hstong-mock-gateway	[no test files]
+?   	github.com/shing1211/hstongapi4go/gen/common/constant	[no test files]
+?   	github.com/shing1211/hstongapi4go/gen/common/msg	[no test files]
+?   	github.com/shing1211/hstongapi4go/gen/hq/dto	[no test files]
+?   	github.com/shing1211/hstongapi4go/gen/hq/notify	[no test files]
+?   	github.com/shing1211/hstongapi4go/gen/trade/notify	[no test files]
+ok  	github.com/shing1211/hstongapi4go/internal/crypto	1.070s
+ok  	github.com/shing1211/hstongapi4go/internal/errs	1.086s
+ok  	github.com/shing1211/hstongapi4go/internal/push	1.240s
+ok  	github.com/shing1211/hstongapi4go/internal/session	1.070s
+ok  	github.com/shing1211/hstongapi4go/internal/transport	1.460s
+ok  	github.com/shing1211/hstongapi4go/pkg/hstong	1.611s
+ok  	github.com/shing1211/hstongapi4go/pkg/hstong/algo	1.459s
+ok  	github.com/shing1211/hstongapi4go/pkg/hstong/future	1.459s
+ok  	github.com/shing1211/hstongapi4go/pkg/hstong/market	1.273s
+ok  	github.com/shing1211/hstongapi4go/pkg/hstong/stream	1.260s
+ok  	github.com/shing1211/hstongapi4go/pkg/hstong/trade	1.294s
+?   	github.com/shing1211/hstongapi4go/pkg/types	[no test files]
+ok  	github.com/shing1211/hstongapi4go/test/e2e	1.339s
+ok  	github.com/shing1211/hstongapi4go/test/mockgateway	1.372s
+full race exit=0
+
+### go test -count=1 -cover ./test/...
+ok  	github.com/shing1211/hstongapi4go/test/e2e	0.390s	coverage: [no statements]
+ok  	github.com/shing1211/hstongapi4go/test/mockgateway	0.374s	coverage: 78.6% of statements
+
+### python scripts/check_money.py
+money-check OK: no float money/quantity fields in pkg/
+```
+
+## Standalone binary smoke test
+
+Built `./cmd/hstong-mock-gateway` and ran it with ephemeral ports, then stopped
+it after 1.2s. It printed the bound addresses:
+
+```
+hstong-mock-gateway: HTTP  http://127.0.0.1:54605
+hstong-mock-gateway: push  127.0.0.1:54607
+hstong-mock-gateway: serving 51 endpoints; press Ctrl-C to stop
+```
+
+`make mock-gateway` now runs `go run ./cmd/hstong-mock-gateway "$@"`.
+
+## Coverage note
+
+`go test -cover ./test/...` reports 78.6% for `test/mockgateway`. The e2e
+package reports `[no statements]` because, by design, it contains only test
+files plus a package doc comment (there is no non-test code to cover).
+
+## Endpoint count assertion detail
+
+- `client.Routes()` length is asserted `== 51` in
+  `test/mockgateway/server_test.go` (`TestAllRoutesRegisteredAndRespond`).
+- The mock's fixture table length is asserted `== 51`, and every route must
+  have a fixture.
+- `test/e2e/e2e_test.go` builds a 51-row table and fails
+  (`endpoint table = N, want 51`) when it drifts.
+- `go test -v` count of `TestE2E_AllEndpoints/POST_/...` subtests = 51.

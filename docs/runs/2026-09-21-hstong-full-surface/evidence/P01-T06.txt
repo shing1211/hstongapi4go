@@ -1,0 +1,43 @@
+T06 — Client, options, env, routing — evidence
+Run: 2026-09-21-hstong-full-surface · Status: done · Role: backend
+
+Files
+- client/doc.go, options.go, env.go, routes.go, client.go,
+  routes_test.go, client_test.go
+- docs/adr/0006-test-dependencies.md
+- go.mod / go.sum: + go.uber.org/goleak v1.3.0 (test-only)
+
+Public API
+    const DefaultBaseURL = "http://127.0.0.1:11111"
+    const DefaultPushAddr = "127.0.0.1:11112"
+    const DefaultTimeout = 10s
+    var ErrClientClosed, ErrUnknownRoute
+    type Route string; (Route).Path/String/Validate; Routes() []Route; NormalizePath(string) string
+    51 Route constants (market pull 9, market sub 2, trade session 2, assets 5,
+    orders 13, trade push 2, algo 7, futures 11)
+    type Config; type Option
+    WithBaseURL, WithPushAddr, WithHTTPClient, WithTimeout, WithTradePassword,
+    WithPlatformPublicKey, WithEnv
+    New(opts ...Option) (*Client, error)
+    (c *Client) Do(ctx, op string, route Route, params any, codec transport.Codec, out any) error
+    (c *Client) JSON()/ProtoJSON() transport.Codec
+    (c *Client) Close() error   // idempotent via sync.Once
+    Accessors: BaseURL, PushAddr, Timeout, TradePassword (sensitive),
+    PlatformPublicKey, VerifyPush, HTTPClient
+    Env: HSTONG_GATEWAY_URL, HSTONG_PUSH_ADDR, HSTONG_TIMEOUT,
+         HSTONG_TRADE_PASSWORD, HSTONG_VERIFY_PUSH
+
+Verification
+- gofmt -l . -> empty; go build/vet -> exit 0
+- route constants = 51 (grep + TestRoutes_Count)
+- TestRoute_ValidateAndPath: all 51 validate; Path/String match
+- TestNormalizePath_AliasForms: 51 x 3 alias forms -> canonical
+- TestNormalizePath_Idempotent / UnknownUnchanged; TestRoute_ValidateUnknown
+- TestDo_UnknownRouteSendsNothing (no request on invalid route)
+- go test -race -count=1 ./... -> ok (client, crypto, errs, transport)
+- goleak.VerifyTestMain in client: no leaks
+- python scripts/check_money.py -> OK
+
+Follow-up
+- T09 added the public client.Codec alias (type Codec = transport.Codec) so no
+  internal type appears in a public signature (DESIGN.md §6).

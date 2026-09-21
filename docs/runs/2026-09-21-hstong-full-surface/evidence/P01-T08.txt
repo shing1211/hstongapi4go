@@ -1,0 +1,36 @@
+T08 — AES-ECB trade-password crypto — evidence
+Run: 2026-09-21-hstong-full-surface · Status: done · Role: backend
+
+Algorithm (verified on host before implementation)
+- key = Base64Decode("m+qS04/2CH1OweCnmXZ3TDZkCQS+hBzY") -> 24 bytes -> AES-192
+- mode = ECB, padding = PKCS7, output = Base64 (std, padded)
+
+Files created
+- internal/crypto/doc.go
+- internal/crypto/aes.go
+- internal/crypto/aes_test.go
+
+Public API (for T10 session manager)
+    package crypto
+    func EncryptTradePassword(plaintext string) (string, error)
+    var ErrInvalidKeyLength error
+
+Verification
+- go build ./...                              -> exit 0
+- go vet ./...                                -> exit 0
+- gofmt -l .                                  -> empty
+- go test ./internal/crypto/... -v -count=1   -> PASS
+    TestKeyIsAES192, TestEncryptTradePassword (doc_vector,
+    empty_string_pads_to_full_block, exactly_one_block_pads_an_extra_block,
+    multi_block), TestEncryptTradePassword_Deterministic,
+    TestEncryptTradePassword_NoPlaintextInError
+- go test -race ./internal/crypto/... -count=1 -> ok
+- python scripts/check_money.py               -> OK
+
+Doc vector
+    "123456" -> W1U8iZIppSE+mBMtzy9vZQ==   (16-byte ciphertext)  MATCH
+
+Notes
+- stdlib only (crypto/aes, encoding/base64, errors); ECB implemented over
+  aes.NewCipher's cipher.Block since ECB is not a stdlib mode.
+- Plaintext/ciphertext never logged; error text excludes the password.

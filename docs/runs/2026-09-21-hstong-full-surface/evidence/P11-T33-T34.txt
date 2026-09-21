@@ -1,0 +1,49 @@
+T33 + T34 — Examples and documentation site — evidence
+Run: 2026-09-21-hstong-full-surface · Status: done · Role: docs
+
+T33 examples/ (all compile; go build ./examples/... exit 0)
+- examples/quickstart/main.go    env config, client.New, session login, quote, order query
+- examples/market-data/main.go   quote, order book, K-line, ticker, time-share
+- examples/trading/main.go       funds, positions, place order (gated), open orders, cancel
+- examples/streaming/main.go     stream connect, subscribe, consume Updates() until cancel
+- examples/futures/main.go       futures funds, positions, place/query
+- examples/algo/main.go          algo add order, master/sub query, action
+- examples/mock-gateway/README.md
+- examples/README.md
+- examples/examples_test.go      walks examples/*/main.go (go/parser): package main,
+                                 func main(), SPDX header present
+- Env-driven, context timeouts, no hardcoded credentials; order placement gated behind
+  HSTONG_EXAMPLE_PLACE_ORDER.
+
+T34 MkDocs Material site
+- mkdocs.yml (Material; nav covers Getting Started, Protocol, Market Data, Trading,
+  Futures, Algo, Streaming, Mock Gateway, Testing, Observability, Rate Limiting,
+  Security, Errors, ADRs; docs/runs excluded)
+- requirements-docs.txt (mkdocs-material pinned)
+- scripts/mkdocs_hooks.py (rewrites out-of-tree repo links to GitHub URLs)
+- docs/index.md, getting-started.md, configuration.md, authentication.md, protocol.md,
+  market-data.md, trading.md, futures.md, algo.md, streaming.md, mock-gateway.md,
+  testing.md, observability.md, rate-limiting.md, security.md, errors.md,
+  CONTRIBUTING.md, LEGACY.md
+- docs/LEGACY.md documents the deprecated direct-to-platform protocol (151-byte header,
+  RSA/AES/heartbeat/device binding, published platform public keys) and states it is NOT
+  implemented (ADR 0001).
+
+Checks
+- go build ./examples/... -> exit 0; go test ./examples/... -count=1 -> ok
+- python yaml.safe_load(mkdocs.yml) -> OK
+- mkdocs 1.6.1 / Material 9.7.7; mkdocs build --strict -> exit 0
+
+Known limitation (fixed in the follow-up hardening session)
+- After T30-T32, WithMetrics/WithRetryPolicy/WithRateLimiter/WithCircuitBreaker took
+  internal types. The follow-up added public aliases in client (client/hardening.go) and
+  updated observability.md / rate-limiting.md / configuration.md. Confirmed by the
+  orchestrator: gofmt/vet/build clean, public aliases compile from package client_test.
+
+Known limitation (fixed by orchestrator housekeeping)
+- T35 added a '../test/integration/README.md' link in docs/testing.md, which broke
+  mkdocs strict. scripts/mkdocs_hooks.py now rewrites ../test/** links too; strict exits 0.
+
+Unverified claims
+- Runtime behavior of the examples is compile-verified only (never executed against a
+  Gateway). Prose snippets in docs are source-checked but not machine-compiled.

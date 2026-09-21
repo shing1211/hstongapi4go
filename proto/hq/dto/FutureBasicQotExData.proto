@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+option java_package = "com.huasheng.quant.open.sdk.protobuf.hq.common.dto";
+option java_outer_classname = "FutureBasicQotExDataProto";
+message FutureBasicQotExData {
+    string expiryDate=1; // 到期日字符串
+    int32 expiryDateDistance = 2; //距离到期日天数
+    string preSettle =3;//昨结
+    string openInterest =4;//持仓量
+    string preOpenInterest =5;//昨持仓量
+    string dailyIncrement =6;//日增仓
+    string multiplier =7;//合约乘数
+    string mainContractCode =8;//主力合约代码  eg:美期：MNQmain-->MNQ2506  港期：HSImain.HK-->HSI2506.HK
+}

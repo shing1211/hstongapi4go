@@ -1,0 +1,66 @@
+# Copyright 2026 shing1211
+# SPDX-License-Identifier: Apache-2.0
+#
+# golangci-lint configuration for hstongapi4go (v2 schema).
+#
+# Go support caveat: golangci-lint only supports the two most recent Go minor
+# releases and explicit support for the `go 1.26` directive used by this module
+# first appeared in golangci-lint v2.9.0. CI therefore pins the `v2.9` line
+# (see .github/workflows/ci.yml). If the lint job ever fails with a "Go version
+# ... is not supported" error, bump the pinned golangci-lint version rather than
+# lowering the module's Go directive.
+version: "2"
+
+linters:
+  # `standard` = errcheck, govet, ineffassign, staticcheck, unused.
+  default: standard
+  enable:
+    # Listed explicitly for clarity even though they are part of `standard`.
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    # Extra, intentionally low-noise checks.
+    - misspell
+    - revive
+  settings:
+    revive:
+      rules:
+        # Interface implementations legitimately ignore parameters; flagging
+        # them is noisy for a transport/SDK library.
+        - name: unused-parameter
+          disabled: true
+  exclusions:
+    # Skip files tagged "Code generated ... DO NOT EDIT." (e.g. *.pb.go).
+    generated: lax
+    paths:
+      - gen/
+      - .*\.pb\.go$
+      - proto/
+    rules:
+      # Test helpers routinely ignore returned errors.
+      - path: _test\.go
+        linters:
+          - errcheck
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    gofmt:
+      simplify: true
+    goimports:
+      local-prefixes:
+        - github.com/shing1211/hstongapi4go
+  exclusions:
+    # Generated protobuf code is never gofmt/goimports-checked.
+    generated: lax
+    paths:
+      - gen/
+      - proto/
+
+run:
+  timeout: 5m
+  tests: true

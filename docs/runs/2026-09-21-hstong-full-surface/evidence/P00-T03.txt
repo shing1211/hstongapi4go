@@ -1,0 +1,43 @@
+T03 — Vendor PB + keys + enums — evidence
+Run: 2026-09-21-hstong-full-surface
+Status: done
+Role: data
+
+Source
+- 华盛通OpenAPI-SDK-PB.zip (9,229 bytes)
+- SHA-256: 74367ceeefaa1aac1153b9c28afcf5aa68856ab1bdcd983dde697a6318759329
+- Protobuf package v2.2.0
+- 17 protos copied byte-for-byte; 0 re-encoded; 0 hash mismatches
+
+Files created
+- proto/PROVENANCE.md
+- proto/common/constant/NotifyMsgType.proto
+- proto/common/msg/HeartBeat.proto
+- proto/common/msg/Notify.proto
+- proto/hq/dto/{Security,BasicQot,FutureBasicQotExData,OptionBasicQotExData,Broker,OrderBook,Ticker,TimeShare,KLine}.proto
+- proto/hq/notify/{BasicQotNotify,BrokerNotify,OrderBookFullNotify,TickerNotify}.proto
+- proto/trade/notify/TradeStockDeliverNotify.proto
+- docs/SPEC.md (canonical index v1: 51 endpoints, 11 topics, NotifyMsgType, status codes, dictionaries, limits)
+- pkg/types/doc.go, enums.go, status.go, platformkeys.go
+
+Structural checks
+- proto .proto count = 17
+- legacy protos (Request/Response/RequestMsgType/ResponseMsgType) = 0
+- docs/SPEC.md present (18,675 bytes)
+
+Commands run + results
+- go build ./...              -> exit 0
+- go vet ./...                -> exit 0
+- gofmt -l .                  -> empty (clean)
+- go test ./...               -> no test files, exit 0
+- python scripts/check_money.py -> "money-check OK: no float money/quantity fields in pkg/", exit 0
+
+Non-exhaustive enums (documented as such in code)
+- moneyType, entrustProp, entrustType (note: legacy dictionary uses a different
+  code set than the Gateway order endpoint), exchange (22 IB venues), TopicID
+  variants 27/28/35/36/37 (semantics not stated in the reference).
+
+Notes
+- Proto files are valid UTF-8 (not GBK); bytes preserved verbatim.
+- Status codes sourced from the legacy reference; internal/errs (T07) must confirm
+  the mapping against the live Gateway envelope {"ok","err","data"}.

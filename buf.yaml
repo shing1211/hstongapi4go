@@ -1,0 +1,25 @@
+# Copyright 2026 shing1211
+# SPDX-License-Identifier: Apache-2.0
+#
+# buf module configuration for the vendored HStong protobuf definitions.
+#
+# The module root is `proto/` so that imports such as
+# `common/constant/NotifyMsgType.proto` and `hq/dto/Security.proto` resolve
+# exactly as they do upstream (see proto/PROVENANCE.md and ADR 0002).
+#
+# The vendored files are byte-for-byte upstream: no `package` declaration, no
+# `go_package`, and Chinese comments. Lint is therefore informational only and
+# `make proto` treats a lint failure as non-fatal; `make proto-verify` checks
+# generation drift, not style.
+version: v2
+
+modules:
+  - path: proto
+
+lint:
+  use:
+    - STANDARD
+
+breaking:
+  use:
+    - FILE

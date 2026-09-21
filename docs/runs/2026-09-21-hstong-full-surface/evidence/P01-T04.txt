@@ -1,0 +1,36 @@
+T04 — Protobuf codegen — evidence
+Run: 2026-09-21-hstong-full-surface · Status: done · Role: data
+
+Toolchain
+- buf 1.73.0 (host)
+- protoc-gen-go pinned to v1.36.6 (matches Makefile TOOLS pin; host had v1.36.1)
+- protobuf module v1.36.12
+
+Files created/modified
+- buf.yaml (version: v2, module path: proto)
+- buf.gen.yaml (managed mode: go_package_prefix =
+  github.com/shing1211/hstongapi4go/gen; paths=source_relative)
+- gen/** (17 .pb.go: common/constant/NotifyMsgType, common/msg/{HeartBeat,Notify},
+  hq/dto/{BasicQot,Broker,FutureBasicQotExData,KLine,OptionBasicQotExData,
+  OrderBook,Security,Ticker,TimeShare}, hq/notify/{BasicQotNotify,BrokerNotify,
+  OrderBookFullNotify,TickerNotify}, trade/notify/TradeStockDeliverNotify)
+- scripts/proto_verify.sh
+- Makefile (only `proto` and `proto-verify` recipes)
+- go.mod / go.sum (google.golang.org/protobuf v1.36.12)
+
+Verification
+- buf --version            -> 1.73.0
+- buf generate            -> exit 0, 17 files
+- go mod tidy             -> exit 0
+- go build ./...          -> exit 0
+- go vet ./...            -> exit 0
+- gofmt -l .              -> empty
+- bash scripts/proto_verify.sh -> "proto-verify: gen/ matches proto/ (no drift)" exit 0
+- second buf generate     -> git diff --exit-code -- gen/ = 0 (no drift)
+- negative test           -> editing a .pb.go made proto_verify fail; restored
+
+Notes
+- buf lint fails on upstream protos (no package, non-snake filenames); non-fatal
+  by design in the `proto` target.
+- proto/** untouched (byte-for-byte).
+- make unavailable on host; script exercised via Git Bash; CI runs the recipes.

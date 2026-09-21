@@ -1,0 +1,32 @@
+# Copyright 2026 shing1211
+# SPDX-License-Identifier: Apache-2.0
+#
+# Code generation config for the vendored HStong protobuf definitions.
+#
+# The protos carry `java_package` but no `go_package`, so managed mode supplies
+# the Go import path from the file's location under the module root. With
+# `go_package_prefix = github.com/shing1211/hstongapi4go/gen`:
+#
+#   common/msg/Notify.proto      -> github.com/shing1211/hstongapi4go/gen/common/msg
+#   hq/dto/BasicQot.proto        -> github.com/shing1211/hstongapi4go/gen/hq/dto
+#   trade/notify/...proto        -> github.com/shing1211/hstongapi4go/gen/trade/notify
+#
+# `paths=source_relative` makes the on-disk layout mirror the proto tree, so the
+# files land at gen/common/..., gen/hq/..., gen/trade/.... Generated code is
+# committed (ADR 0004) and checked for drift by `make proto-verify`.
+#
+# Well-known types (google/protobuf/any.proto, imported by common/msg/Notify.proto)
+# are bundled with buf and resolved from its embedded WKT set; they are not
+# vendored here and produce no Go output.
+version: v2
+
+managed:
+  enabled: true
+  override:
+    - file_option: go_package_prefix
+      value: github.com/shing1211/hstongapi4go/gen
+
+plugins:
+  - local: protoc-gen-go
+    out: gen
+    opt: paths=source_relative

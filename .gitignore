@@ -23,3 +23,32 @@ go.work.sum
 
 # env file
 .env
+
+# --- hstongapi4go additions ---
+
+# Coverage reports
+coverage.out
+coverage.html
+
+# Build/test output
+dist/
+site/
+
+# Python virtualenvs (scripts/)
+.venv/
+__pycache__/
+*.pyc
+
+# Downloaded vendor archives — local reference only, NEVER committed.
+# The root also holds the HStong SDK/Gateway archives (Chinese filenames):
+#   华盛通OpenAPI-SDK-{PB,Cpp,Java,Python}.zip
+#   华盛通OpenAPI-Gateway客户端-*.{zip,dmg,tar.gz,exe}
+# The extracted proto/ tree IS committed (see PROVENANCE.md); the archives are
+# not. Rules kept broad so re-downloads with new names stay ignored.
+*.zip
+*.dmg
+*.tar.gz
+*.7z
+*.rar
+/华盛通OpenAPI-*
+/vendor-archives/

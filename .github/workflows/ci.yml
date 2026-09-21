@@ -1,0 +1,84 @@
+name: CI
+
+# Public Go SDK module: github.com/shing1211/hstongapi4go (Apache-2.0).
+#
+# The Go toolchain version is NOT hard-coded here: actions/setup-go reads it
+# from the `go` directive in go.mod via `go-version-file`, so go.mod remains the
+# single source of truth (currently `go 1.26`).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Least privilege: every job only reads the repository.
+permissions:
+  contents: read
+
+# Cancel superseded runs for the same branch/PR instead of queueing them.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: build, vet, test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Go (version from go.mod)
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          check-latest: true
+          cache: true
+
+      - name: Build
+        run: go build ./...
+
+      - name: gofmt check
+        # Generated protobuf code under gen/ is excluded (see .golangci.yml);
+        # everything else must be gofmt-clean.
+        run: |
+          UNFORMATTED=$(gofmt -l . | grep -v '^gen/' || true)
+          if [ -n "$UNFORMATTED" ]; then
+            echo "The following files are not gofmt-clean:"
+            echo "$UNFORMATTED"
+            exit 1
+          fi
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test ./... -count=1
+
+      - name: Test (race detector)
+        run: go test -race -count=1 ./...
+
+      - name: Money type check (no float money fields)
+        run: make money-check
+
+  lint:
+    name: golangci-lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Go (version from go.mod)
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          check-latest: true
+          cache: true
+
+      # golangci-lint-action v8 (v7+ supports golangci-lint v2). golangci-lint
+      # >= v2.9 is required for the `go 1.26` directive, so pin that line.
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.9

@@ -1,0 +1,134 @@
+T26 + T27 — Algo endpoints + tests — evidence
+Run: 2026-09-21-hstong-full-surface · Status: done · Role: backend (merged T26+T27)
+Deliverable: 7 strategy/algo endpoints in pkg/hstong/algo (JSON codec, money as string)
+
+Files created
+- pkg/hstong/algo/doc.go        package doc: master/child model + JSON codec + no-retry
+- pkg/hstong/algo/algo.go       Manager, New, 7 methods, params/results, validation
+- pkg/hstong/algo/action.go     Action typed constant set + Valid/String
+- pkg/hstong/algo/algo_test.go  7 endpoint tests + single-attempt + validation + goleak
+- pkg/hstong/algo/action_test.go  action-code validation + per-action required params
+- docs/runs/2026-09-21-hstong-full-surface/evidence/P08-T26-T27.txt (this file)
+
+Public API (package algo)
+    const (
+        opAddOrder = "trade/AlgoAddOrder"; opCancelOrder = "trade/AlgoCancelOrder"
+        opCancelEntrust = "trade/AlgoCancelEntrust"; opChangeOrder = "trade/AlgoChangeOrder"
+        opActionOrder = "trade/AlgoActionOrder"; opQueryOrderList = "trade/AlgoQueryOrderList"
+        opQueryEntrustIDList = "trade/AlgoQueryEntrustIdList"
+    )
+    var ErrInvalidParams error
+    type Option func(*config)
+    func WithDefaultExchangeType(types.ExchangeType) Option
+    type Manager
+    func New(*client.Client, ...Option) *Manager
+    func (*Manager) AddOrder(context.Context, AddOrderParams) (string, error)
+    func (*Manager) CancelOrder(context.Context, CancelOrderParams) (string, error)
+    func (*Manager) CancelEntrust(context.Context, CancelEntrustParams) (string, error)
+    func (*Manager) ChangeOrder(context.Context, ChangeOrderParams) (string, error)
+    func (*Manager) ActionOrder(context.Context, ActionOrderParams) (string, error)
+    func (*Manager) QueryOrderList(context.Context, QueryOrderListParams) ([]MasterOrder, error)
+    func (*Manager) QueryEntrustIDList(context.Context, QueryEntrustIDListParams) ([]string, error)
+
+    Action constant set (action.go)
+    type Action string
+        ActionStart Action = "1"   // START
+        ActionStop  Action = "2"   // STOP
+        ActionSuspend Action = "3" // SUSPEND
+        ActionResume  Action = "4" // RESUME
+    func (Action) Valid() bool
+    func (Action) String() string   // "START".."RESUME", else "Action(<raw>)"
+
+    Supporting typed constants
+    Strategy:      StrategyVWAP "1", StrategyTWAP "1001", StrategyIceberg "1002",
+                   StrategyTPOV "1003", StrategyPOV "1005"  (non-exhaustive)
+    EntrustType:   EntrustTypeLimit "1", EntrustTypeMarket "2"
+    SessionType:   SessionTypeOff "0", SessionTypeOn "1"
+    Sensitivity:   SensitivityNeutral "1", SensitivityAggressive "2", SensitivityPassive "3"
+    Status:        0,1,2,3,4,5,6,8,A,C,E  (master-order lifecycle)
+    StrategyStatus:1,2,3,4  (shares the Action code set)
+
+    Params/results
+    type StrategyParam (all string except Interval int)
+    type AddOrderParams, CancelOrderParams, CancelEntrustParams, ChangeOrderParams,
+         ActionOrderParams, QueryOrderListParams, QueryEntrustIDListParams
+    type MasterOrder (money/qty all string)
+
+Codec + no-retry
+- All 7 methods use m.client.JSON() -> encoding/json (ADR 0002); no proto invented.
+- AddOrder/CancelOrder/CancelEntrust/ChangeOrder/ActionOrder issue exactly one
+  Client.Do and the client never retries (ADR 0003).
+- QueryOrderList / QueryEntrustIDList are read-only and retryable upstream.
+
+Validation (local, before any request; errors wrap ErrInvalidParams)
+- empty required fields; entrustType in {1,2}; sessionType in {0,1};
+  sensitivity in {1,2,3}; action in {1,2,3,4}; positive-decimal price/amount;
+  positive-int page numbers; yyyyMMdd dates; exchangeType required with stockCode.
+- WithDefaultExchangeType fills an empty ExchangeType before validation.
+
+Ambiguities modelled (from the live reference pages)
+- operate-algo action set is exactly 1-4 -> closed set; unlisted values rejected.
+- AddOrder table labels targetStrategy 1005 = POV while the request-example
+  comments and master-order query label 1003 = TPOV and 1005 = INLINE. The
+  Strategy set is therefore non-exhaustive/ambiguous: only empty is rejected and
+  unknown codes are forwarded unchanged (StrategyPOV documented as ambiguous).
+- Algo entrustType ('1' limit, '2' market) differs from types.EntrustType
+  (where '3' is limit), so a package-local EntrustType is defined instead of
+  reusing the trade enum. types.ExchangeType and types.EntrustBS are reused.
+- Algo master Status ('0','1','2','3','4','5','6','8','A','C','E') differs from
+  types.EntrustStatus, so a package-local Status is defined.
+- QueryEntrustIdList returns only IDs: data.entrustId: []string, decoded to
+  []string. No child DTO is documented.
+- operate-algo param table marks exchangeType required while its request example
+  omits it; modelled as required (validated) per the table.
+
+Verification (exact observed output)
+$ gofmt -l .
+pkg\hstong\trade\orders.go        <-- concurrent P05 trade file, NOT part of T26/T27;
+                                      pkg/hstong/algo/** prints nothing (clean)
+
+$ go build ./...
+build exit=0
+
+$ go vet ./...
+vet exit=0
+
+$ go test ./pkg/hstong/algo/... -race -count=1
+ok  	github.com/shing1211/hstongapi4go/pkg/hstong/algo	1.266s
+
+$ go test ./pkg/hstong/algo/... -race -count=1 -v
+--- PASS: TestActionValid (10 subtests)
+--- PASS: TestActionString (6 subtests)
+--- PASS: TestActionOrder_PerActionRequest (START/STOP/SUSPEND/RESUME)
+--- PASS: TestActionOrder_RejectsInvalidAction (empty/0/5/START/start)
+--- PASS: TestActionOrder_RequiredParamsPerAction (4 actions x 3 missing fields)
+--- PASS: TestActionOrder_DefaultExchangeType
+--- PASS: TestManager_AddOrder
+--- PASS: TestManager_CancelOrder
+--- PASS: TestManager_CancelEntrust
+--- PASS: TestManager_ChangeOrder
+--- PASS: TestManager_ActionOrder
+--- PASS: TestManager_QueryOrderList
+--- PASS: TestManager_QueryEntrustIDList
+--- PASS: TestAlgoMutationsAreSingleAttempt (5 mutations -> exactly 1 request each)
+--- PASS: TestManager_ValidationRejectsWithoutRequest (13 cases -> 0 requests)
+--- PASS: TestManager_DefaultExchangeType
+--- PASS: TestManager_GatewayFailureIsTyped
+PASS
+ok  	github.com/shing1211/hstongapi4go/pkg/hstong/algo	1.196s
+(goleak.VerifyTestMain active: no leaked goroutines)
+
+$ go test -race -count=1 ./...
+ok  	.../client, internal/crypto, internal/errs, internal/session,
+        internal/transport, pkg/hstong, pkg/hstong/algo, pkg/hstong/future
+?   	.../gen/..., pkg/hstong/market, pkg/hstong/trade, pkg/types [no test files]
+all test exit=0
+
+$ python scripts/check_money.py
+money-check OK: no float money/quantity fields in pkg/
+
+Follow-ups
+- Full-suite gofmt cleanliness depends on the concurrent P05 trade file
+  pkg/hstong/trade/orders.go; pkg/hstong/algo/** is gofmt-clean.
+- The 1005 POV-vs-INLINE label conflict should be confirmed against the Gateway
+  in P12/T35 if a caller depends on that strategy code.

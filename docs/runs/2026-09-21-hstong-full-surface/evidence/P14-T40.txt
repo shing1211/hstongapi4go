@@ -1,0 +1,153 @@
+P14 / T40 — Six-language README translations + i18n lockstep check — measured evidence
+Run: 2026-09-21-hstong-full-surface
+Date: 2026-09-21
+Host: Windows (win32), Go 1.26.8, Python 3.11.8, mkdocs 1.6.1 (mkdocs-material 9.x)
+
+NOTE: `make` is unavailable on the host and `python3` is a broken Microsoft Store
+stub, so the underlying commands were run directly: `python` instead of
+`python3`, `mkdocs` on PATH. GOTMPDIR was set for every Go command. All authored
+files carry the repository SPDX header (`scripts/check_i18n.py`).
+
+================================================================================
+1. i18n lockstep check — positive
+================================================================================
+$ python scripts/check_i18n.py
+i18n OK: 6 languages consistent
+exit: 0
+
+The 6 files checked: README.md (canonical), README.zh-Hans.md, README.zh-Hant.md,
+README.ja.md, README.ko.md, README.es.md.
+
+================================================================================
+2. i18n lockstep check — negative (deliberately broken switcher, temp copy)
+================================================================================
+Test performed on a copy under GOTMPDIR (no repo file was modified). The exact
+line anchoring removed the README.es.md link, replacing it with README.fr.md:
+
+  $env:GOTMPDIR="C:\Users\Tchan\AppData\Local\Temp\opencode"
+  $tmp = Join-Path $env:GOTMPDIR "i18n-neg"
+  # copy scripts/check_i18n.py + the six READMEs into $tmp, then:
+  python -c "...p.write_text(t.replace('](./README.es.md)', '](./README.fr.md)'))"
+  python (Join-Path $tmp "scripts\check_i18n.py")
+
+$ python <tmp>/scripts/check_i18n.py
+i18n check failed:
+  README.zh-Hans.md: language switcher missing or wrong; expected the line linking
+  all six READMEs: [English](./README.md) · [简体中文](./README.zh-Hans.md) ·
+  [繁體中文](./README.zh-Hant.md) · [日本語](./README.ja.md) ·
+  [한국어](./README.ko.md) · [Español](./README.es.md)
+i18n: 1 violation(s); see TRANSLATING.md
+exit: 1
+
+(Printed here decoded to UTF-8; the raw PowerShell console re-encoded the
+non-ASCII label bytes, which is a console-codepage artifact only. The script
+itself reads and writes UTF-8 throughout.)
+
+================================================================================
+3. Relative Markdown link check (now includes the five new READMEs)
+================================================================================
+$ python scripts/check_links.py
+check_links: scanned 61 Markdown files, 0 unresolved link(s)
+exit: 0
+
+(61 files; the T36 baseline was 55. The six extra Markdown files are the five
+new translations plus TRANSLATING.md. Every relative link in the new READMEs
+resolves: ./DISCLAIMER.md, ./examples/README.md, ./docs/*, ./test/*,
+./CONTRIBUTING.md, ./SECURITY.md, ./LICENSE, ./NOTICE, ./THIRD_PARTY_NOTICES.md,
+and the six switcher targets.)
+
+================================================================================
+4. mkdocs.yml parses as YAML
+================================================================================
+$ python -c "import yaml; yaml.safe_load(open('mkdocs.yml')); print('ok')"
+ok
+exit: 0
+
+================================================================================
+5. MkDocs strict build
+================================================================================
+$ mkdocs build --strict
+INFO    -  Cleaning site directory
+INFO    -  Building documentation to directory: D:\github\hstongapi4go\site
+INFO    -  The following pages exist in the docs directory, but are not included
+           in the "nav" configuration: DESIGN.md
+INFO    -  Doc file 'DESIGN.md' contains a link to
+           'runs/2026-09-21-hstong-full-surface/plan.md' which is excluded from
+           the built site.      (same informational note for ADR 0001-0007)
+INFO    -  Documentation built in 1.50 seconds
+exit: 0
+
+(The `runs/` notes are informational; docs/runs is excluded from the published
+site via mkdocs.yml `exclude_docs`. Strict mode still exits 0.)
+
+================================================================================
+6. Go build / vet / gofmt (README-only change must not disturb Go)
+================================================================================
+$ go build ./...
+exit: 0
+
+$ go vet ./...
+exit: 0
+
+$ gofmt -l .
+(no output)
+exit: 0
+
+================================================================================
+7. Count consistency across all six READMEs
+================================================================================
+$ python <tmp>/count_check.py
+README.md              headings=13  51=yes  11=yes  17=yes  v2.2.0=yes  v2.4.1=yes
+README.zh-Hans.md      headings=13  51=yes  11=yes  17=yes  v2.2.0=yes  v2.4.1=yes
+README.zh-Hant.md      headings=13  51=yes  11=yes  17=yes  v2.2.0=yes  v2.4.1=yes
+README.ja.md           headings=13  51=yes  11=yes  17=yes  v2.2.0=yes  v2.4.1=yes
+README.ko.md           headings=13  51=yes  11=yes  17=yes  v2.2.0=yes  v2.4.1=yes
+README.es.md           headings=13  51=yes  11=yes  17=yes  v2.2.0=yes  v2.4.1=yes
+Protobuf-v2.2.0          present in 6/6 files
+Gateway-v2.4.1           present in 6/6 files
+Endpoints-51             present in 6/6 files
+Push%20topics-11         present in 6/6 files
+
+All six files carry 13 Markdown headings (1 H1 + 12 H2) and the identical badge
+strings. Note on "17": the English README states endpoint (51) and topic (11)
+counts and the protobuf (v2.2.0) / Gateway (v2.4.1) versions, but it does NOT
+state the vendored-proto count "17" — "17" occurs only as the order-book push
+topic id `` `17` ``. That is canonical per docs/SPEC.md (which owns the 17-proto
+count), so the translations mirror it rather than inventing a count. No count in
+any translation differs from the English README.
+
+================================================================================
+8. Files created / modified by T40
+================================================================================
+created:
+  README.zh-Hans.md
+  README.zh-Hant.md
+  README.ja.md
+  README.ko.md
+  README.es.md
+  TRANSLATING.md
+  scripts/check_i18n.py
+  docs/runs/2026-09-21-hstong-full-surface/evidence/P14-T40.txt   (this file)
+modified:
+  README.md   (language switcher line + "Canonical English source. Last synced:
+               2026-09-21" banner; no prose/count/command change)
+  Makefile    (docs-check target only: added `$(PYTHON) scripts/check_i18n.py`
+               between the link check and `mkdocs build --strict`; no other
+               target touched)
+left unchanged:
+  every Go file, gen/**, proto/**, buf*.yaml, .github/**, mkdocs.yml, plan.md,
+  todos.md, phases/**, and all other evidence files.
+
+================================================================================
+9. Known limitations / caveats
+================================================================================
+- `make docs-check` itself could not be executed (`make` absent, `python3`
+  stubbed); its three underlying commands were each run directly and exit 0:
+  check_links.py, check_i18n.py, mkdocs build --strict.
+- Native-content guard thresholds (see scripts/check_i18n.py NATIVE_CONTENT) are
+  deliberately far below what a real translation produces, so they catch an
+  untranslated English copy, not translation quality.
+- Heading tolerance is 2 (documented in the script docstring and TRANSLATING.md);
+  all six files currently have exactly 13 headings (zero drift).
+- The Korean translation of the vendor name uses the Hanja form 華盛; the common
+  Latin form "HStong" is kept alongside it.

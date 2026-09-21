@@ -1,0 +1,33 @@
+T01 — ADRs + DESIGN + AGENTS — evidence
+Run: 2026-09-21-hstong-full-surface
+Status: done
+Role: architect
+
+Files created
+- docs/adr/README.md
+- docs/adr/0001-gateway-transport.md
+- docs/adr/0002-hybrid-codec.md
+- docs/adr/0003-no-auto-retry-orders.md
+- docs/adr/0004-minimal-dependencies.md
+- docs/adr/0005-key-model-and-push-verification.md
+- docs/DESIGN.md
+- AGENTS.md
+
+Decisions recorded
+- 0001 Gateway transport only; legacy direct protocol documented, not implemented.
+- 0002 Hybrid per-endpoint Codec: proto/protojson for push + market DTOs;
+  hand-written tagged structs + encoding/json for trade/futures/algo/assets/session.
+- 0003 No auto-retry for trade/futures/algo mutations (one attempt).
+- 0004 stdlib-first; protobuf is the only forced runtime dep; new deps need an ADR.
+- 0005 Developer PKCS#8 key is a Gateway concern (privateKeyPath); platform key
+  auto-selected from domain; SDK does no RSA signing; bodySHA1 verification
+  opt-in/default-off; bundled test+prod SPKI; WithPlatformPublicKey override.
+
+Verification
+- docs/adr/ contains 6 files; docs/ contains adr/, runs/, DESIGN.md.
+- Relative-link scan over the 8 new files: checked 8 files; dangling=0.
+- All 18 Make target names used in AGENTS.md match the Makefile.
+
+Notes
+- docs/SPEC.md and docs/LEGACY.md referenced as plain text (do not exist yet).
+- No Go code written by this task.

@@ -1,0 +1,18 @@
+﻿P16 close-out verification — 2026-09-21T14:29:39.9414215+08:00
+
+gofmt: clean
+go build ./...: exit=0
+go build examples+cmd: exit=0
+go vet ./...: exit=0
+go test -race ./...: fail_lines=0
+  ok packages=19
+python scripts/check_money.py: money-check OK: no float money/quantity fields in pkg/
+python scripts/check_links.py: check_links: scanned 64 Markdown files, 0 unresolved link(s)
+python scripts/check_i18n.py: i18n OK: 6 languages consistent
+proto_verify: proto-verify: regenerating into /tmp/tmp.EoWHtcQOpG/gen
+proto-verify: gen/ matches proto/ (no drift)
+mkdocs build --strict: exit=0
+integration: skips=7 fails=0
+e2e endpoints: 51/51
+
+Working tree entries: 36

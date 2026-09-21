@@ -1,0 +1,38 @@
+﻿P00 verification — 2026-09-21T12:09:34.6384069+08:00
+
+## go build ./...
+
+exit=0
+
+## go vet ./...
+
+exit=0
+
+## gofmt -l .
+(empty — clean)
+
+## go test ./...
+?   	github.com/shing1211/hstongapi4go	[no test files]
+
+exit=0
+
+## python scripts/check_money.py
+money-check OK: pkg/ does not exist yet
+
+exit=0
+
+## git status --short
+ M .gitignore
+?? .editorconfig
+?? .github/
+?? .golangci.yml
+?? AGENTS.md
+?? DISCLAIMER.md
+?? Makefile
+?? NOTICE
+?? THIRD_PARTY_NOTICES.md
+?? doc.go
+?? docs/
+?? go.mod
+?? scripts/
+

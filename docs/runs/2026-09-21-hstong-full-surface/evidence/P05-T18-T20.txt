@@ -1,0 +1,193 @@
+﻿P05 T18+T19+T20 trade surface - evidence
+Run: 2026-09-21-hstong-full-surface
+Host: Windows amd64, Go 1.26.8, GOTMPDIR set (a.out.exe lock mitigation)
+Date: 2026-09-21
+Deliverables: pkg/hstong/trade/{doc,assets,orders,pagination}.go + tests
+
+===== gofmt -l . =====
+
+gofmt exit=0 (empty list = clean)
+
+===== go build ./... =====
+
+go build exit=0
+
+===== go vet ./... =====
+
+go vet exit=0
+
+===== go test ./pkg/hstong/trade/... -race -count=1 -v =====
+=== RUN   TestManager_MarginFundInfo
+--- PASS: TestManager_MarginFundInfo (0.01s)
+=== RUN   TestManager_Positions
+--- PASS: TestManager_Positions (0.00s)
+=== RUN   TestManager_PositionsInline
+--- PASS: TestManager_PositionsInline (0.00s)
+=== RUN   TestManager_RealFundJourList
+--- PASS: TestManager_RealFundJourList (0.00s)
+=== RUN   TestManager_HistoryFundJourList
+--- PASS: TestManager_HistoryFundJourList (0.00s)
+=== RUN   TestManager_ExchangeRate
+--- PASS: TestManager_ExchangeRate (0.00s)
+=== RUN   TestOrders_Entrust
+--- PASS: TestOrders_Entrust (0.00s)
+=== RUN   TestOrders_EntrustConditional
+--- PASS: TestOrders_EntrustConditional (0.00s)
+=== RUN   TestOrders_EntrustValidation
+=== RUN   TestOrders_EntrustValidation/missing_exchangeType
+=== RUN   TestOrders_EntrustValidation/missing_stockCode
+=== RUN   TestOrders_EntrustValidation/missing_entrustBs
+=== RUN   TestOrders_EntrustValidation/missing_entrustType
+=== RUN   TestOrders_EntrustValidation/zero_amount
+=== RUN   TestOrders_EntrustValidation/negative_amount
+=== RUN   TestOrders_EntrustValidation/non-numeric_amount
+=== RUN   TestOrders_EntrustValidation/limit_missing_price
+=== RUN   TestOrders_EntrustValidation/conditional_missing_condValue
+=== RUN   TestOrders_EntrustValidation/conditional_missing_validDays
+=== RUN   TestOrders_EntrustValidation/conditional_validDays_zero
+=== RUN   TestOrders_EntrustValidation/conditional_validDays_over_100
+=== RUN   TestOrders_EntrustValidation/conditional_validDays_non-numeric
+=== RUN   TestOrders_EntrustValidation/iceberg_missing_display
+=== RUN   TestOrders_EntrustValidation/iceberg_zero_display
+=== RUN   TestOrders_EntrustValidation/iceberg_display_over_amount
+--- PASS: TestOrders_EntrustValidation (0.01s)
+    --- PASS: TestOrders_EntrustValidation/missing_exchangeType (0.00s)
+    --- PASS: TestOrders_EntrustValidation/missing_stockCode (0.00s)
+    --- PASS: TestOrders_EntrustValidation/missing_entrustBs (0.00s)
+    --- PASS: TestOrders_EntrustValidation/missing_entrustType (0.00s)
+    --- PASS: TestOrders_EntrustValidation/zero_amount (0.00s)
+    --- PASS: TestOrders_EntrustValidation/negative_amount (0.00s)
+    --- PASS: TestOrders_EntrustValidation/non-numeric_amount (0.00s)
+    --- PASS: TestOrders_EntrustValidation/limit_missing_price (0.00s)
+    --- PASS: TestOrders_EntrustValidation/conditional_missing_condValue (0.00s)
+    --- PASS: TestOrders_EntrustValidation/conditional_missing_validDays (0.00s)
+    --- PASS: TestOrders_EntrustValidation/conditional_validDays_zero (0.00s)
+    --- PASS: TestOrders_EntrustValidation/conditional_validDays_over_100 (0.00s)
+    --- PASS: TestOrders_EntrustValidation/conditional_validDays_non-numeric (0.00s)
+    --- PASS: TestOrders_EntrustValidation/iceberg_missing_display (0.00s)
+    --- PASS: TestOrders_EntrustValidation/iceberg_zero_display (0.00s)
+    --- PASS: TestOrders_EntrustValidation/iceberg_display_over_amount (0.00s)
+=== RUN   TestOrders_CancelEntrust
+--- PASS: TestOrders_CancelEntrust (0.00s)
+=== RUN   TestOrders_CancelEntrustValidation
+=== RUN   TestOrders_CancelEntrustValidation/missing_exchangeType
+=== RUN   TestOrders_CancelEntrustValidation/missing_stockCode
+=== RUN   TestOrders_CancelEntrustValidation/missing_entrustId
+--- PASS: TestOrders_CancelEntrustValidation (0.00s)
+    --- PASS: TestOrders_CancelEntrustValidation/missing_exchangeType (0.00s)
+    --- PASS: TestOrders_CancelEntrustValidation/missing_stockCode (0.00s)
+    --- PASS: TestOrders_CancelEntrustValidation/missing_entrustId (0.00s)
+=== RUN   TestOrders_BatchCancelEntrust
+--- PASS: TestOrders_BatchCancelEntrust (0.00s)
+=== RUN   TestOrders_ChangeEntrust
+--- PASS: TestOrders_ChangeEntrust (0.00s)
+=== RUN   TestOrders_ChangeEntrustValidation
+=== RUN   TestOrders_ChangeEntrustValidation/missing_amount
+=== RUN   TestOrders_ChangeEntrustValidation/missing_entrustId
+=== RUN   TestOrders_ChangeEntrustValidation/conditional_missing_condValue
+=== RUN   TestOrders_ChangeEntrustValidation/conditional_missing_validDays
+=== RUN   TestOrders_ChangeEntrustValidation/conditional_validDays_over_100
+--- PASS: TestOrders_ChangeEntrustValidation (0.00s)
+    --- PASS: TestOrders_ChangeEntrustValidation/missing_amount (0.00s)
+    --- PASS: TestOrders_ChangeEntrustValidation/missing_entrustId (0.00s)
+    --- PASS: TestOrders_ChangeEntrustValidation/conditional_missing_condValue (0.00s)
+    --- PASS: TestOrders_ChangeEntrustValidation/conditional_missing_validDays (0.00s)
+    --- PASS: TestOrders_ChangeEntrustValidation/conditional_validDays_over_100 (0.00s)
+=== RUN   TestOrders_Reads
+=== RUN   TestOrders_Reads/MaxAvailableAsset
+=== RUN   TestOrders_Reads/RealEntrustList
+=== RUN   TestOrders_Reads/RealDeliverList
+=== RUN   TestOrders_Reads/RealCondOrderList
+=== RUN   TestOrders_Reads/HistoryEntrustList
+=== RUN   TestOrders_Reads/HistoryDeliverList
+=== RUN   TestOrders_Reads/HistoryCondOrderList
+=== RUN   TestOrders_Reads/MarginFullInfo
+=== RUN   TestOrders_Reads/BeforeAndAfterSupport
+--- PASS: TestOrders_Reads (0.03s)
+    --- PASS: TestOrders_Reads/MaxAvailableAsset (0.00s)
+    --- PASS: TestOrders_Reads/RealEntrustList (0.00s)
+    --- PASS: TestOrders_Reads/RealDeliverList (0.00s)
+    --- PASS: TestOrders_Reads/RealCondOrderList (0.00s)
+    --- PASS: TestOrders_Reads/HistoryEntrustList (0.00s)
+    --- PASS: TestOrders_Reads/HistoryDeliverList (0.00s)
+    --- PASS: TestOrders_Reads/HistoryCondOrderList (0.00s)
+    --- PASS: TestOrders_Reads/MarginFullInfo (0.00s)
+    --- PASS: TestOrders_Reads/BeforeAndAfterSupport (0.00s)
+=== RUN   TestOrders_MutationsAreSingleAttempt
+=== RUN   TestOrders_MutationsAreSingleAttempt/Entrust
+=== RUN   TestOrders_MutationsAreSingleAttempt/CancelEntrust
+=== RUN   TestOrders_MutationsAreSingleAttempt/BatchCancelEntrust
+=== RUN   TestOrders_MutationsAreSingleAttempt/ChangeEntrust
+--- PASS: TestOrders_MutationsAreSingleAttempt (0.01s)
+    --- PASS: TestOrders_MutationsAreSingleAttempt/Entrust (0.00s)
+    --- PASS: TestOrders_MutationsAreSingleAttempt/CancelEntrust (0.00s)
+    --- PASS: TestOrders_MutationsAreSingleAttempt/BatchCancelEntrust (0.00s)
+    --- PASS: TestOrders_MutationsAreSingleAttempt/ChangeEntrust (0.00s)
+=== RUN   TestClampPageSize
+--- PASS: TestClampPageSize (0.00s)
+=== RUN   TestPaginate_NilFetch
+--- PASS: TestPaginate_NilFetch (0.00s)
+=== RUN   TestPaginate_StopsOnShortPage
+--- PASS: TestPaginate_StopsOnShortPage (0.00s)
+=== RUN   TestPaginate_DoesNotLoopOnStalledCursor
+--- PASS: TestPaginate_DoesNotLoopOnStalledCursor (0.00s)
+=== RUN   TestPaginate_WalksAllPages
+--- PASS: TestPaginate_WalksAllPages (0.01s)
+=== RUN   TestPaginate_ContextCancelled
+--- PASS: TestPaginate_ContextCancelled (0.00s)
+PASS
+ok  	github.com/shing1211/hstongapi4go/pkg/hstong/trade	1.210s
+
+go test (trade) exit=0
+
+===== single-attempt + pagination focus (verbose) =====
+=== RUN   TestOrders_MutationsAreSingleAttempt
+=== RUN   TestOrders_MutationsAreSingleAttempt/Entrust
+=== RUN   TestOrders_MutationsAreSingleAttempt/CancelEntrust
+=== RUN   TestOrders_MutationsAreSingleAttempt/BatchCancelEntrust
+=== RUN   TestOrders_MutationsAreSingleAttempt/ChangeEntrust
+--- PASS: TestOrders_MutationsAreSingleAttempt (0.01s)
+    --- PASS: TestOrders_MutationsAreSingleAttempt/Entrust (0.01s)
+    --- PASS: TestOrders_MutationsAreSingleAttempt/CancelEntrust (0.00s)
+    --- PASS: TestOrders_MutationsAreSingleAttempt/BatchCancelEntrust (0.00s)
+    --- PASS: TestOrders_MutationsAreSingleAttempt/ChangeEntrust (0.00s)
+=== RUN   TestPaginate_NilFetch
+--- PASS: TestPaginate_NilFetch (0.00s)
+=== RUN   TestPaginate_StopsOnShortPage
+--- PASS: TestPaginate_StopsOnShortPage (0.00s)
+=== RUN   TestPaginate_DoesNotLoopOnStalledCursor
+--- PASS: TestPaginate_DoesNotLoopOnStalledCursor (0.00s)
+=== RUN   TestPaginate_WalksAllPages
+--- PASS: TestPaginate_WalksAllPages (0.01s)
+=== RUN   TestPaginate_ContextCancelled
+--- PASS: TestPaginate_ContextCancelled (0.00s)
+PASS
+ok  	github.com/shing1211/hstongapi4go/pkg/hstong/trade	1.115s
+
+focus exit=0
+
+===== go test -race -count=1 ./... =====
+?   	github.com/shing1211/hstongapi4go	[no test files]
+ok  	github.com/shing1211/hstongapi4go/client	1.699s
+?   	github.com/shing1211/hstongapi4go/gen/common/constant	[no test files]
+?   	github.com/shing1211/hstongapi4go/gen/common/msg	[no test files]
+?   	github.com/shing1211/hstongapi4go/gen/hq/dto	[no test files]
+?   	github.com/shing1211/hstongapi4go/gen/hq/notify	[no test files]
+?   	github.com/shing1211/hstongapi4go/gen/trade/notify	[no test files]
+ok  	github.com/shing1211/hstongapi4go/internal/crypto	1.091s
+ok  	github.com/shing1211/hstongapi4go/internal/errs	1.107s
+ok  	github.com/shing1211/hstongapi4go/internal/session	1.091s
+ok  	github.com/shing1211/hstongapi4go/internal/transport	1.615s
+ok  	github.com/shing1211/hstongapi4go/pkg/hstong	1.580s
+ok  	github.com/shing1211/hstongapi4go/pkg/hstong/algo	1.536s
+ok  	github.com/shing1211/hstongapi4go/pkg/hstong/future	1.569s
+ok  	github.com/shing1211/hstongapi4go/pkg/hstong/market	1.482s
+ok  	github.com/shing1211/hstongapi4go/pkg/hstong/trade	1.561s
+?   	github.com/shing1211/hstongapi4go/pkg/types	[no test files]
+
+go test (all) exit=0
+
+===== python scripts/check_money.py =====
+money-check OK: no float money/quantity fields in pkg/
+
+money exit=0

@@ -1,0 +1,199 @@
+P07 — Futures (T23 + T24 + T25) — verification evidence
+Run: 2026-09-21-hstong-full-surface
+Go: go1.26.8 windows/amd64
+Host note: Windows file-lock on the built test binary; GOTMPDIR was set to a
+writable non-scanned directory (documented in AGENTS.md). No code change.
+
+================================================================================
+1. gofmt -l .
+================================================================================
+(no output — clean)
+
+$ gofmt -l pkg/hstong/future
+(no output — clean)
+
+================================================================================
+2. go build ./...
+================================================================================
+(no output)
+exit=0
+
+================================================================================
+3. go vet ./...
+================================================================================
+(no output)
+exit=0
+
+================================================================================
+4. go test ./pkg/hstong/future/... -race -count=1 -v
+================================================================================
+=== RUN   TestManagerEndpoints
+=== RUN   TestManagerEndpoints/QueryProductInfo
+=== RUN   TestManagerEndpoints/QueryMaxBuySellAmount
+=== RUN   TestManagerEndpoints/QueryFundInfo
+=== RUN   TestManagerEndpoints/QueryHoldsList
+=== RUN   TestManagerEndpoints/Entrust
+=== RUN   TestManagerEndpoints/CancelEntrust
+=== RUN   TestManagerEndpoints/ModifyEntrust
+=== RUN   TestManagerEndpoints/QueryRealEntrustList
+=== RUN   TestManagerEndpoints/QueryHistoryEntrustList
+=== RUN   TestManagerEndpoints/QueryRealDeliverList
+=== RUN   TestManagerEndpoints/QueryHistoryDeliverList
+--- PASS: TestManagerEndpoints (0.06s)
+    --- PASS: TestManagerEndpoints/QueryProductInfo (0.01s)
+    --- PASS: TestManagerEndpoints/QueryMaxBuySellAmount (0.00s)
+    --- PASS: TestManagerEndpoints/QueryFundInfo (0.01s)
+    --- PASS: TestManagerEndpoints/QueryHoldsList (0.00s)
+    --- PASS: TestManagerEndpoints/Entrust (0.00s)
+    --- PASS: TestManagerEndpoints/CancelEntrust (0.00s)
+    --- PASS: TestManagerEndpoints/ModifyEntrust (0.00s)
+    --- PASS: TestManagerEndpoints/QueryRealEntrustList (0.00s)
+    --- PASS: TestManagerEndpoints/QueryHistoryEntrustList (0.00s)
+    --- PASS: TestManagerEndpoints/QueryRealDeliverList (0.00s)
+    --- PASS: TestManagerEndpoints/QueryHistoryDeliverList (0.00s)
+=== RUN   TestHistoryQueryDefaults
+=== RUN   TestHistoryQueryDefaults/built-in_defaults
+=== RUN   TestHistoryQueryDefaults/WithDefaultPageSize
+=== RUN   TestHistoryQueryDefaults/oversized_option_falls_back_to_default
+--- PASS: TestHistoryQueryDefaults (0.01s)
+    --- PASS: TestHistoryQueryDefaults/built-in_defaults (0.00s)
+    --- PASS: TestHistoryQueryDefaults/WithDefaultPageSize (0.00s)
+    --- PASS: TestHistoryQueryDefaults/oversized_option_falls_back_to_default (0.01s)
+=== RUN   TestFutureMutationsAreSingleAttempt
+=== RUN   TestFutureMutationsAreSingleAttempt/Entrust/success
+=== RUN   TestFutureMutationsAreSingleAttempt/Entrust/gateway-failure
+=== RUN   TestFutureMutationsAreSingleAttempt/CancelEntrust/success
+=== RUN   TestFutureMutationsAreSingleAttempt/CancelEntrust/gateway-failure
+=== RUN   TestFutureMutationsAreSingleAttempt/ModifyEntrust/success
+=== RUN   TestFutureMutationsAreSingleAttempt/ModifyEntrust/gateway-failure
+--- PASS: TestFutureMutationsAreSingleAttempt (0.03s)
+    --- PASS: TestFutureMutationsAreSingleAttempt/Entrust/success (0.00s)
+    --- PASS: TestFutureMutationsAreSingleAttempt/Entrust/gateway-failure (0.01s)
+    --- PASS: TestFutureMutationsAreSingleAttempt/CancelEntrust/success (0.00s)
+    --- PASS: TestFutureMutationsAreSingleAttempt/CancelEntrust/gateway-failure (0.00s)
+    --- PASS: TestFutureMutationsAreSingleAttempt/ModifyEntrust/success (0.00s)
+    --- PASS: TestFutureMutationsAreSingleAttempt/ModifyEntrust/gateway-failure (0.00s)
+=== RUN   TestValidationRejectsInvalidInput
+=== RUN   TestValidationRejectsInvalidInput/product_info_empty_list
+=== RUN   TestValidationRejectsInvalidInput/product_info_blank_code
+=== RUN   TestValidationRejectsInvalidInput/product_info_code_with_space
+=== RUN   TestValidationRejectsInvalidInput/max_buy_sell_empty_code
+=== RUN   TestValidationRejectsInvalidInput/entrust_empty_code
+=== RUN   TestValidationRejectsInvalidInput/entrust_bad_direction
+=== RUN   TestValidationRejectsInvalidInput/entrust_zero_amount
+=== RUN   TestValidationRejectsInvalidInput/entrust_non-numeric_amount
+=== RUN   TestValidationRejectsInvalidInput/entrust_limit_without_price
+=== RUN   TestValidationRejectsInvalidInput/entrust_specified_date_without_time
+=== RUN   TestValidationRejectsInvalidInput/cancel_empty_entrust_id
+=== RUN   TestValidationRejectsInvalidInput/modify_bad_price
+=== RUN   TestValidationRejectsInvalidInput/history_page_size_too_large
+=== RUN   TestValidationRejectsInvalidInput/history_bad_date
+=== RUN   TestValidationRejectsInvalidInput/history_impossible_date
+--- PASS: TestValidationRejectsInvalidInput (0.01s)
+    --- PASS: TestValidationRejectsInvalidInput/product_info_empty_list (0.00s)
+    --- PASS: TestValidationRejectsInvalidInput/product_info_blank_code (0.00s)
+    --- PASS: TestValidationRejectsInvalidInput/product_info_code_with_space (0.00s)
+    --- PASS: TestValidationRejectsInvalidInput/max_buy_sell_empty_code (0.00s)
+    --- PASS: TestValidationRejectsInvalidInput/entrust_empty_code (0.00s)
+    --- PASS: TestValidationRejectsInvalidInput/entrust_bad_direction (0.00s)
+    --- PASS: TestValidationRejectsInvalidInput/entrust_zero_amount (0.00s)
+    --- PASS: TestValidationRejectsInvalidInput/entrust_non-numeric_amount (0.00s)
+    --- PASS: TestValidationRejectsInvalidInput/entrust_limit_without_price (0.00s)
+    --- PASS: TestValidationRejectsInvalidInput/entrust_specified_date_without_time (0.00s)
+    --- PASS: TestValidationRejectsInvalidInput/cancel_empty_entrust_id (0.00s)
+    --- PASS: TestValidationRejectsInvalidInput/modify_bad_price (0.00s)
+    --- PASS: TestValidationRejectsInvalidInput/history_page_size_too_large (0.00s)
+    --- PASS: TestValidationRejectsInvalidInput/history_bad_date (0.00s)
+    --- PASS: TestValidationRejectsInvalidInput/history_impossible_date (0.00s)
+=== RUN   TestNotifyType
+--- PASS: TestNotifyType (0.00s)
+=== RUN   TestFromDeliverNotify
+--- PASS: TestFromDeliverNotify (0.00s)
+=== RUN   TestFromDeliverNotifyFillOnly
+--- PASS: TestFromDeliverNotifyFillOnly (0.00s)
+=== RUN   TestFromDeliverNotifyNil
+--- PASS: TestFromDeliverNotifyNil (0.00s)
+PASS
+ok  	github.com/shing1211/hstongapi4go/pkg/hstong/future	1.256s
+
+================================================================================
+5. go test -race -count=1 ./...
+================================================================================
+?   	github.com/shing1211/hstongapi4go	[no test files]
+ok  	github.com/shing1211/hstongapi4go/client	1.779s
+?   	github.com/shing1211/hstongapi4go/gen/common/constant	[no test files]
+?   	github.com/shing1211/hstongapi4go/gen/common/msg	[no test files]
+?   	github.com/shing1211/hstongapi4go/gen/hq/dto	[no test files]
+?   	github.com/shing1211/hstongapi4go/gen/hq/notify	[no test files]
+?   	github.com/shing1211/hstongapi4go/gen/trade/notify	[no test files]
+ok  	github.com/shing1211/hstongapi4go/internal/crypto	1.090s
+ok  	github.com/shing1211/hstongapi4go/internal/errs	1.103s
+ok  	github.com/shing1211/hstongapi4go/internal/session	1.119s
+ok  	github.com/shing1211/hstongapi4go/internal/transport	1.617s
+ok  	github.com/shing1211/hstongapi4go/pkg/hstong	1.582s
+ok  	github.com/shing1211/hstongapi4go/pkg/hstong/algo	1.643s
+ok  	github.com/shing1211/hstongapi4go/pkg/hstong/future	1.569s
+ok  	github.com/shing1211/hstongapi4go/pkg/hstong/market	1.491s
+ok  	github.com/shing1211/hstongapi4go/pkg/hstong/trade	1.146s
+?  	github.com/shing1211/hstongapi4go/pkg/types	[no test files]
+exit=0
+
+$ go test ./pkg/hstong/future/... -race -count=1 -cover
+ok  	github.com/shing1211/hstongapi4go/pkg/hstong/future	1.355s	coverage: 89.1% of statements
+exit=0
+
+================================================================================
+6. python scripts/check_money.py
+================================================================================
+money-check OK: no float money/quantity fields in pkg/
+exit=0
+
+================================================================================
+Scope / artefacts
+================================================================================
+Files created:
+  pkg/hstong/future/doc.go
+  pkg/hstong/future/future.go
+  pkg/hstong/future/push.go
+  pkg/hstong/future/future_test.go
+  pkg/hstong/future/push_test.go
+  docs/runs/2026-09-21-hstong-full-surface/evidence/P07-T23-T25.txt
+
+No other package modified. No go.mod change (stdlib + existing google.golang.org/
+protobuf + go.uber.org/goleak only).
+
+11 endpoint methods, canonical routes (client/routes.go):
+  QueryProductInfo       -> /trade/FuturesQueryProductInfo
+  QueryMaxBuySellAmount  -> /trade/FuturesQueryMaxBuySellAmount
+  QueryFundInfo          -> /trade/FuturesQueryFundInfo
+  QueryHoldsList         -> /trade/FuturesQueryHoldsList
+  Entrust                -> /trade/FuturesEntrust
+  CancelEntrust          -> /trade/FuturesCancelEntrust
+  ModifyEntrust          -> /trade/FuturesModifyEntrust
+  QueryRealEntrustList   -> /trade/FuturesQueryRealEntrustList
+  QueryHistoryEntrustList-> /trade/FuturesQueryHistoryEntrustList
+  QueryRealDeliverList   -> /trade/FuturesQueryRealDeliverList
+  QueryHistoryDeliverList-> /trade/FuturesQueryHistoryDeliverList
+
+Push (T24):
+  NotifyType = types.FuturesTradeStockDeliverMsgType (2)
+  FromDeliverNotify(*pb.TradeStockDeliverNotify) DeliverNotification
+  DeliverNotification.HasFill() reports MatchNo != "" (fill-only)
+  RecordNo mirrors EntrustNo
+
+Mutation single-attempt (ADR 0003): asserted for Entrust, CancelEntrust, and
+ModifyEntrust on both success and a retryable 1015 gateway failure; the recorder
+observed exactly 1 outbound HTTP request in every sub-test.
+
+Validation (typed 1016 errs.Error, zero requests): empty/whitespace stock codes,
+bare product-info list, non-positive/non-numeric quantities, missing required
+price, EntrustBS outside 1-4, validTimeType=4 without date, empty entrustId,
+pageSize >= 100, malformed/impossible dates.
+
+Note: `go test -race -count=1 ./...` also covers concurrently authored packages
+(algo, market, trade) that other sessions created while this task ran; all green.
+A transient Windows file-lock on the built future.test.exe occurred on the first
+run and was resolved by setting GOTMPDIR as documented in AGENTS.md.
+
+Risk: none open. Fields modelled from the current API docs + legacy proto
+definitions are recorded in the phase file / report.

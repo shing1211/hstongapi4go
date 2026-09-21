@@ -1,0 +1,38 @@
+T05 + T07 — Transport + error taxonomy — evidence
+Run: 2026-09-21-hstong-full-surface · Status: done · Role: backend (merged session)
+
+T07 internal/errs
+- internal/errs/doc.go, errors.go, errors_test.go
+- Error{Code types.StatusCode, Category, Message, Op, Err}; Error()/Unwrap(); errors.Is/As friendly
+- Category: Success, Connection, Timeout, API, Account, Trading, RateLimit, Unknown
+- Full mapping table 0000, 1001-1018, 20033, 40001, 40002
+- Helpers: KnownCode, CategoryForCode, MessageForCode, CodeOf, CategoryOf, Retryable,
+  ReLoginRequired, IsDeprecated
+- Retryable: 1011, 1015, 1017, 1018, connection, timeout, deadlines
+- ReLoginRequired: 1012, 1013, 1014, 20033
+- IsDeprecated: 1005
+
+T05 internal/transport
+- internal/transport/{doc.go,codec.go,transport.go,transport_test.go,codec_test.go}
+- Envelope: {"timeout_sec":N,"params":{...}} -> {"ok":bool,"err":string,"data":{...}}
+- Codec interface; JSONCodec (encoding/json); ProtoJSONCodec (protojson, rejects non-proto.Message)
+- Transport.New(WithBaseURL|WithHTTPClient|WithDefaultTimeout); Concurrent-safe; immutable
+- Do(ctx, op, path, params any, codec Codec, out any) error
+- NO retry loop (ADR 0003); single attempt per call
+- timeout_sec derives from ctx deadline when shorter than the default (min 1)
+- ok=false -> *errs.Error; code recovered from the `err` string (bare code, code+text, or free text)
+
+Verification
+- gofmt -l .                       -> empty
+- go build ./... / go vet ./...    -> exit 0
+- go test ./internal/errs/... -race -count=1 -v        -> ok, all PASS
+- go test ./internal/transport/... -race -count=1 -v   -> ok, all PASS
+    TestDo_SingleAttemptOnFailure (retryable 1011 + HTTP 500) -> exactly one attempt per call
+    TestDo_ConcurrentUseIsRaceClean -> 64 goroutines, no races
+    TestProtoJSONCodecRejectsUnknownFields, TestErrorsIsAndAsThroughWraps -> PASS
+- python scripts/check_money.py    -> OK
+
+Open item (for P12/T35)
+- The documented response envelope has no explicit code field; the transport recovers
+  the StatusCode from the `err` string. If the real Gateway puts the code in a
+  dedicated field, `response`/`classifyFailure` is the single place to change.

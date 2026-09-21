@@ -1,0 +1,27 @@
+T09 — Core tests + goleak + public Codec alias — evidence
+Run: 2026-09-21-hstong-full-surface · Status: done · Role: tester
+
+Files
+- client/codec.go (type Codec = transport.Codec; Do/JSON/ProtoJSON now name it)
+- client/routes_e2e_test.go (51-route table-driven e2e, both codecs + invalid routes)
+- client/leak_test.go (100 clients x 8 concurrent Do; goleak.VerifyNone)
+- client/extra_test.go (alias assertion, resolveHTTPClient arms, fallback transports)
+- internal/transport/leak_test.go, internal/transport/extra_test.go
+- internal/errs/leak_test.go, internal/errs/extra_test.go
+- docs/runs/2026-09-21-hstong-full-surface/evidence/P01-coverage.txt
+- client/client.go, client/doc.go (Codec naming — source-compatible)
+
+Independent verification (orchestrator)
+- gofmt -l .  -> clean
+- go build ./... / go vet ./... -> exit 0
+- go test -race -count=1 ./... -> ok client, crypto, errs, transport
+- coverage: client 100.0%, internal/errs 100.0%, internal/transport 99.1%,
+  internal/crypto 87.5%
+- 51-route e2e: TestRoutesE2E_AllCanonicalRoutes -> PASS, 51/51 subtests
+- stray root artifacts: none (coverage.txt/baseline cleaned)
+- evidence/P01-coverage.txt present
+
+Notes
+- client.Codec alias satisfies DESIGN.md §6 (no internal type in a public signature).
+- crypto 87.5%: remaining arms (fixed-key decode failure, aes.NewCipher error) are
+  unreachable with the protocol's constant key.
