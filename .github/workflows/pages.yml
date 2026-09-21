@@ -1,0 +1,27 @@
+name: Deploy Docs to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+    paths: ['docs/**', 'mkdocs.yml', 'scripts/mkdocs_hooks.py']
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: peaceiris/actions-mkdocs-gh-pages@v4
+        with:
+          devtools: false

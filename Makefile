@@ -58,11 +58,10 @@ test: ## Run unit tests
 test-race: ## Run unit tests with the race detector
 	@if [ -f go.mod ]; then $(GO) test ./... -race -count=1; else echo "no go.mod yet; skipping"; fi
 
-test-integration: ## Run env-gated integration tests (HSTONG_INTEGRATION=1 + HSTONG_* required)
+test-integration: ## Run env-gated integration tests (HSTONG_INTEGRATION=1 required)
 	@if [ -d test/integration ]; then \
-		echo "test-integration: tests skip unless HSTONG_INTEGRATION=1 (see test/integration/README.md)"; \
 		$(GO) test ./test/integration/... -count=1 -v; \
-	else echo "test-integration: not yet available (P12)"; fi
+	else echo "test-integration: not yet available"; fi
 
 coverage: ## Write coverage.out and coverage.html
 	@if [ -f go.mod ]; then \
