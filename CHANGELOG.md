@@ -9,6 +9,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Nothing yet.
 
+## [0.1.1] - 2026-09-21
+
+### Changed
+
+- **`client.ProtoJSON()` removed.** `ProtoJSONCodec` was never functional for market
+  data (the wrapper structs are not `proto.Message`) and the documented fallback
+  could never work at runtime. The `proto` package dependency stays — it is still
+  required for TCP push binary protobuf. The v0.1.0 `ProtoJSONCodec` fallback
+  bullet below is superseded.
+
+### Fixed
+
+- **Circuit breaker isolation (G7).** The SDK now has two independent circuit
+  breakers: `QueryBreaker` (gates read-only queries) and `MutationBreaker` (gates
+  order/futures/algo mutations). A storm of rejected orders can no longer block
+  reads. The legacy `WithCircuitBreaker(b)` option sets both for backward
+  compatibility.
+- **Response schemas (G10).** `docs/SPEC.md` §3 now documents all 34 response types
+  for the trade, futures, and algo surfaces, transcribed from Go struct field
+  comments. Complex nested types (`OrderVo`, `HoldsVo`, `FundInfo`, etc.) and all
+  scalar/array wrappers are now indexed.
+
 ## [0.1.0] - 2026-09-21
 
 First alpha release of the SDK, covering the whole current HStong Quant OpenAPI
@@ -104,7 +126,8 @@ canonical in [docs/SPEC.md](./docs/SPEC.md).
 
 - Market HTTP bodies decode with `encoding/json` over typed DTOs (ADR 0007),
   narrowing ADR 0002's original uniform-`protojson` market branch; `protojson`
-  remains a per-endpoint fallback.
+  remains a per-endpoint fallback (**superseded by v0.1.1: `ProtoJSONCodec`
+  removed**).
 - The public hardening options (`WithRetryPolicy`, `WithRateLimiter`,
   `WithCircuitBreaker`, `WithMetrics`) are exposed through `client` aliases so
   callers never name internal types.
