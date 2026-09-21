@@ -72,6 +72,31 @@
 | R7 legacy platform keys rotate | public constants + `WithPlatformPublicKey` override |
 | Push `bodySHA1` uses SHA-1 | platform-mandated; documented residual risk |
 
+## v0.1.1 Patch (2026-09-21)
+
+Post-release remediation, three gaps identified and fixed in `c145f10`.
+
+- **G5 — `client.ProtoJSON()` removed.** `ProtoJSONCodec` was dead code: the wrapper
+  DTOs are not `proto.Message`, so the codec could never be used for any endpoint.
+  Removed from `client.go`, `transport/codec.go`, all test files, and the ADR 0007
+  consequences section. The `proto` package stays (required for TCP push binary
+  protobuf).
+- **G7 — Two independent circuit breakers.** `Config` now has `QueryBreaker` and
+  `MutationBreaker` fields. `WithQueryBreaker(b)` and `WithMutationBreaker(b)` are
+  the targeted options; `WithCircuitBreaker(b)` sets both for backward compat.
+  `execute()` routes each call to the correct breaker — order rejections can no
+  longer trip the query circuit.
+- **G10 — 34 response schema tables in SPEC.md §3.** All trade, futures, and algo
+  response types documented verbatim from Go struct field comments. Sections 4–10
+  renumbered.
+
+| | |
+|---|---|
+| Commit | `c145f10` |
+| CHANGELOG | `c197577` |
+| Tag | `v0.1.1` (`c3e3eb8`), annotated, pushed to `origin` and `gitee` |
+| Files changed | 17, net +718 / −287 lines |
+
 ## Follow-ups
 
 - Run `test/integration` against the real test Gateway (Mon–Fri 09:00–18:00) and paste
