@@ -89,3 +89,5 @@ More runnable programs live under [`examples/`](https://github.com/shing1211/hst
   [Streaming](streaming.md).
 - [Error Codes](errors.md) — the Gateway status table and how the SDK reports failures.
 - [Mock Gateway](mock-gateway.md) — run the whole SDK offline.
+
+<!-- last updated by CI -->
