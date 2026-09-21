@@ -2,11 +2,24 @@
 
 - **Run:** `2026-09-21-hstong-full-surface`
 - **Mode:** BUILD
-- **Status:** implementation complete; **release (T37) pending explicit human approval**
+- **Status:** released — feature commit `500b0a1` and tag `v0.1.0` pushed to both remotes
 - **Base commit:** `461f219`
 - **Plan:** [plan.md](./plan.md) · **Tracker:** [todos.md](./todos.md) ·
   **Next phase:** [next-phase.md](./next-phase.md) ·
   **Release:** [release-plan.md](./release-plan.md) · **Docs sweep:** [docs-plan.md](./docs-plan.md)
+
+## Release (T37)
+
+- **Feature commit:** `500b0a139615405fa63095b6889eb4d4b5a311ec` —
+  `feat: full-surface HStong Quant OpenAPI Gateway SDK (v0.1.0)` (248 files,
+  DCO-signed).
+- **Tag:** `v0.1.0`, annotated, object `25aaeb89d5f3a4ee1cdd228b565d9623fdf8199f`.
+- **Remotes:** `origin` = https://github.com/shing1211/hstongapi4go.git,
+  `gitee` = https://gitee.com/shing1211/hstongapi4go.git (added in this step).
+- **Push results:** `origin` `461f219..500b0a1  main -> main`; `gitee` new branch
+  `main -> main`; tag `v0.1.0` new on both remotes.
+- **Verification:** `git ls-remote` reports `refs/heads/main` = `500b0a1` and
+  `refs/tags/v0.1.0` = `25aaeb8` on **both** remotes.
 
 ## Shipped
 
@@ -33,7 +46,7 @@
 | Uniform `protojson` for market data (approach A) | **Corrected to hybrid**: market decodes with `encoding/json` over generated DTOs (ADR 0007), discovered from the vendored Java/Python SDKs |
 | ADRs 0001–0005 | ADRs 0001–**0007** (0006 test-dependencies, 0007 HTTP JSON codec) |
 | Session in `internal/session` + `pkg/hstong/session.go` | As planned |
-| T37 release to GitHub + Gitee | **Deferred pending approval**; `gitee` remote not yet added |
+| T37 release to GitHub + Gitee | **Done**: feature commit `500b0a1`, tag `v0.1.0` on both remotes; `gitee` remote added |
 | Integration confirmation | **Deferred**: suite written and env-gated; live run requires the user |
 
 ## Deferred / not done
@@ -44,7 +57,7 @@
    single-attempt against the real Gateway (see `phases/P12-integration.md`).
 2. **`make` never exercised on this host** (no GNU make). Recipes verified by running
    their underlying commands; CI is untested against this tree's first push.
-3. **Release/tag/Pages/coverage badge** not wired.
+3. **Release and tag done** (`v0.1.0` on both remotes); Pages/coverage badge not yet wired.
 4. **Translation quality** is machine-authored; human review advisable.
 5. **`client.ProtoJSON()`** is now an unused-by-default fallback; make-or-remove is an
    open decision (`next-phase.md`).
@@ -73,4 +86,9 @@
 - All required run artifacts exist: `plan.md`, `todos.md`, `phases/P00–P16`,
   `docs-plan.md`, `evidence/`, `release-plan.md`, `report.md`, `next-phase.md`.
 - `docs/runs/index.md` updated with this run.
-- Remaining task: **T37** (release) — see `release-plan.md`, awaiting approval.
+- **T37** (release) done: feature commit `500b0a1`, annotated tag `v0.1.0`
+  (`25aaeb8`) pushed to `origin` and `gitee`; both remotes verified at the same
+  `main` SHA.
+- `docs/runs/index.md` records the feature commit SHA; its **Close-out commit**
+  column is left as the feature SHA (the close-out SHA cannot be embedded in the
+  commit it describes).

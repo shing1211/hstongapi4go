@@ -25,9 +25,9 @@
 | P12 Integration | 1 | 1 |
 | P13 Docs Sync | 1 | 1 |
 | P14 Translations | 1 | 1 |
-| P15 Release | 1 | 0 (awaiting approval) |
-| P16 Close-out | 2 | 1 |
-| **Total** | **40** | **38** |
+| P15 Release | 1 | 1 |
+| P16 Close-out | 2 | 2 |
+| **Total** | **40** | **40** |
 
 ## Tasks
 
@@ -70,9 +70,9 @@
 | T35 | Integration tests + wire validation | tester | done | T28 | P12 | written + env-gated; live confirmation pending user run |
 | T36 | Full markdown sweep + counts from SPEC | docs | done | T34,T35 | P13 | make docs-check |
 | T40 | 6-language READMEs + i18n check | docs | done | T36 | P14 | check_i18n.py passes |
-| T37 | Release to GitHub + Gitee main | release | todo | T40 | P15 | both remotes at new SHA |
+| T37 | Release to GitHub + Gitee main | release | done | T40 | P15 | both remotes at new SHA |
 | T38 | Next-phase planning | planner | done | T37 | P16 | next-phase.md |
-| T39 | Close-out report + index | orchestrator | doing | T38 | P16 | report.md + runs/index.md |
+| T39 | Close-out report + index | orchestrator | done | T38 | P16 | report.md + runs/index.md |
 
 ## Notes carried forward
 
@@ -104,3 +104,4 @@
 | 2026-09-21 | T30+T31+T32 done: internal/resilience (mutation-single-attempt guard), internal/logging (redaction) + internal/metrics, opt-in push bodySHA1 verification (default OFF). T33+T34 done: 6 runnable examples + MkDocs Material site + docs/LEGACY.md; mkdocs build --strict 0. T35 done: env-gated integration suite (7 tests skip by default) + run instructions. Fixes: public client aliases for hardening options; internal/push flake (cross-type ordering assumption) fixed; mkdocs hook extended for ../test links. Verified: gofmt/build/vet clean, race x3 green, 20x push load green, integration skips, examples ok, money-check OK. P10/P11/P12 gates closed (P12 live-run deferred to user). T36 dispatched. |
 | 2026-09-21 | T36 done: canonical README (12.6 KB), CHANGELOG/CONTRIBUTING/SECURITY, docs/runs/index.md, scripts/check_links.py + make docs-check, docs-plan.md (55 md files reviewed) and AGENTS.md stale wording fixed. T40 done: 5 translations + switcher + Last synced + TRANSLATING.md + scripts/check_i18n.py wired into docs-check. Verified: check_links 61 files/0 unresolved, check_i18n OK 6 languages, mkdocs build --strict exit 0, counts 51/11 identical across 6 READMEs. P13/P14 gates PASSED. T38 dispatched. |
 | 2026-09-21 | T38 done: next-phase.md (17.9 KB) with gaps/tech-debt, 3-7 candidates, recommended P17 live-wire validation. Orchestrator: report.md, release-plan.md, plan.md Actuals, runs/index.md written. Fixed: make test-integration target (-tags mismatch), CHANGELOG Unreleased staleness. T37 (release) HELD pending explicit user approval; live integration run also pending user. |
+| 2026-09-21 | T37 done: released **v0.1.0**. `gitee` remote added; feature commit `500b0a1` (248 files, DCO-signed) pushed to `origin` (`461f219..500b0a1`) and `gitee` (new branch); annotated tag `v0.1.0` (`25aaeb8`) pushed to both. `git ls-remote` confirms both remotes at `main` = `500b0a1` and tag = `25aaeb8`. Pre-flight all green (gofmt/build/vet/race x1, money/links/i18n, mkdocs --strict, proto-verify replicated — host `bash` is a broken WSL stub). Close-out commit records the SHAs; T39 done. |
