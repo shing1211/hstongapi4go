@@ -27,18 +27,20 @@ hooks:
 theme:
   name: material
   language: en
+  logo: assets/logo.svg
+  favicon: images/favicon.svg
   palette:
     - media: "(prefers-color-scheme: light)"
       scheme: default
-      primary: indigo
-      accent: indigo
+      primary: blue
+      accent: blue
       toggle:
         icon: material/brightness-7
         name: Switch to dark mode
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
-      primary: indigo
-      accent: indigo
+      primary: blue
+      accent: blue
       toggle:
         icon: material/brightness-4
         name: Switch to light mode
@@ -83,6 +85,9 @@ nav:
       - "0006: Test deps": adr/0006-test-dependencies.md
       - "0007: JSON codec": adr/0007-http-json-codec.md
   - API Reference: SPEC.md
+
+extra_css:
+  - stylesheets/extra.css
 
 markdown_extensions:
   - admonition

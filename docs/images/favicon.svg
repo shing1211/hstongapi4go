@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  hstongapi4go favicon — 32×32 SVG.
+  Blue rounded square with stylised "go" mark matching the logo.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="hstongapi4go favicon">
+  <title>hstongapi4go</title>
+  <rect width="32" height="32" rx="7" fill="#1565C0"/>
+  <!-- Stylised "go" mark — simplified gopher head -->
+  <circle cx="11" cy="14" r="3.2" fill="white"/>
+  <circle cx="9" cy="9.5" r="2" fill="white"/>
+  <circle cx="14" cy="9.5" r="2" fill="white"/>
+  <rect x="7.5" y="17.5" width="8" height="5" rx="1.8" fill="white"/>
+  <rect x="14" y="17.5" width="2.5" height="5" rx="1.2" fill="white"/>
+</svg>

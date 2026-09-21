@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  hstongapi4go wordmark — SVG version.
+  Uses embedded strokes so no external font is required.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 40" role="img" aria-label="hstongapi4go logo">
+  <title>hstongapi4go</title>
+  <desc>Idiomatic Go SDK for the HStong Quant OpenAPI local Gateway</desc>
+
+  <!-- Background pill -->
+  <rect x="2" y="2" width="36" height="36" rx="8" ry="8"
+        fill="#1565C0" stroke="#0D47A1" stroke-width="1"/>
+
+  <!-- Stylised "go" ligature mark inside pill — gopher silhouette simplified -->
+  <circle cx="14" cy="18" r="4" fill="white"/>
+  <circle cx="12" cy="12" r="2.5" fill="white"/>
+  <circle cx="18" cy="12" r="2.5" fill="white"/>
+  <rect x="10" y="22" width="10" height="6" rx="2" fill="white"/>
+  <rect x="18" y="22" width="3" height="6" rx="1.5" fill="white"/>
+
+  <!-- "hstong" text — heavy weight -->
+  <text x="46" y="26"
+        font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
+        font-size="17"
+        font-weight="700"
+        letter-spacing="-0.3"
+        fill="#0D47A1">hstong</text>
+
+  <!-- "api4go" text — regular weight, slightly lighter -->
+  <text x="46"
+        font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
+        font-size="17"
+        font-weight="400"
+        letter-spacing="-0.3"
+        fill="#1565C0">
+    <tspan x="46" dy="0">api4</tspan><tspan font-weight="700" fill="#0D47A1">go</tspan>
+  </text>
+</svg>

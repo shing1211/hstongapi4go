@@ -1,0 +1,30 @@
+/* Custom stylesheet — hstongapi4go documentation site */
+
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,500;1,400&display=swap');
+
+:root {
+  --md-code-font: 'JetBrains Mono', 'Roboto Mono', monospace;
+  --md-code-font--web: 'JetBrains Mono', 'Roboto Mono', monospace;
+}
+
+[data-md-color-scheme="default"] {
+  --md-code-bg-color: #e8f0fb;
+  --md-typeset-a-color: #1565C0;
+}
+
+[data-md-color-scheme="slate"] {
+  --md-code-bg-color: #1a2642;
+  --md-typeset-a-color: #64b5f6;
+}
+
+[data-md-color-scheme="default"] :is(h1, h2, h3, h4) {
+  color: #0D47A1;
+}
+
+.md-typeset .md-button {
+  border-radius: 4px;
+}
+
+code {
+  font-feature-settings: "liga" 1, "calt" 1;
+}
