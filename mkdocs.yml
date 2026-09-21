@@ -8,8 +8,7 @@ site_name: hstongapi4go
 site_description: Idiomatic Go SDK for the HStong (Huasheng) Quant OpenAPI local Gateway.
 site_url: https://shing1211.github.io/hstongapi4go/
 repo_url: https://github.com/shing1211/hstongapi4go
-repo_name: shing1211/hstongapi4go
-copyright: Copyright &copy; hstongapi4go contributors &mdash; Apache-2.0
+edit_uri: edit/main/docs/
 
 docs_dir: docs
 
@@ -46,6 +45,7 @@ theme:
   features:
     - navigation.tabs
     - navigation.sections
+    - navigation.expand
     - navigation.top
     - search.suggest
     - search.highlight
@@ -75,13 +75,13 @@ nav:
   - Contributing: CONTRIBUTING.md
   - Architecture Decisions:
       - Overview: adr/README.md
-      - "0001: Target the local Gateway": adr/0001-gateway-transport.md
+      - "0001": adr/0001-gateway-transport.md
       - "0002: Hybrid codec": adr/0002-hybrid-codec.md
-      - "0003: Never auto-retry order mutations": adr/0003-no-auto-retry-orders.md
-      - "0004: Minimal dependency set": adr/0004-minimal-dependencies.md
-      - "0005: Key model and push verification": adr/0005-key-model-and-push-verification.md
-      - "0006: Test-only dependencies": adr/0006-test-dependencies.md
-      - "0007: Gateway HTTP bodies are plain JSON": adr/0007-http-json-codec.md
+      - "0003: No auto-retry": adr/0003-no-auto-retry-orders.md
+      - "0004: Minimal deps": adr/0004-minimal-dependencies.md
+      - "0005: Push verification": adr/0005-key-model-and-push-verification.md
+      - "0006: Test deps": adr/0006-test-dependencies.md
+      - "0007: JSON codec": adr/0007-http-json-codec.md
   - API Reference: SPEC.md
 
 markdown_extensions:
@@ -90,10 +90,24 @@ markdown_extensions:
   - tables
   - toc:
       permalink: true
+  - pymdownx.details
   - pymdownx.highlight:
       anchor_linenums: true
   - pymdownx.inlinehilite
   - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
 
 plugins:
   - search
+  - git-revision-date-localized:
+      enabled: !ENV [CI, false]
+      fallback_to_build_date: true
+      type: timeago
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/shing1211/hstongapi4go
+  footer:
+    copyright: "Copyright © 2026 shing1211 — Apache-2.0"
