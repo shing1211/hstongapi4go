@@ -48,7 +48,7 @@ skipped by default; see [Testing](testing.md).
   `make proto-verify`.
 - **No auto-retry on order mutations.** Trade, futures, and algo mutations issue
   exactly one attempt (ADR 0003).
-- **Money and quantities are strings**, never `float64` (ADR 0002, ADR 0007).
+- **Money and quantities are strings**, never `float64` (see [DESIGN.md §7](./DESIGN.md)).
 - **No new dependencies without an ADR** (ADR 0004).
 - **GoDoc.** Every exported identifier has a doc comment starting with the
   identifier name, covering behavior, defaults, and edge cases.

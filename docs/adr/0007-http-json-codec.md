@@ -63,9 +63,9 @@ rest of ADR 0002 stand.
 - ADR 0002's "protojson for market DTOs" branch is **deleted** for the HTTP path.
   The hybrid codec and the per-endpoint `Codec` selection are unchanged; only the
   market endpoints' default decoder moves from `protojson` to `encoding/json`.
-- `client.ProtoJSON()` was removed from the public API (post-release change, v0.1.0
-  was the only release). The `proto` package dependency remains — it is still needed
-  for TCP push binary protobuf.
+- `client.ProtoJSON()` was removed from the public API (post-release change, v0.1.1).
+  The `proto` package dependency remains — it is still needed for TCP push binary
+  protobuf.
 - Market responses use hand-written wrapper structs; their element types remain the
   generated DTOs, so the authoritative field names and precision live in `gen/` and
   the DTO set stays stable.
@@ -83,7 +83,7 @@ rest of ADR 0002 stand.
 | A | Keep ADR 0002's `protojson`-for-market as written | Rejected: the vendor SDKs prove the body is generic JSON; `protojson` expects quoted `int64` and protobuf-JSON enum names, neither of which the Gateway sends. |
 | B | Hand-written structs only, drop the generated DTOs | Rejected: loses the authoritative DTO field names and types, and duplicates the push DTO set that `Any` unpacking already depends on. |
 | C | Use `encoding/json` for push as well | Rejected: the push channel is framed binary protobuf, not JSON. |
-| D | `encoding/json` over typed structs; retain `protojson` per endpoint as fallback | Superseded by v0.2.0: the fallback was removed because the market wrappers are not `proto.Message` and the fallback could never work at runtime. |
+| D | `encoding/json` over typed structs; retain `protojson` per endpoint as fallback | Superseded by v0.1.1: the fallback was removed because the market wrappers are not `proto.Message` and the fallback could never work at runtime. |
 
 ## References
 

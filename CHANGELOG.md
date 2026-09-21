@@ -14,6 +14,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   to remove references to the removed `client.ProtoJSON()` public API. The
   market codec section in `pkg/hstong/market/doc.go` was rewritten to
   confirm `client.JSON` is used for all nine endpoints.
+- **Stale documentation references reconciled.** CHANGELOG `[Unreleased]`
+  compare link fixed (`v0.1.0` → `v0.1.2`); `[0.1.1]` and `[0.1.2]`
+  release links added. ADR 0007 version references corrected (`v0.2.0` →
+  `v0.1.1`, "only release" → "first release"). `docs/CONTRIBUTING.md`
+  money-as-string rule now cites `DESIGN.md §7` instead of unrelated
+  codec ADRs. README Status badge version string dropped to match
+  translations.
 
 ## [0.1.1] - 2026-09-21
 
@@ -165,5 +172,7 @@ canonical in [docs/SPEC.md](./docs/SPEC.md).
 - The plaintext trade password is held in memory only, encrypted before it
   leaves the process, and never logged or embedded in an error.
 
-[Unreleased]: https://github.com/shing1211/hstongapi4go/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/shing1211/hstongapi4go/compare/v0.1.2...HEAD
 [0.1.0]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.0
+[0.1.1]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.1
+[0.1.2]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.2
