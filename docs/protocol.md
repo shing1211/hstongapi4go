@@ -67,17 +67,15 @@ contains no HTTP request/response messages, and the vendor SDKs decode the HTTP
 body with a plain JSON parser (Gson in Java, `json.loads` in Python) — not
 protobuf's JSON mapping. Gateway `int64` counters therefore arrive as JSON
 **numbers**, which `encoding/json` maps onto the generated `int64` fields.
-`client.ProtoJSON()` is retained as a per-endpoint fallback only.
 
 The public codec surface:
 
 ```go
-var jsonCodec  client.Codec = c.JSON()      // encoding/json
-var protoCodec client.Codec = c.ProtoJSON() // protojson
+var jsonCodec client.Codec = c.JSON() // encoding/json
 ```
 
 `client.Codec` is an alias for the transport codec interface, so no internal
-type appears in the public API. Both accessors return stateless singletons safe
+type appears in the public API. The accessor returns a stateless singleton safe
 for concurrent use.
 
 ## Money and quantities

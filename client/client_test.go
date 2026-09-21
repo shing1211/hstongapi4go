@@ -17,9 +17,7 @@ import (
 	"time"
 
 	"go.uber.org/goleak"
-	"google.golang.org/protobuf/encoding/protojson"
 
-	"github.com/shing1211/hstongapi4go/gen/hq/dto"
 	"github.com/shing1211/hstongapi4go/pkg/types"
 )
 
@@ -67,8 +65,8 @@ func TestNew_Defaults(t *testing.T) {
 	if c.HTTPClient() == nil {
 		t.Error("HTTPClient = nil, want non-nil")
 	}
-	if c.JSON() == nil || c.ProtoJSON() == nil {
-		t.Error("codec accessors returned nil")
+	if c.JSON() == nil {
+		t.Error("JSON() returned nil")
 	}
 }
 
@@ -281,52 +279,6 @@ func TestDo_JSON(t *testing.T) {
 	}
 	if out.Code != "AAPL" || out.Price != "123.45" || out.Qty != json.Number("100") {
 		t.Fatalf("out = %+v, want decoded data", out)
-	}
-	if got := seenPath.Load().(string); got != "/hq/BasicQot" {
-		t.Fatalf("request path = %q, want canonical /hq/BasicQot", got)
-	}
-}
-
-func TestDo_ProtoJSON(t *testing.T) {
-	var seenPath atomic.Value
-	seenPath.Store("")
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		seenPath.Store(r.URL.Path)
-		var env struct {
-			Params json.RawMessage `json:"params"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&env); err != nil {
-			t.Errorf("decoding envelope: %v", err)
-			return
-		}
-		var security dto.Security
-		if err := protojson.Unmarshal(env.Params, &security); err != nil {
-			t.Errorf("decoding params with protojson: %v", err)
-			return
-		}
-		if security.GetDataType() != 10000 || security.GetCode() != "00700" {
-			t.Errorf("params = %+v, want dataType=10000 code=00700", &security)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{"ok":true,"err":"","data":%s}`, env.Params)
-	}))
-	defer srv.Close()
-
-	c, err := New(WithBaseURL(srv.URL))
-	if err != nil {
-		t.Fatalf("New: %v", err)
-	}
-	defer c.Close()
-
-	var out dto.Security
-	err = c.Do(context.Background(), "hq/BasicQot", RouteHqBasicQot,
-		&dto.Security{DataType: 10000, Code: "00700"}, c.ProtoJSON(), &out)
-	if err != nil {
-		t.Fatalf("Do: %v", err)
-	}
-	if out.GetDataType() != 10000 || out.GetCode() != "00700" {
-		t.Fatalf("out = %+v, want dataType=10000 code=00700", &out)
 	}
 	if got := seenPath.Load().(string); got != "/hq/BasicQot" {
 		t.Fatalf("request path = %q, want canonical /hq/BasicQot", got)

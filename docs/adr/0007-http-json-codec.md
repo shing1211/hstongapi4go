@@ -51,8 +51,6 @@ Rules:
 - `int64` is a JSON **number**, not a quoted string. The market wrappers map it
   directly onto the generated `int64` fields.
 - Generated `gen/hq/dto` types are still used for typing; only the decoder changes.
-- `protojson` is retained solely as a **per-endpoint fallback**, never a global
-  mode. `client.ProtoJSON()` stays on the public API.
 - The TCP push path remains binary protobuf; this ADR does not touch it.
 - No `.proto` files are invented for the hand-written bodies, and no new dependency
   is added (`encoding/json` is stdlib).
@@ -62,27 +60,21 @@ rest of ADR 0002 stand.
 
 ## Consequences
 
-- ADR 0002's "protojson for market DTOs" branch is **narrowed, not deleted**. It
-  survives as the documented fallback branch: the hybrid codec and the per-endpoint
-  `Codec` selection are unchanged, only the market endpoints' default decoder moves
-  from `protojson` to `encoding/json`.
-- `client.ProtoJSON()` and the `protojson` codec remain in the public surface and
-  stay covered by the client tests, so the fallback is a working path rather than a
-  claimed one.
-- Market responses gain hand-written wrapper structs; their element types remain the
+- ADR 0002's "protojson for market DTOs" branch is **deleted** for the HTTP path.
+  The hybrid codec and the per-endpoint `Codec` selection are unchanged; only the
+  market endpoints' default decoder moves from `protojson` to `encoding/json`.
+- `client.ProtoJSON()` was removed from the public API (post-release change, v0.1.0
+  was the only release). The `proto` package dependency remains — it is still needed
+  for TCP push binary protobuf.
+- Market responses use hand-written wrapper structs; their element types remain the
   generated DTOs, so the authoritative field names and precision live in `gen/` and
   the DTO set stays stable.
 - The `int64`-as-number assumption is inferred from the vendor SDKs, not yet
-  observed from a live Gateway. The P12/T35 integration validation must confirm the
-  real Gateway's `int64` representation (number versus quoted string) for each
+  confirmed against a live Gateway. The P12/T35 integration validation must confirm
+  the real Gateway's `int64` representation (number versus quoted string) for each
   market endpoint.
-- **Documented fallback.** If a real Gateway build quotes an `int64` for an affected
-  endpoint, switch that endpoint's codec to `client.ProtoJSON()` over the generated
-  DTOs. The wrapper itself is not a proto message, so the DTO lists must be decoded
-  from `json.RawMessage` elements. This is an internal change and does not alter the
-  public API.
-- `make proto-verify` and the integration checks detect drift so the fallback is
-  applied deliberately. `make money-check` still governs money/quantity fields.
+- `make proto-verify` and the integration checks detect drift. `make money-check`
+  still governs money/quantity fields.
 
 ## Alternatives considered
 
@@ -91,7 +83,7 @@ rest of ADR 0002 stand.
 | A | Keep ADR 0002's `protojson`-for-market as written | Rejected: the vendor SDKs prove the body is generic JSON; `protojson` expects quoted `int64` and protobuf-JSON enum names, neither of which the Gateway sends. |
 | B | Hand-written structs only, drop the generated DTOs | Rejected: loses the authoritative DTO field names and types, and duplicates the push DTO set that `Any` unpacking already depends on. |
 | C | Use `encoding/json` for push as well | Rejected: the push channel is framed binary protobuf, not JSON. |
-| D | `encoding/json` over typed structs using generated DTO element types; retain `protojson` per endpoint as fallback | **Chosen.** |
+| D | `encoding/json` over typed structs; retain `protojson` per endpoint as fallback | Superseded by v0.2.0: the fallback was removed because the market wrappers are not `proto.Message` and the fallback could never work at runtime. |
 
 ## References
 

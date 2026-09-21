@@ -16,9 +16,6 @@ import (
 	"testing"
 	"time"
 
-	"google.golang.org/protobuf/encoding/protojson"
-
-	"github.com/shing1211/hstongapi4go/gen/hq/dto"
 	"github.com/shing1211/hstongapi4go/internal/errs"
 	"github.com/shing1211/hstongapi4go/pkg/types"
 )
@@ -96,41 +93,6 @@ func TestDo_JSONRoundTrip(t *testing.T) {
 	}
 	if got := atomic.LoadInt32(count); got != 1 {
 		t.Fatalf("requests = %d, want 1", got)
-	}
-}
-
-func TestDo_ProtoJSONRoundTrip(t *testing.T) {
-	srv, _ := countingServer(t, func(w http.ResponseWriter, r *http.Request) {
-		if got := r.Header.Get("Content-Type"); got != "application/json" {
-			t.Errorf("Content-Type = %q, want application/json", got)
-		}
-		var env request
-		if err := json.NewDecoder(r.Body).Decode(&env); err != nil {
-			t.Errorf("decoding envelope: %v", err)
-			return
-		}
-		var security dto.Security
-		if err := protojson.Unmarshal(env.Params, &security); err != nil {
-			t.Errorf("decoding params with protojson: %v", err)
-			return
-		}
-		if security.GetDataType() != 10000 || security.GetCode() != "00700" {
-			t.Errorf("params = %+v, want dataType=10000 code=00700", &security)
-		}
-		if _, err := fmt.Fprintf(w, `{"ok":true,"err":"","data":%s}`, env.Params); err != nil {
-			t.Errorf("writing response: %v", err)
-		}
-	})
-
-	tr := New(WithBaseURL(srv.URL))
-	var out dto.Security
-	err := tr.Do(context.Background(), "hq/BasicQot", "/hq/BasicQot",
-		&dto.Security{DataType: 10000, Code: "00700"}, ProtoJSONCodec{}, &out)
-	if err != nil {
-		t.Fatalf("Do: %v", err)
-	}
-	if out.GetDataType() != 10000 || out.GetCode() != "00700" {
-		t.Fatalf("out = %+v, want dataType=10000 code=00700", &out)
 	}
 }
 

@@ -3,11 +3,13 @@
 
 // Package resilience provides the optional hardening layer of the HStong
 // (华盛) SDK: a stdlib-only token-bucket rate limiter, a retry policy with a
-// hard mutation guard, and a three-state circuit breaker.
+// hard mutation guard, and two independent three-state circuit breakers: one for
+// read-only queries and one for order/futures/algo mutations.
 //
 // Nothing in this package is active unless a caller opts in through the client
 // options (client.WithRateLimiter, client.WithRetryPolicy,
-// client.WithCircuitBreaker). The SDK's default behaviour remains one HTTP
+// client.WithCircuitBreaker, client.WithQueryBreaker,
+// client.WithMutationBreaker). The SDK's default behaviour remains one HTTP
 // attempt per call with no rate limit and no breaker
 // (docs/adr/0003-no-auto-retry-orders.md, docs/adr/0004-minimal-dependencies.md).
 //
@@ -18,6 +20,10 @@
 // from the endpoint path, and a mutation path is issued exactly once regardless
 // of the configured attempt budget. Retrying a mutation is never authorized by
 // a caller flag.
+//
+// The two-breaker model ensures that a storm of rejected mutations cannot block
+// reads: mutation failures are counted against the MutationBreaker, not the
+// QueryBreaker. WithCircuitBreaker(b) sets both to b for backward compatibility.
 //
 // # Concurrency
 //

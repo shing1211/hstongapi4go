@@ -267,8 +267,8 @@ func assertKind(t *testing.T, route client.Route, container string, row map[stri
 		return
 	}
 	t.Errorf("wire/codec mismatch on %s field %s[0].%s: observed a JSON %s (%s), want a JSON %s. "+
-		"The generated DTO lives in gen/hq/dto and pkg/hstong/market/market.go decodes this payload with encoding/json (docs/adr/0007-http-json-codec.md); "+
-		"if the Gateway quotes an int64, switch this endpoint to client.ProtoJSON() or correct that ADR.",
+		"pkg/hstong/market/market.go decodes this payload with encoding/json (docs/adr/0007-http-json-codec.md); "+
+		"if the Gateway quotes an int64, correct that ADR and update the wrapper field type.",
 		route, container, field, kind, truncate(raw), want)
 }
 

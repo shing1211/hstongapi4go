@@ -122,8 +122,8 @@ func cloneDefaultTransport() *http.Transport {
 // never sent on the wire. params is encoded with codec and sent as the
 // envelope's params; a nil codec defaults to the transport's JSON codec. The
 // codec parameter is the public client.Codec alias, so callers pass the value
-// returned by JSON or ProtoJSON without naming an internal type. out may be nil
-// to discard the response data.
+// returned by JSON without naming an internal type. out may be nil to discard
+// the response data.
 //
 // Do delegates to the transport, which issues exactly one HTTP attempt unless a
 // caller installed a RetryPolicy (and the route is a read-only query), a
@@ -164,21 +164,37 @@ func (c *Client) Do(ctx context.Context, op string, route Route, params any, cod
 // attempt, matching the SDK's default behaviour. The retry class is derived
 // from the endpoint path, so a mutation is never retried.
 func (c *Client) execute(ctx context.Context, op string, route Route, params any, codec Codec, out any) error {
-	if c.cfg.CircuitBreaker != nil && !c.cfg.CircuitBreaker.Allow() {
+	path := route.Path()
+
+	// Route to the operation-specific breaker if set, otherwise fall back to the
+	// legacy combined CircuitBreaker for backward compatibility.
+	var cb *CircuitBreaker
+	if resilience.IsMutation(path) {
+		cb = c.cfg.MutationBreaker
+		if cb == nil {
+			cb = c.cfg.CircuitBreaker
+		}
+	} else {
+		cb = c.cfg.QueryBreaker
+		if cb == nil {
+			cb = c.cfg.CircuitBreaker
+		}
+	}
+	if cb != nil && !cb.Allow() {
 		return fmt.Errorf("%w: %s", resilience.ErrCircuitOpen, op)
 	}
 
 	attempt := func(ctx context.Context) error {
 		if c.cfg.RateLimiter != nil {
 			limitStart := time.Now()
-			if werr := c.cfg.RateLimiter.WaitEndpoint(ctx, route.Path()); werr != nil {
+			if werr := c.cfg.RateLimiter.WaitEndpoint(ctx, path); werr != nil {
 				return werr
 			}
 			if c.instruments != nil {
 				c.instruments.RateLimitWait(op, time.Since(limitStart))
 			}
 		}
-		return c.transport.Do(ctx, op, route.Path(), params, codec, out)
+		return c.transport.Do(ctx, op, path, params, codec, out)
 	}
 
 	var err error
@@ -188,11 +204,11 @@ func (c *Client) execute(ctx context.Context, op string, route Route, params any
 		err = attempt(ctx)
 	}
 
-	if c.cfg.CircuitBreaker != nil {
+	if cb != nil {
 		if err != nil {
-			c.cfg.CircuitBreaker.OnFailure()
+			cb.OnFailure()
 		} else {
-			c.cfg.CircuitBreaker.OnSuccess()
+			cb.OnSuccess()
 		}
 	}
 	return err
@@ -211,13 +227,6 @@ func outcomeLabel(err error) string {
 // stateless singleton and is safe for concurrent use.
 func (c *Client) JSON() Codec {
 	return transport.JSONCodec{}
-}
-
-// ProtoJSON returns the Codec for proto-backed market data bodies, decoded with
-// protojson over the generated types in gen/. The returned value is a
-// stateless singleton and is safe for concurrent use.
-func (c *Client) ProtoJSON() Codec {
-	return transport.ProtoJSONCodec{}
 }
 
 // Close releases the client's idle HTTP connections and marks it closed. It is

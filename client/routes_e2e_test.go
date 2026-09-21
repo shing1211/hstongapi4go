@@ -13,25 +13,15 @@ import (
 	"strconv"
 	"sync"
 	"testing"
-
-	"github.com/shing1211/hstongapi4go/gen/hq/dto"
 )
-
-// marketProtoRoute is the one route exercised with the ProtoJSON codec so the
-// end-to-end routing test covers the proto-backed market path as well as the
-// hand-written JSON path. Every other route uses JSON.
-const marketProtoRoute = RouteHqBasicQot
 
 // TestRoutesE2E_AllCanonicalRoutes drives client.New(...).Do for every
 // registered route against one httptest server and asserts the canonical POST
-// envelope contract on each request. The JSON codec is used for the trade-ish
-// surfaces and ProtoJSON for the market route, so both codecs cross the public
-// API.
+// envelope contract on each request.
 func TestRoutesE2E_AllCanonicalRoutes(t *testing.T) {
 	type routeCase struct {
 		name   string
 		route  Route
-		proto  bool
 		params any
 		data   string
 	}
@@ -39,14 +29,11 @@ func TestRoutesE2E_AllCanonicalRoutes(t *testing.T) {
 	cases := make([]routeCase, 0, len(Routes()))
 	dataByPath := make(map[string]string, len(Routes()))
 	for _, route := range Routes() {
-		c := routeCase{name: route.Path(), route: route}
-		if route == marketProtoRoute {
-			c.proto = true
-			c.params = &dto.Security{DataType: 10000, Code: "00700"}
-			c.data = `{"dataType":10000,"code":"00700"}`
-		} else {
-			c.params = map[string]any{"code": "AAPL"}
-			c.data = `{"code":"AAPL","price":"1.00","qty":1}`
+		c := routeCase{
+			name:   route.Path(),
+			route:  route,
+			params: map[string]any{"code": "AAPL"},
+			data:   `{"code":"AAPL","price":"1.00","qty":1}`,
 		}
 		cases = append(cases, c)
 		dataByPath[route.Path()] = c.data
@@ -140,17 +127,6 @@ func TestRoutesE2E_AllCanonicalRoutes(t *testing.T) {
 		c := c
 		t.Run(c.name, func(t *testing.T) {
 			ctx := context.Background()
-			if c.proto {
-				var out dto.Security
-				if err := cli.Do(ctx, c.name, c.route, c.params, cli.ProtoJSON(), &out); err != nil {
-					t.Fatalf("Do(%s): %v", c.route.Path(), err)
-				}
-				if out.GetDataType() != 10000 || out.GetCode() != "00700" {
-					t.Fatalf("proto data = %+v, want dataType=10000 code=00700", &out)
-				}
-				return
-			}
-
 			out := map[string]any{}
 			if err := cli.Do(ctx, c.name, c.route, c.params, cli.JSON(), &out); err != nil {
 				t.Fatalf("Do(%s): %v", c.route.Path(), err)

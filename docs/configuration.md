@@ -64,7 +64,6 @@ c.PlatformPublicKey()  // base64 SPKI
 c.VerifyPush()         // opt-in push signature verification
 c.HTTPClient()         // never nil on a client built by New
 c.JSON()               // encoding/json codec
-c.ProtoJSON()          // protojson codec (per-endpoint fallback)
 ```
 
 ## Defaults for the local Gateway

@@ -32,3 +32,10 @@ type RateLimiter = resilience.Limiter
 // the internal breaker type; its methods are Allow, OnSuccess, OnFailure, and
 // State. A nil *CircuitBreaker (the default) disables breaking.
 type CircuitBreaker = resilience.Breaker
+
+// IsQuery reports whether path is a read-only ClassQuery endpoint. It is the
+// negation of resilience.IsMutation and exists so callers outside the resilience
+// package can classify a path without importing it.
+func IsQuery(path string) bool {
+	return !resilience.IsMutation(path)
+}

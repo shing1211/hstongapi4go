@@ -72,9 +72,17 @@ type Config struct {
 	// RateLimiter, when non-nil, gates every call through its global and
 	// per-endpoint token buckets. It is nil by default (no rate limit).
 	RateLimiter *RateLimiter
-	// CircuitBreaker, when non-nil, gates calls and records their outcomes. It
-	// is nil by default (no breaker).
+	// CircuitBreaker, when non-nil, gates all calls and records their outcomes.
+	// It is nil by default (no breaker). Deprecated: use QueryBreaker or
+	// MutationBreaker for separate breakers, or WithCircuitBreaker which sets
+	// both for backward compatibility.
 	CircuitBreaker *CircuitBreaker
+	// QueryBreaker, when non-nil, gates ClassQuery calls and records their
+	// outcomes. It is nil by default (no breaker for queries).
+	QueryBreaker *CircuitBreaker
+	// MutationBreaker, when non-nil, gates ClassMutation calls and records
+	// their outcomes. It is nil by default (no breaker for mutations).
+	MutationBreaker *CircuitBreaker
 
 	// err records the first failure produced by an option that can fail, such
 	// as WithEnv. New surfaces it instead of the client.
@@ -219,6 +227,25 @@ func WithRateLimiter(l *RateLimiter) Option {
 
 // WithCircuitBreaker installs a circuit breaker. The default is nil (no
 // breaker). A nil breaker restores the default.
+//
+// Deprecated: this sets both QueryBreaker and MutationBreaker to b for backward
+// compatibility. Use WithQueryBreaker or WithMutationBreaker to set only one.
 func WithCircuitBreaker(b *CircuitBreaker) Option {
-	return func(c *Config) { c.CircuitBreaker = b }
+	return func(c *Config) {
+		c.CircuitBreaker = b
+		c.QueryBreaker = b
+		c.MutationBreaker = b
+	}
+}
+
+// WithQueryBreaker installs a circuit breaker for ClassQuery calls. The default
+// is nil (no breaker for queries).
+func WithQueryBreaker(b *CircuitBreaker) Option {
+	return func(c *Config) { c.QueryBreaker = b }
+}
+
+// WithMutationBreaker installs a circuit breaker for ClassMutation calls. The
+// default is nil (no breaker for mutations).
+func WithMutationBreaker(b *CircuitBreaker) Option {
+	return func(c *Config) { c.MutationBreaker = b }
 }

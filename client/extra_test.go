@@ -12,7 +12,7 @@ import (
 	"github.com/shing1211/hstongapi4go/internal/transport"
 )
 
-// TestCodec_Alias pins the public alias: the accessors return client.Codec,
+// TestCodec_Alias pins the public alias: the accessor returns client.Codec,
 // which is the transport codec interface, so no internal type is named by the
 // public API (docs/DESIGN.md §6).
 func TestCodec_Alias(t *testing.T) {
@@ -23,15 +23,11 @@ func TestCodec_Alias(t *testing.T) {
 	defer c.Close()
 
 	var jsonCodec Codec = c.JSON()
-	var protoCodec Codec = c.ProtoJSON()
-	if jsonCodec == nil || protoCodec == nil {
-		t.Fatal("codec accessors returned nil")
+	if jsonCodec == nil {
+		t.Fatal("JSON() returned nil")
 	}
 	if got := reflect.TypeOf(jsonCodec); got != reflect.TypeOf(transport.JSONCodec{}) {
 		t.Fatalf("JSON() type = %v, want transport.JSONCodec", got)
-	}
-	if got := reflect.TypeOf(protoCodec); got != reflect.TypeOf(transport.ProtoJSONCodec{}) {
-		t.Fatalf("ProtoJSON() type = %v, want transport.ProtoJSONCodec", got)
 	}
 }
 
