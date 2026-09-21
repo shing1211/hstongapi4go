@@ -27,7 +27,9 @@ c, err := client.New(
 | `WithMetrics(rec)` | nil (inert) | Metrics recorder. Takes the public `client.Recorder` alias (see [Observability](observability.md)). |
 | `WithRetryPolicy(p)` | nil (one attempt) | Query-only retry policy. Takes the public `client.RetryPolicy` alias. Mutations are never retried (see [Rate Limiting](rate-limiting.md)). |
 | `WithRateLimiter(l)` | nil (no limit) | Token-bucket rate limiter. Takes the public `client.RateLimiter` alias. |
-| `WithCircuitBreaker(b)` | nil (no breaker) | Circuit breaker. Takes the public `client.CircuitBreaker` alias. |
+| `WithCircuitBreaker(b)` | nil (no breaker) | Sets both `QueryBreaker` and `MutationBreaker` to `b` for backward compatibility. Takes the public `client.CircuitBreaker` alias. |
+| `WithQueryBreaker(b)` | nil (no breaker) | Circuit breaker for read-only query endpoints. Takes the public `client.CircuitBreaker` alias. |
+| `WithMutationBreaker(b)` | nil (off) | Circuit breaker for order/futures/algo mutation endpoints. Mutations can open this breaker independently of `QueryBreaker`. Takes the public `client.CircuitBreaker` alias. |
 | `WithEnv()` | — | Reads the `HSTONG_*` variables below. |
 
 `New` returns an error, never panics, when the resolved configuration is invalid

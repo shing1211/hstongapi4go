@@ -117,8 +117,8 @@ message PBNotify {
 }
 ```
 
-`payload` is unpacked via the full 17-proto `Any` registry, then decoded by the
-topic's decoder.
+`payload` is unpacked by the `notifyMsgType` wire enum value, then decoded by the
+topic's decoder (the `Any` `type_url` is not used).
 
 ### 3.4 NotifyMsgType values
 
@@ -155,15 +155,14 @@ Per-endpoint codec selection. See [ADR 0002](./adr/0002-hybrid-codec.md).
 
 | Surface | Representation | Codec |
 |---------|----------------|-------|
-| TCP push payloads | generated proto types; `Any` unpack | binary protobuf |
-| Market DTOs in HTTP `data` | generated proto types | `protojson` |
+| TCP push payloads | generated proto types; `notifyMsgType` enum dispatch | binary protobuf |
+| Market DTOs in HTTP `data` (9 pull + subscribe) | hand-written wrappers whose element types are the generated `gen/hq/dto` protobuf messages | `encoding/json` (ADR 0007) |
 | Trade / futures / algo / assets / session HTTP bodies | hand-written structs with explicit `json:"..."` tags | `encoding/json` |
-| Envelope (`timeout_sec`, `params`, `ok`, `err`, `data`) | hand-written; `json.RawMessage` payloads | `encoding/json` |
+| Envelope (`timeout_sec`, `params`, `ok`, `err`, `data`) | hand-written structs; `json.RawMessage` payloads | `encoding/json` |
 
 The official PB package contains **no HTTP request/response messages**, which is why
-the non-market HTTP bodies are hand-written. The fallback is documented in ADR 0002:
-any market endpoint may switch to `encoding/json` against a mirror struct without a
-public API change.
+the non-market HTTP bodies are hand-written. Market HTTP bodies are decoded with
+`encoding/json` (not `protojson`); see [ADR 0007](./adr/0007-http-json-codec.md).
 
 ## 5. Error categories
 
@@ -210,7 +209,7 @@ to reconcile via the real/history entrust and deliver queries.
 - In hand-written HTTP bodies they are `string` (or `json.Number` where the wire
   value is numeric).
 - Generated market DTOs keep the proto types' `int64`/`double` fields and are decoded
-  with `protojson`, which renders 64-bit integers as strings.
+  with `encoding/json`, which maps JSON numbers directly onto `int64` fields.
 - `make money-check` scans for `float32`/`float64` misuse of monetary fields.
 
 ## 8. Related documents

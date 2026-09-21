@@ -33,8 +33,8 @@ Adopt a **per-endpoint `Codec` abstraction** with a hybrid representation:
 
 | Surface | Representation | Codec |
 |---------|----------------|-------|
-| TCP push payload | generated proto types; `proto.Unmarshal` after `Any` unpack | binary protobuf |
-| Market DTOs in HTTP `data` (9 pull + subscribe) | generated proto types | `protojson` |
+| TCP push payload | generated proto types; `notifyMsgType` enum dispatch | binary protobuf |
+| Market DTOs in HTTP `data` (9 pull + subscribe) | hand-written wrappers over `gen/hq/dto` types | `encoding/json` (**superseded by ADR 0007**) |
 | Trade / futures / algo / assets / session HTTP bodies | hand-written Go structs with explicit `json:"..."` tags | `encoding/json` |
 | Envelope (`timeout_sec`, `params`, `ok`, `err`, `data`) | hand-written structs; `json.RawMessage` payloads | `encoding/json` |
 
@@ -46,11 +46,10 @@ Rules:
   retry rule and `make money-check`).
 - No `.proto` files are invented for trade/futures/algo/session bodies.
 
-**Documented fallback.** If the Gateway emits a market `data` payload that
-`protojson` cannot decode, the affected endpoint's `Codec` is switched to
-`encoding/json` against a hand-written mirror struct. This is an internal change and
-does not alter the public API. `make proto-verify` (T04) and the P12 integration
-validation (T35) detect drift so the fallback is applied deliberately.
+**Fallback (superseded).** ADR 0007 replaced the market DTO `protojson` branch with
+`encoding/json`. The documented `protojson` fallback no longer exists. If a market
+endpoint needs a different decoder, the fix is a `json.RawMessage` decode against a
+hand-written mirror struct scoped to that endpoint.
 
 ## Consequences
 

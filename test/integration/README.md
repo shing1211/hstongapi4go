@@ -102,13 +102,17 @@ reported as a `SKIP`, not a failure, because entitlements are account-specific.
 ## Interpreting a wire mismatch
 
 If `TestIntegration_WireCodecProbe` fails, the Gateway sent an `int64` as a
-quoted string while `pkg/hstong/market` decodes with `encoding/json`. Follow the
+JSON number while `pkg/hstong/market` decodes with `encoding/json`. Follow the
 documented fallback in
-[ADR 0007](../../docs/adr/0007-http-json-codec.md): select `client.ProtoJSON()`
-for that endpoint in `pkg/hstong/market/market.go` and decode the DTO list from
-`json.RawMessage` elements, or correct the ADR if the vendor SDKs were wrong.
+[ADR 0007](../../docs/adr/0007-http-json-codec.md): switch that endpoint to
+decode from `json.RawMessage` using a helper that handles the observed format,
+or correct the ADR if the vendor SDKs were wrong.
 Record the raw observation in the run's `evidence/` directory before changing
 code.
+
+> **Note:** `client.ProtoJSON()` was removed in v0.1.1 (G5). The `protojson`
+> fallback no longer exists; the fix path is now `json.RawMessage` + a custom
+> decode helper scoped to the affected endpoint.
 
 ## Verification
 
