@@ -115,3 +115,86 @@ Throttle on the caller side too. There is **no documented QPS quota**, but:
 
 See [Error Codes](errors.md) for the full status table and [Observability](observability.md)
 for the metric names the resilience layer records.
+
+## Hardened client example
+
+The example below wires every hardening layer together — rate limiter, separate
+query/mutation circuit breakers, query-only retry policy, structured logging,
+and metrics:
+
+```go
+import (
+    "context"
+    "log/slog"
+    "time"
+
+    "github.com/shing1211/hstongapi4go/client"
+    "github.com/shing1211/hstongapi4go/internal/logging"
+    "github.com/shing1211/hstongapi4go/internal/resilience"
+)
+
+// simpleRecorder implements client.Recorder without any external dependency.
+type simpleRecorder struct{}
+
+func (s *simpleRecorder) Count(ctx context.Context, name string, n int64, labels ...string) {}
+func (s *simpleRecorder) Observe(ctx context.Context, name string, value float64, labels ...string) {}
+func (s *simpleRecorder) Gauge(ctx context.Context, name string, value float64, labels ...string) {}
+
+c, err := client.New(
+    client.WithEnv(), // read HSTONG_*; override individual values below
+
+    // Timeout: 3 s per request, applied to both HTTP and Gateway envelope.
+    client.WithTimeout(3*time.Second),
+
+    // Structured logging with secret redaction.
+    // Never log payloads or the trade password.
+    client.WithLogger(slog.Default()),
+
+    // Metrics: a no-op recorder above is fine; swap for OTLP, Prometheus, etc.
+    client.WithMetrics(&simpleRecorder{}),
+
+    // Rate limiter: 100 calls/s globally, 10 calls/s per endpoint.
+    client.WithRateLimiter(
+        resilience.NewLimiter(
+            resilience.Limit{TokensPerSecond: 100, Burst: 20},
+            resilience.Limit{TokensPerSecond: 10, Burst: 5},
+        ),
+    ),
+
+    // Query breaker: opens after 5 consecutive failures, cools down for 30 s.
+    client.WithQueryBreaker(
+        resilience.NewBreaker(5, 30*time.Second),
+    ),
+
+    // Mutation breaker: independent; a storm of rejected orders does not block reads.
+    client.WithMutationBreaker(
+        resilience.NewBreaker(5, 30*time.Second),
+    ),
+
+    // Retry policy: up to 3 attempts for reads, with jittered exponential backoff.
+    // Mutations (orders) are never retried regardless of this setting.
+    client.WithRetryPolicy(resilience.RetryPolicy{
+        MaxAttempts: 3,
+        BaseBackoff: 100 * time.Millisecond,
+        MaxBackoff:  2 * time.Second,
+        Jitter:      true,
+    }),
+)
+if err != nil {
+    panic(err)
+}
+defer c.Close()
+```
+
+### What each layer does
+
+| Layer | What it does | Why it matters |
+|-------|-------------|----------------|
+| Rate limiter | Token bucket; global + per-endpoint | Prevents the Gateway's 200-subscription cap and local resource exhaustion |
+| Query breaker | Opens after 5 failures, blocks reads for 30 s | Stops cascading failures from propagating to callers |
+| Mutation breaker | Independent from query breaker | Order rejections cannot starve market data reads |
+| Retry policy | 3 attempts with backoff for reads only | Retries transient errors (1011, 1015, 1018); never retries orders |
+| Logger | Structured, secrets redacted | Observability without leaking credentials |
+| Metrics | Stable dot-names, no payloads | Plug in Prometheus, OTLP, etc. |
+
+The two-breaker model means a back-pressure event on orders (a surge of `ERR_REJECTED`) opens the mutation breaker but leaves market data reads unaffected. `WithCircuitBreaker(b)` sets both breakers to `b` for backward compatibility; use `WithQueryBreaker` + `WithMutationBreaker` to separate them.
