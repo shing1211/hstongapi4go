@@ -3,7 +3,8 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Go-1.26+-00ADD8?style=flat-square&logo=go" alt="Go">
   <img src="https://img.shields.io/badge/License-Apache%202.0-blue?style=flat-square" alt="License">
-  <img src="https://img.shields.io/badge/Status-alpha-blue?style=flat-square" alt="Status">
+  <img src="https://img.shields.io/badge/Status-alpha%20v0.1.1-blue?style=flat-square" alt="Status">
+  <a href="https://github.com/shing1211/hstongapi4go/actions/workflows/ci.yml"><img src="https://github.com/shing1211/hstongapi4go/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <img src="https://img.shields.io/badge/Gateway-v2.4.1-brightgreen?style=flat-square" alt="Gateway version">
   <img src="https://img.shields.io/badge/Protobuf-v2.2.0-blueviolet?style=flat-square" alt="Protobuf package version">
   <img src="https://img.shields.io/badge/Endpoints-51-orange?style=flat-square" alt="HTTP endpoints">
@@ -61,7 +62,7 @@
 | Documentation (READMEs, MkDocs site, ADRs, SPEC, LEGACY) | Implemented |
 | Offline tests + all-endpoint SDK-to-mock e2e | Implemented |
 | Integration tests against a real Gateway | Written and env-gated; live confirmation pending a user run |
-| Release (GitHub + Gitee) | Pending |
+| Release (GitHub + Gitee) | v0.1.1 ✓ |
 
 All 51 HTTP endpoints and 11 market push topics are implemented. Counts are
 canonical in [docs/SPEC.md](./docs/SPEC.md); do not hand-edit them elsewhere.

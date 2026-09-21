@@ -1,0 +1,86 @@
+name: Bug Report
+description: Report something that is not working correctly
+title: "[Bug] "
+labels: ["bug"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Please fill in as much detail as possible so
+        the maintainers can reproduce and fix the issue.
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: I have searched existing issues and this bug is not already reported
+          required: true
+        - label: I am using the latest version of the SDK
+          required: true
+
+  - type: input
+    id: go-version
+    attributes:
+      label: Go version
+      description: Output of `go version`
+      placeholder: go1.26.8 linux/amd64
+    validations:
+      required: true
+
+  - type: input
+    id: gateway-version
+    attributes:
+      label: Gateway version
+      description: Version of the HStong Gateway (e.g. 2.4.1)
+      placeholder: "2.4.1"
+    validations:
+      required: true
+
+  - type: input
+    id: sdk-version
+    attributes:
+      label: SDK version
+      description: Git commit hash or tag (e.g. v0.1.1)
+      placeholder: v0.1.1
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: |
+        Standalone code (without credentials) that reproduces the issue.
+        Redact any secrets (passwords, tokens, keys).
+      placeholder: |
+        package hstong_test
+
+        import (
+            "context"
+            "testing"
+
+            "github.com/shing1211/hstongapi4go/client"
+        )
+
+        func TestBugRepro(t *testing.T) {
+            c, err := client.New()
+            // ...
+        }
+    validations:
+      required: true
+
+  - type: textarea
+    id: error-output
+    attributes:
+      label: Error output
+      description: Full error message and stack trace (secrets redacted)
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Anything else that might be relevant (environment, OS, network, etc.)
