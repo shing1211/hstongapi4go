@@ -5,9 +5,15 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.1.2] - 2026-09-21
 
-Nothing yet.
+### Fixed
+
+- **Stale ProtoJSON references removed (G5).** `client/doc.go`,
+  `internal/transport/doc.go`, and `pkg/hstong/market/doc.go` were updated
+  to remove references to the removed `client.ProtoJSON()` public API. The
+  market codec section in `pkg/hstong/market/doc.go` was rewritten to
+  confirm `client.JSON` is used for all nine endpoints.
 
 ## [0.1.1] - 2026-09-21
 
