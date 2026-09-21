@@ -12,7 +12,6 @@
 //
 // A Transport is immutable after construction and safe for concurrent use; it
 // holds no per-request state. The caller supplies a concrete path (route-alias
-// resolution is the client's responsibility) and a Codec (JSONCodec for
-// hand-written trade/futures/algo/assets/session bodies, ProtoJSONCodec for
-// proto-backed market data). A nil Codec defaults to JSONCodec.
+// resolution is the client's responsibility) and a Codec. A nil Codec
+// defaults to JSONCodec.
 package transport

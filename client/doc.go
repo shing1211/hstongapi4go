@@ -20,15 +20,8 @@
 //
 // # Codecs
 //
-// The payload encoding is chosen per endpoint (docs/adr/0002-hybrid-codec.md):
-// JSON() returns the encoding/json codec for the hand-written trade, futures,
-// algo, assets, and session bodies, while ProtoJSON() returns the protojson
-// codec for the proto-backed market data bodies generated under gen/.
-//
-// Both accessors return a Codec, the public alias for the internal transport
-// codec interface, so no internal type appears in the package's signatures. The
-// concrete implementations are JSONCodec and ProtoJSONCodec; obtain them from
-// JSON and ProtoJSON rather than naming them directly.
+// Every endpoint uses the encoding/json codec (client.JSON). The codec is
+// obtained from (*Client).JSON; see docs/adr/0002-hybrid-codec.md.
 //
 // # Usage
 //
