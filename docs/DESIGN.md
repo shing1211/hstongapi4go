@@ -48,7 +48,7 @@ Application
 | `internal/resilience/` | Rate limit, retry budgets, circuit breaker | Mutations excluded; see [ADR 0003](./adr/0003-no-auto-retry-orders.md) |
 | `internal/logging/` | `log/slog` helpers + redaction | Never-nil logger |
 | `internal/metrics/` | Dependency-free, OTel-bridgeable interface | See [ADR 0004](./adr/0004-minimal-dependencies.md) |
-| `pkg/hstong/` | Public managers: `market`, `trade`, `future`, `algo`, `stream` | Domain API surface |
+| `pkg/hstong/` | Public managers: `market/`, `trade/`, `future/`, `algo/`, `stream/`, `session.go` | Domain API surface |
 | `pkg/types/` | Enums and domain types from the data dictionaries | Public |
 | `test/mockgateway/` | Mock HTTP (51 routes) + TCP push server | Offline tests |
 | `examples/`, `scripts/`, `docs/`, `.github/workflows/` | Examples, tooling, docs, CI | |

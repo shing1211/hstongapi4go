@@ -122,8 +122,8 @@ Grouped by surface, exactly as approved in the plan (Appendix A). Every route is
 **Total: 51 HTTP endpoints** (9 + 2 + 2 + 5 + 13 + 2 + 7 + 11).
 
 Response schemas are documented in §3. Each table's fields are copied verbatim from the
-corresponding Go struct field comments in `pkg/hstong/trade/`, `pkg/hstong/future/`, and
-`pkg/hstong/algo/`. Deprecated fields are marked; see §9.
+corresponding Go struct field comments in `pkg/hstong/trade/`, `pkg/hstong/future/`,
+`pkg/hstong/algo/`, and `pkg/hstong/session.go`. Deprecated fields are marked; see §9.
 
 ## 3. Response schemas
 
@@ -985,7 +985,9 @@ currencies (for example `E` CAD, `F` CHF, `M` EUR, `Q` GBP, `W` JPY, `t` SGD).
 ## 10. Deprecated fields
 
 The reference marks these fields unreliable; consumers should prefer the
-documented replacements and never rely on them for money or P&L:
+documented replacements and never rely on them for money or P&L.
 
-`holdsBalance`, `marketValue`, `lastPrice`, `incomeBalance`, `marketValueRate`,
+In `MarginFundInfo`: `holdsBalance`.
+
+In `HoldsVo`: `marketValue`, `lastPrice`, `incomeBalance`, `marketValueRate`,
 `incomeRatio`.

@@ -69,7 +69,7 @@ hand.
 | Typed errors + status codes | `internal/errs/` |
 | Rate limit / retry / breaker | `internal/resilience/` |
 | Logging + metrics | `internal/logging/`, `internal/metrics/` |
-| Public managers | `pkg/hstong/` (`market`, `trade`, `future`, `algo`, `stream`) |
+| Public managers | `pkg/hstong/` (`market`, `trade`, `future`, `algo`, `stream`, `session.go`) |
 | Domain types + enums | `pkg/types/` |
 | Mock Gateway | `test/mockgateway/`, `cmd/hstong-mock-gateway/` |
 | Examples | `examples/` |

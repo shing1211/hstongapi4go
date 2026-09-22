@@ -75,7 +75,7 @@ resp, err := m.Entrust(ctx, future.EntrustRequest{
     EntrustType:   "0",   // 0 limit, 1 auction, 2 market
     EntrustPrice:  "20000",
     EntrustAmount: "1",
-    EntrustBS:     string(types.EntrustBuy), // 1 open long, 2 close long, 3 close short, 4 open short
+    EntrustBS:     string(types.EntrustBuy), // 1 open long/buy, 2 close long/sell, 3 close short, 4 open short
     ValidTimeType: "0",   // 0 day, 1 IOC, 2 FOK, 3 GTD, 4 good-till-specified-date
 })
 

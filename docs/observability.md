@@ -129,3 +129,44 @@ endpoint. Do not log request bodies if you add them.
 | Push state | `Subscription.Errors()` | `ErrReconnected` marks a reconnect |
 | Buffer drops | not exposed | drop-oldest is internal; raise `WithBuffer` if observed |
 | Breaker state | `WithMetrics` | `0` closed, `1` half-open, `2` open |
+
+## Verifying in tests
+
+To exercise metrics recording in unit tests, use the mock Gateway and a
+no-op recorder that captures the observed values:
+
+```go
+type recordingRecorder struct {
+    mu    sync.Mutex
+    calls []struct {
+        name   string
+        value  float64
+        labels []string
+    }
+}
+
+func (r *recordingRecorder) Count(ctx context.Context, name string, n int64, labels ...string) {
+    r.mu.Lock()
+    defer r.mu.Unlock()
+    r.calls = append(r.calls, struct {
+        name   string
+        value  float64
+        labels []string
+    }{name, float64(n), labels})
+}
+
+func (r *recordingRecorder) Observe(ctx context.Context, name string, value float64, labels ...string) {
+    r.mu.Lock()
+    defer r.mu.Unlock()
+    r.calls = append(r.calls, struct {
+        name   string
+        value  float64
+        labels []string
+    }{name, value, labels})
+}
+
+func (r *recordingRecorder) Gauge(ctx context.Context, name string, value float64, labels ...string) {}
+```
+
+See [Testing](testing.md) for the mock Gateway API and error injection to
+trigger retry and circuit-breaker paths.

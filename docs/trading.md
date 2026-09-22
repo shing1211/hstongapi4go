@@ -107,7 +107,7 @@ id, err := m.Entrust(ctx, trade.EntrustRequest{
     StockCode:     "0700.HK",
     EntrustAmount: "100",
     EntrustPrice:  "300",
-    EntrustBS:     types.EntrustBuy,      // 1 buy, 2 sell, 3 close short, 4 open short
+    EntrustBS:     types.EntrustBuy,      // 1 buy/open long, 2 sell/close long, 3 close short, 4 open short
     EntrustType:   types.EntrustTypeLimit, // 3 limit (HK/US/A-share)
 })
 ```

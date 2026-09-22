@@ -73,6 +73,13 @@ nav:
       - Observability: observability.md
       - Rate Limiting: rate-limiting.md
       - Security: security.md
+  - Reference:
+      - Glossary: glossary.md
+      - Quick Reference: quick-reference.md
+      - API Reference: SPEC.md
+  - Operations:
+      - Runbook: runbook.md
+      - Migration Guide: MIGRATION.md
   - Legacy Protocol: LEGACY.md
   - Contributing: CONTRIBUTING.md
   - Architecture Decisions:
