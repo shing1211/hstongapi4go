@@ -44,9 +44,16 @@ it when the program exits.
 ```go
 c, err := client.New(client.WithEnv())
 if err != nil {
-    return err
+    return err  // Output: client setup failed: invalid environment: ...
 }
-defer c.Close()
+defer func() {
+    if err := c.Close(); err != nil {
+        log.Println("close error:", err)
+    }
+}()
+
+// Possible output (on success with default Gateway):
+// (no output — client is ready)
 ```
 
 `client.WithEnv()` reads the `HSTONG_*` variables listed in

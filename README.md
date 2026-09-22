@@ -28,8 +28,26 @@
 
 > Canonical English source. Last synced: 2026-09-21
 
+## Key Concepts
+
+Before writing your first call, understand these SDK abstractions:
+
+| Concept | Package | Description |
+|---------|--------|-------------|
+| `Client` | [client](./docs/configuration.md) | Thread-safe HTTP transport; create once, share widely |
+| `SessionManager` | [pkg/hstong](./docs/authentication.md) | Trade login/logout, keep-alive, single-flight re-login |
+| `Manager` | [pkg/hstong/market](./docs/market-data.md) | Surface-specific API (market, trade, futures, algo) |
+| `stream.Client` | [pkg/hstong/stream](./docs/streaming.md) | TCP push subscriber with auto-reconnect |
+
+**Choose your surface:**
+
+- **Market data only?** → `market.New(c)` — no authentication required
+- **Trading, futures, algo?** → `hstong.NewSessionManager(c)` + `Login` first
+- **Real-time quotes?** → `stream.New(c)` + `Connect` + `Subscribe`
+
 ## Table of Contents
 
+- [Key Concepts](#key-concepts)
 - [Status](#status)
 - [Install](#install)
 - [Quickstart](#quickstart)

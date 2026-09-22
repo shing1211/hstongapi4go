@@ -240,3 +240,32 @@ defer m.UnsubscribeOrders(ctx)
 The subscription is session-wide, not per-security. Notifications arrive on the
 TCP push channel as `TradeStockDeliverNotify`; consume them with
 `stream.SubscribeTrade`. See [Streaming](streaming.md).
+
+## EntrustStatus reference
+
+`EntrustStatus` is the order lifecycle status published in push notifications and
+queried order lists.
+
+| Value | Constant | Chinese | Meaning |
+|-------|----------|---------|---------|
+| `0` | `EntrustStatusNoRegister` | 未报 | Not yet submitted |
+| `1` | `EntrustStatusWaitToRegister` | 待报 | Waiting to submit |
+| `2` | `EntrustStatusRegistered` | 已报 | Accepted by the host |
+| `3` | `EntrustStatusWaitCancel` | 已报待撤 | Accepted; queued for cancel |
+| `4` | `EntrustStatusPartFilledWaitCancel` | 部成待撤 | Partially filled; queued for cancel |
+| `5` | `EntrustStatusPartCancelled` | 部撤 | Partially cancelled |
+| `6` | `EntrustStatusCancelled` | 已撤 | Cancelled |
+| `7` | `EntrustStatusPartFilled` | 部成 | Partially filled |
+| `8` | `EntrustStatusFilled` | 已成 | Fully filled |
+| `9` | `EntrustStatusHostReject` | 废单 | Rejected by the host |
+| `A` | `EntrustStatusWaitModifyRegistered` | 已报待改 | Accepted; queued for modify |
+| `B` | — | — | Unused |
+| `C` | — | — | Unused |
+| `D` | — | — | Unused |
+| `E` | `EntrustStatusWaitModifyPartFilled` | 部成待改 | Partially filled; queued for modify |
+| `F` | `EntrustStatusRejectPreOrder` | 预埋单检查废单 | Rejected pre-order check |
+| `G` | `EntrustStatusCancelledPreOrder` | 预埋单已撤 | Pre-order cancelled |
+| `H` | `EntrustStatusWaitReview` | 待审核 | Waiting for review |
+| `J` | `EntrustStatusReviewFail` | 审核失败 | Review failed |
+| `W` | `EntrustStatusWaitConfirming` | 待确认 | Waiting for confirmation |
+| `X` | — | — | Unused |

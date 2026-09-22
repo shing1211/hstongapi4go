@@ -159,3 +159,28 @@ if ok {
 `future.FromDeliverNotify` returns a typed, string-only view of the payload;
 `DeliverNotification.HasFill` reports whether `MatchNo` is populated (a fill
 rather than a pure state change). See [Streaming](streaming.md).
+
+## EntrustStatus reference
+
+`EntrustStatus` in futures push notifications and order queries uses the same
+status set as the trade surface.
+
+| Value | Constant | Chinese | Meaning |
+|-------|----------|---------|---------|
+| `0` | `EntrustStatusNoRegister` | 未报 | Not yet submitted |
+| `1` | `EntrustStatusWaitToRegister` | 待报 | Waiting to submit |
+| `2` | `EntrustStatusRegistered` | 已报 | Accepted by the host |
+| `3` | `EntrustStatusWaitCancel` | 已报待撤 | Accepted; queued for cancel |
+| `4` | `EntrustStatusPartFilledWaitCancel` | 部成待撤 | Partially filled; queued for cancel |
+| `5` | `EntrustStatusPartCancelled` | 部撤 | Partially cancelled |
+| `6` | `EntrustStatusCancelled` | 已撤 | Cancelled |
+| `7` | `EntrustStatusPartFilled` | 部成 | Partially filled |
+| `8` | `EntrustStatusFilled` | 已成 | Fully filled |
+| `9` | `EntrustStatusHostReject` | 废单 | Rejected by the host |
+| `A` | `EntrustStatusWaitModifyRegistered` | 已报待改 | Accepted; queued for modify |
+| `E` | `EntrustStatusWaitModifyPartFilled` | 部成待改 | Partially filled; queued for modify |
+| `F` | `EntrustStatusRejectPreOrder` | 预埋单检查废单 | Rejected pre-order check |
+| `G` | `EntrustStatusCancelledPreOrder` | 预埋单已撤 | Pre-order cancelled |
+| `H` | `EntrustStatusWaitReview` | 待审核 | Waiting for review |
+| `J` | `EntrustStatusReviewFail` | 审核失败 | Review failed |
+| `W` | `EntrustStatusWaitConfirming` | 待确认 | Waiting for confirmation |

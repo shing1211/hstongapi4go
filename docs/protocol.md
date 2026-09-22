@@ -35,6 +35,30 @@ Response:
   [Error Codes](errors.md).
 - `params` is omitted entirely when there are no parameters.
 
+### curl examples
+
+All calls are `POST` to `http://127.0.0.1:11111`. Omit `--data` when there are
+no parameters.
+
+```sh
+# Login (trade password from HSTONG_TRADE_PASSWORD env var — not shown here)
+curl -X POST http://127.0.0.1:11111/trade/Login \
+  -H "Content-Type: application/json" \
+  -d '{"timeout_sec": 10, "params": {"tradePassword": "encrypted_password_string"}}'
+
+# Market data query (no auth required)
+curl -X POST http://127.0.0.1:11111/hq/BasicQot \
+  -H "Content-Type: application/json" \
+  -d '{"timeout_sec": 10, "params": {" securities":[{"market": 116,"code": "00700"}] }}'
+
+# Push subscribe (no auth required)
+curl -X POST http://127.0.0.1:11111/hq/Subscribe \
+  -H "Content-Type: application/json" \
+  -d '{"timeout_sec": 10, "params": {" subList":[{"market": 116,"code": "00700","qotItem": ["basic","kline"]}] }}'
+```
+
+## Route aliases
+
 ## Route aliases
 
 Every logical route is reachable under three alias forms. `client.NormalizePath`

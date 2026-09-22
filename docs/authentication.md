@@ -32,6 +32,52 @@ c, err := client.New(client.WithTradePassword("..."))
 If no password is configured, `Login` returns a typed error **without sending a
 request**.
 
+## Complete authentication flow
+
+Every authenticated call follows this pattern:
+
+```go
+// 1. Create client (reads HSTONG_TRADE_PASSWORD from environment)
+c, err := client.New(client.WithEnv())
+if err != nil {
+    log.Fatal("client setup failed:", err)
+}
+defer c.Close()
+
+// 2. Create session manager
+session := hstong.NewSessionManager(c)
+
+// 3. Login (sends encrypted password to Gateway)
+if err := session.Login(ctx); err != nil {
+    log.Fatal("login failed:", err)  // Output: login failed: gateway: 1012 not logged in
+}
+defer session.Logout(ctx)
+
+// 4. Attach session to trade manager (auto re-login on 1012/1013/1014)
+tradeMgr := trade.New(c, trade.WithSession(session))
+
+// 5. Make authenticated calls — session auto-extends on each call
+funds, err := tradeMgr.MarginFundInfo(ctx, trade.MarginFundInfoRequest{
+    ExchangeType: types.ExchangeHK,
+})
+if err != nil {
+    log.Fatal("margin query failed:", err)
+}
+fmt.Println("asset balance:", funds.AssetBalance)
+// Possible output: asset balance: 123456.78
+```
+
+**Troubleshooting auth failures:**
+
+| Error | Cause | Resolution |
+|-------|-------|------------|
+| `1012 not logged in` | No session established | Call `session.Login(ctx)` |
+| `1013 session displaced` | Another login kicked this session | Normal; SDK auto re-logs in |
+| `1014 login timeout` | Token expired after 3h idle | Call `session.Login(ctx)` again |
+| `20033 futures login timeout` | Futures token expired | Call `session.Login(ctx)` for futures |
+
+See [Keep-alive](#keep-the-three-hour-token-alive) to prevent token expiry.
+
 ## Log in
 
 ```go

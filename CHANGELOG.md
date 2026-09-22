@@ -5,6 +5,25 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.3] - 2026-09-22
+
+### Added
+
+- **Key Concepts section in README** — Client, SessionManager, Manager, and
+  stream.Client explained with surface-selection guide.
+- **Complete auth flow in authentication.md** — 5-step pattern with expected
+  outputs and troubleshooting table (1012/1013/1014/20033).
+- **EntrustStatus reference tables** — added to trading.md (20 states),
+  futures.md (17 states), and algo.md (15 states), with Chinese labels.
+- **curl examples in protocol.md** — login, market query, push subscribe.
+- **Expected output comments in getting-started.md** — error and success
+  output shown for minimal program.
+
+### Changed
+
+- **MIGRATION.md overhaul** — migration table with before/after code examples,
+  typed error handling guidance, v0.1.2 notes.
+
 ## [0.1.2] - 2026-09-21
 
 ### Fixed
