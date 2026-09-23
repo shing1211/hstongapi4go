@@ -5,6 +5,53 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.5] - 2026-09-24
+
+### Added
+
+- **ADRs 0008–0011.** Four new architecture decision records covering the
+  v-next enterprise SDK layer: ADR 0008 (decimal-backed financial types with
+  `shopspring/decimal`), ADR 0009 (OpenTelemetry observability with `otel`
+  build tag), ADR 00010 (additive v-next layered architecture: `pkg/domain`,
+  `pkg/services`, `pkg/transport`, `internal/auth`), ADR 0011 (v0.1.x
+  compatibility guarantees — no breaking type or wire changes).
+- **`pkg/domain/` — decimal financial types.** `Money`, `Price`, `Quantity`,
+  `Rate` types backed by `github.com/shopspring/decimal`, with scale, rounding,
+  and validation. Typed `AccountID`, `OrderID`, `EntrustID`, `ContractID`,
+  `SessionToken`. HK market models: `Symbol`, `Market`, `LotSize`,
+  `TickSchedule`, `MarketSession`, `DefaultHKTickSchedule`. Order state machine
+  (`OrderState`, `NextOrderState`, lifecycle events). Push event types
+  (`QuoteEvent`, `TickerEvent`, `OrderBookEvent`, `BrokerEvent`, `TradeEvent`,
+  `AccountEvent`, `SystemEvent`).
+- **`pkg/transport/mappers.go`.** Wire-to-domain mappers for `BasicQot`,
+  `Ticker`, `OrderBook`, `TradeStockDeliverNotify` using the correct generated
+  proto field paths (`GetLastPrice` → `float64`, `GetBusinessPrice` → `string`,
+  etc.).
+- **`internal/auth/` — session and token lifecycle.** `Session` struct with
+  expiry/refresh tracking, `SessionStore` interface with `InMemoryStore`,
+  `TokenManager` with injectable `Clock` and configurable TTL/refresh window,
+  `Authenticator` with `Login`/`Logout`/`GetSession`/`MustBeAuthenticated`,
+  re-export of `crypto.EncryptTradePassword`.
+- **`internal/auth` tests.** Crypto vector `123456 -> W1U8iZIppSE+mBMtzy9vZQ==`,
+  `Session` expiry/refresh, `TokenManager` CRUD, `InMemoryStore` concurrency.
+
+### Changed
+
+- **`go.mod`** — added `github.com/shopspring/decimal v1.4.0` as runtime
+  dependency (ADR 0008). Grouped require block.
+- **`scripts/check_money.py`** — updated docstring to reflect that `pkg/domain/`
+  uses `decimal.Decimal` (exempt from float rejection) while the rest of
+  `pkg/` stays `string`/`json.Number`.
+
+### Changed
+
+- **Docs: algo status table, protocol curl examples, mkdocs nav.** Fixed the
+  algo `EntrustStatus` table to match the actual 11 constants; corrected the
+  login route and curl request bodies in `docs/protocol.md`; removed the
+  duplicate nav entry from `mkdocs.yml`.
+- **`docs/runs/`** — added the `hstong-enterprise-sdk` run plan and tracker
+  (E01–E22 across 4 phases).
+
 ## [0.1.4] - 2026-09-23
 
 ### Changed
@@ -198,9 +245,10 @@ canonical in [docs/SPEC.md](./docs/SPEC.md).
 - The plaintext trade password is held in memory only, encrypted before it
   leaves the process, and never logged or embedded in an error.
 
-[Unreleased]: https://github.com/shing1211/hstongapi4go/compare/v0.1.4...HEAD
+[Unreleased]: https://github.com/shing1211/hstongapi4go/compare/v0.1.5...HEAD
 [0.1.0]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.0
 [0.1.1]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.1
 [0.1.2]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.2
 [0.1.3]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.3
 [0.1.4]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.4
+[0.1.5]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.5
