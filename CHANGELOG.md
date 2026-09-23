@@ -5,6 +5,13 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.4] - 2026-09-23
+
+### Changed
+
+- **Last synced date bumped** to 2026-09-23 across all six READMEs to reflect
+  the current repository state.
+
 ## [0.1.3] - 2026-09-22
 
 ### Added
@@ -191,7 +198,9 @@ canonical in [docs/SPEC.md](./docs/SPEC.md).
 - The plaintext trade password is held in memory only, encrypted before it
   leaves the process, and never logged or embedded in an error.
 
-[Unreleased]: https://github.com/shing1211/hstongapi4go/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/shing1211/hstongapi4go/compare/v0.1.4...HEAD
 [0.1.0]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.0
 [0.1.1]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.1
 [0.1.2]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.2
+[0.1.3]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.3
+[0.1.4]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.4

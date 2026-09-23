@@ -14,8 +14,9 @@ import re
 
 _REPO_BLOB = "https://github.com/shing1211/hstongapi4go/blob/main/"
 
-# Matches "](\../proto/<path>[#anchor])" and "](\../test/<path>[#anchor])".
-_OUT_OF_TREE = re.compile(r"\]\(\.\./((?:proto|test)/[^)\s#]+)(#[^)\s]+)?\)")
+# Matches "](\../proto/<path>[#anchor])", "](\../test/<path>[#anchor])",
+# and "](\../CHANGELOG.md)".
+_OUT_OF_TREE = re.compile(r"\]\(\.\./((?:proto|test)/[^)\s#]+|CHANGELOG\.md)(#[^)\s]+)?\)")
 
 
 def on_page_markdown(markdown, *, page, config, files):

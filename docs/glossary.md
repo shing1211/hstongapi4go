@@ -28,7 +28,7 @@ account.
 | `3` | close short |
 | `4` | open short |
 
-See [SPEC.md §7.4](./SPEC.md#74-entrustbs--buy-sell-direction).
+See [SPEC.md §7.4](./SPEC.md#74-entrustbs-buysell-direction).
 
 ### EntrustType — order type
 
@@ -50,7 +50,7 @@ Per-market order types. Key values:
 | Conditional | `33` | 止损限价单 stop-loss limit |
 | Conditional | `34` | 止损市价单 stop-loss market |
 
-See [SPEC.md §7.5](./SPEC.md#75-entrusttype--order-type).
+See [SPEC.md §7.5](./SPEC.md#75-entrusttype-order-type).
 
 ### EntrustStatus — order status
 
@@ -67,7 +67,7 @@ See [SPEC.md §7.5](./SPEC.md#75-entrusttype--order-type).
 | `8` | Filled 已成 |
 | `9` | Host Reject 废单 |
 
-See [SPEC.md §7.2](./SPEC.md#72-entruststatus--order-status).
+See [SPEC.md §7.2](./SPEC.md#72-entruststatus-order-status).
 
 ## Market data terms
 
@@ -128,7 +128,7 @@ See [SPEC.md §7.2](./SPEC.md#72-entruststatus--order-status).
 | `30000` | A股股票 A-share stock |
 | `30008` | A股科创板 STAR Market |
 
-See [SPEC.md §7.10](./SPEC.md#710-datatype--instrument-type) for the full list.
+See [SPEC.md §7.10](./SPEC.md#710-datatype-instrument-type) for the full list.
 
 ## Session and transport terms
 
@@ -164,7 +164,7 @@ single-flight re-login:
 | Broker queue | `16` | `BrokerNotify` |
 | Order book | `17`, `25`, `26`, `36` | `OrderBookFullNotify` |
 
-See [SPEC.md §4](./SPEC.md#4-market-push-topics--11) and
+See [SPEC.md §4](./SPEC.md#4-market-push-topics-11) and
 [Streaming](./streaming.md).
 
 ## SDK concepts
