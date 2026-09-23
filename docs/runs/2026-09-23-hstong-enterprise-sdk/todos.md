@@ -10,11 +10,11 @@
 
 | Phase | Tasks | Done |
 |-------|-------|------|
-| P00 Foundation & Domain | 5 | 2 |
+| P00 Foundation & Domain | 5 | 3 |
 | P01 REST Services | 5 | 0 |
 | P02 Push Engine | 4 | 0 |
 | P03 DevOps & Hardening | 8 | 0 |
-| **Total** | **22** | **2** |
+| **Total** | **22** | **3** |
 
 ## Tasks
 
@@ -22,7 +22,7 @@
 |----|------|------|--------|-----------|-------|-----------|
 | E01 | Superseding ADRs (decimal, OTel, v-next layering, v0.1.x compat) | architect | done | - | P00 | 4 ADRs; docs-check clean |
 | E02 | v-next layout + boundaries | architect | done | E01 | P00 | go build; boundary doc; gen/ untouched |
-| E03 | Decimal financial types + typed IDs + HK models + mappers | backend | todo | E02 | P00 | table tests; -race green |
+| E03 | Decimal financial types + typed IDs + HK models + mappers | backend | done | E02 | P00 | table tests; -race green |
 | E04 | Auth foundation (AES-ECB trade password, token lifecycle, clock) | backend | todo | E02 | P00 | crypto vector; session tests |
 | E05 | Toolchain: golangci-lint/gosec/govulncheck/coverage/Makefile | devops | todo | E01 | P00 | targets run; CI-parity |
 | E06 | HTTP adapter (deadlines, caps, correlation, paging, query-only retry) | backend | todo | E03,E05 | P01 | httptest round-trips; mutation=1 attempt |
