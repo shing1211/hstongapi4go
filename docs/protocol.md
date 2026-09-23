@@ -42,22 +42,20 @@ no parameters.
 
 ```sh
 # Login (trade password from HSTONG_TRADE_PASSWORD env var — not shown here)
-curl -X POST http://127.0.0.1:11111/trade/Login \
+curl -X POST http://127.0.0.1:11111/trade/TradeLogin \
   -H "Content-Type: application/json" \
   -d '{"timeout_sec": 10, "params": {"tradePassword": "encrypted_password_string"}}'
 
 # Market data query (no auth required)
 curl -X POST http://127.0.0.1:11111/hq/BasicQot \
   -H "Content-Type: application/json" \
-  -d '{"timeout_sec": 10, "params": {" securities":[{"market": 116,"code": "00700"}] }}'
+  -d '{"timeout_sec": 10, "params": {"security":[{"dataType":10000,"code":"00700.HK"}]}}'
 
 # Push subscribe (no auth required)
 curl -X POST http://127.0.0.1:11111/hq/Subscribe \
   -H "Content-Type: application/json" \
-  -d '{"timeout_sec": 10, "params": {" subList":[{"market": 116,"code": "00700","qotItem": ["basic","kline"]}] }}'
+  -d '{"timeout_sec": 10, "params": {"topicId":11,"security":[{"dataType":10000,"code":"00700.HK"}]}}'
 ```
-
-## Route aliases
 
 ## Route aliases
 

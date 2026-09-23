@@ -91,7 +91,6 @@ nav:
       - "0005: Push verification": adr/0005-key-model-and-push-verification.md
       - "0006: Test deps": adr/0006-test-dependencies.md
       - "0007: JSON codec": adr/0007-http-json-codec.md
-  - API Reference: SPEC.md
 
 extra_css:
   - stylesheets/extra.css

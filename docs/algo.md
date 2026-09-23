@@ -142,26 +142,22 @@ are forwarded to the Gateway unchanged.
 The algo `EntrustType` is distinct from the trade surface's
 `types.EntrustType`; do not mix them.
 
-## EntrustStatus reference
+## Status reference
 
-Algo orders use a separate status enumeration from the trade surface. The
-reference labels are incomplete; unknown codes are forwarded to the Gateway
-unchanged.
+Algo master orders use `algo.Status`, a separate enumeration from the trade
+surface's `types.EntrustStatus`; do not mix them. Unknown codes are forwarded
+to the Gateway unchanged.
 
 | Value | Constant | Chinese | Meaning |
 |-------|----------|---------|---------|
-| `0` | `StatusRegistered` | 已报 | Accepted by the host |
-| `1` | `StatusWaitMatch` | 待报 | Waiting to match |
-| `2` | `StatusPartFilled` | 部成 | Partially filled |
-| `3` | `StatusFilled` | 已成 | Fully filled |
+| `0` | `StatusRegistered` | 已报 | Accepted by the platform |
+| `1` | `StatusPartFilled` | 部分成交 | Partially filled |
+| `2` | `StatusFilled` | 全部成交 | Fully filled |
+| `3` | `StatusCompleted` | 当日完成 | Completed for the day |
 | `4` | `StatusCancelled` | 已撤 | Cancelled |
-| `5` | `StatusWaitCancel` | 已报待撤 | Accepted; queued for cancel |
-| `6` | `StatusWaitModify` | 已报待改 | Accepted; queued for modify |
-| `7` | `StatusModifyRejected` | 改单失败 | Modify rejected |
-| `8` | `StatusCancelledRejected` | 撤单失败 | Cancel rejected |
-| `9` | `StatusHostReject` | 废单 | Rejected by the host |
-| `A` | `StatusPreOrderCheckFail` | 预埋单检查失败 | Pre-order check failed |
-| `B` | `StatusPartFilledWaitCancel` | 部成待撤 | Partially filled; queued for cancel |
-| `C` | `StatusPartFilledWaitModify` | 部成待改 | Partially filled; queued for modify |
-| `D` | `StatusSuspended` | 已暂停 | Suspended |
-| `E` | `StatusWaitModifyPartFilled` | 部成待改 | Partially filled; queued for modify |
+| `5` | `StatusModified` | 已改 | Modified |
+| `6` | `StatusWaitCancel` | 待撤 | Waiting to cancel |
+| `8` | `StatusRejected` | 废单 | Rejected |
+| `A` | `StatusPending` | 待报 | Waiting to be submitted |
+| `C` | `StatusExpired` | 过期 | Expired |
+| `E` | `StatusWaitModify` | 待改 | Waiting to modify |
