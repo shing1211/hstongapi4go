@@ -3,11 +3,15 @@
 # SPDX-License-Identifier: Apache-2.0
 """check_money.py — enforce ADR 0008: money/quantity fields are never floats.
 
-Money, prices, quantities, and rates must be represented as string or
-json.Number, never as binary floats. This scans exported struct fields under
-pkg/ (excluding tests) and fails if any field whose name looks monetary or
-quantitative is declared as float32/float64 — optionally via a pointer, slice,
-or array.
+Money, prices, quantities, and rates must be represented as:
+  - string or json.Number  in pkg/  (except pkg/domain/)
+  - decimal.Decimal        in pkg/domain/  (per ADR 0008)
+
+This scans exported struct fields under pkg/ (excluding tests) and fails if any
+field whose name looks monetary or quantitative is declared as float32/float64 —
+optionally via a pointer, slice, or array.  pkg/domain/ is exempt from the
+string/json.Number rule because its types use decimal.Decimal (ADR 0008), but
+float64 is still rejected everywhere.
 
 Exits 0 (with a notice) when pkg/ does not exist yet, so `make check` stays
 green while the repo is still a skeleton.
