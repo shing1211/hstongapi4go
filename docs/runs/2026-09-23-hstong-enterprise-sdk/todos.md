@@ -10,17 +10,17 @@
 
 | Phase | Tasks | Done |
 |-------|-------|------|
-| P00 Foundation & Domain | 5 | 0 |
+| P00 Foundation & Domain | 5 | 1 |
 | P01 REST Services | 5 | 0 |
 | P02 Push Engine | 4 | 0 |
 | P03 DevOps & Hardening | 8 | 0 |
-| **Total** | **22** | **0** |
+| **Total** | **22** | **1** |
 
 ## Tasks
 
 | ID | Task | Role | Status | Depends On | Phase | Acceptance |
 |----|------|------|--------|-----------|-------|-----------|
-| E01 | Superseding ADRs (decimal, OTel, v-next layering, v0.1.x compat) | architect | todo | - | P00 | 4 ADRs; docs-check clean |
+| E01 | Superseding ADRs (decimal, OTel, v-next layering, v0.1.x compat) | architect | done | - | P00 | 4 ADRs; docs-check clean |
 | E02 | v-next layout + boundaries | architect | todo | E01 | P00 | go build; boundary doc; gen/ untouched |
 | E03 | Decimal financial types + typed IDs + HK models + mappers | backend | todo | E02 | P00 | table tests; -race green |
 | E04 | Auth foundation (AES-ECB trade password, token lifecycle, clock) | backend | todo | E02 | P00 | crypto vector; session tests |
@@ -56,3 +56,4 @@
 | When | Note |
 |------|------|
 | 2026-09-23 | Run created from blueprint intake. Target confirmed = current 華盛 Gateway API; repo = existing `hstongapi4go`; deps = decimal + OTel (ADR-gated). Brief's HMAC/WebSocket re-mapped (Appendix A). Awaiting approval gates 1-3 before E01. |
+| 2026-09-24 | **E01 done.** Added ADRs 0008-0011 (decimal, OTel, v-next layering, v0.1.x compat); updated ADR README; updated check_money.py docstring; pushed to origin + gitee (`281f530`). Gate 1 (additive layering) and Gate 2 (superseding ADRs) approved. Gate 3 (baseline hygiene) already handled in prior commit. E01 complete. |
