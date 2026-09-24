@@ -11,10 +11,10 @@
 | Phase | Tasks | Done |
 |-------|-------|------|
 | P00 Foundation & Domain | 5 | 5 |
-| P01 REST Services | 5 | 2 |
-| P02 Push Engine | 4 | 0 |
+| P01 REST Services | 5 | 5 |
+| P02 Push Engine | 4 | 1 |
 | P03 DevOps & Hardening | 8 | 0 |
-| **Total** | **22** | **7** |
+| **Total** | **22** | **11** |
 
 ## Tasks
 
@@ -26,11 +26,11 @@
 | E04 | Auth foundation (AES-ECB trade password, token lifecycle, clock) | backend | done | E02 | P00 | crypto vector; session tests |
 | E05 | Toolchain: golangci-lint/gosec/govulncheck/coverage/Makefile | devops | done | E01 | P00 | targets run; CI-parity |
 | E06 | HTTP adapter (deadlines, caps, correlation, paging, query-only retry) | backend | done | E03,E05 | P01 | httptest round-trips; mutation=1 attempt |
-| E07 | Market services (9 pull + subscribe) | backend | todo | E06 | P01 | fixture round-trips; limit guard |
-| E08 | Account/asset/position services (5) | backend | todo | E06 | P01 | fixture round-trips; cursor paging |
-| E09 | Trading services (13) + HK validation | backend | todo | E06 | P01 | validation tests; mutation guard |
+| E07 | Market services (9 pull + subscribe) | backend | done | E06 | P01 | fixture round-trips; limit guard |
+| E08 | Account/asset/position services (5) | backend | done | E06 | P01 | fixture round-trips; cursor paging |
+| E09 | Trading services (13) + HK validation | backend | done | E06 | P01 | validation tests; mutation guard |
 | E10 | Mock-server integration suites | tester | todo | E09 | P01 | -race; single-attempt assertion |
-| E11 | Push manager (framing, registry, heartbeat, reconnect, resubscribe) | backend | todo | E06 | P02 | golden-frame tests; leak-free |
+| E11 | Push manager (framing, registry, heartbeat, reconnect, resubscribe) | backend | done | E06 | P02 | golden-frame tests; leak-free |
 | E12 | Typed push normalizers + unknown/versioned tolerance | backend | todo | E11 | P02 | decode tests incl. unknown types |
 | E13 | Fan-out, backpressure, gap/freshness, dedup, reconciliation | backend | todo | E12 | P02 | race + backpressure tests |
 | E14 | Push integration/race/reconnect + fuzz tests | tester | todo | E13 | P02 | fuzz seeds; -race green |
@@ -59,3 +59,7 @@
 | 2026-09-24 | **E01 done.** Added ADRs 0008-0011 (decimal, OTel, v-next layering, v0.1.x compat); updated ADR README; updated check_money.py docstring; pushed to origin + gitee (`281f530`). Gate 1 (additive layering) and Gate 2 (superseding ADRs) approved. Gate 3 (baseline hygiene) already handled in prior commit. E01 complete. |
 | 2026-09-24 | **E05 done.** Enterprise toolchain: .github/workflows/ci.yml adds lint (golangci-lint v2.9), security (gosec + govulncheck), coverage gate jobs; Makefile adds lint, gosec, govulncheck, coverage (85% gate), enterprise-check targets; scripts/coverage_gate.go added. Pushed (`16e278f`). |
 | 2026-09-24 | **E06 done.** HTTP adapter layer: pkg/transport/middleware.go (Adapter wrapping Transport with deadlines, response-size caps, correlation IDs, query-only retry), pkg/transport/pagination.go (cursor-based pagination), tests added. Pushed (`16e278f`). |
+| 2026-09-24 | **E07 done.** Market services: pkg/services/market.go (9 pull + subscribe), domain types (Quote, KLine, TimeSharePoint, TickerTick, BrokerQueueEntry) in pkg/domain/market.go. Pushed (`ea05727` + `16badd2` + `c3657ce`). |
+| 2026-09-24 | **E08 done.** Account services: pkg/services/account.go (5 endpoints: MarginFundInfo, HoldsList, RealFundJourList, HistoryFundJourList, RateQueryList), domain types in pkg/domain/account.go. Pushed (`c3c8379`). |
+| 2026-09-24 | **E09 done.** Trading services: pkg/services/trading.go (13 endpoints with HK validation: lot/tick/session/type/TIF/permission), domain types in pkg/domain/trading.go. Pushed (`6cde1cf`). |
+| 2026-09-24 | **E11 done.** Push manager: internal/push/manager.go (TCP dial, 151-byte framing, PBNotify decode, subscription registry, heartbeat, reconnect with exponential backoff, resubscribe). Tests in manager_test.go. Pushed (`b98e416`). |
