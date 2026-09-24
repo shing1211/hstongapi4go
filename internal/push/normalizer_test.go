@@ -21,13 +21,13 @@ func TestNormalizeQuoteEvent(t *testing.T) {
 	payload, err := anypb.New(&hqnotify.BasicQotNotify{
 		Security: &dto.Security{DataType: 10000, Code: "0700.HK"},
 		BasicQot: &dto.BasicQot{
-			LastPrice:    388.0,
-			OpenPrice:    385.0,
-			HighPrice:    390.0,
-			LowPrice:     384.0,
+			LastPrice:      388.0,
+			OpenPrice:      385.0,
+			HighPrice:      390.0,
+			LowPrice:       384.0,
 			LastClosePrice: 383.0,
-			Volume:       1000000,
-			Turnover:     388000000.0,
+			Volume:         1000000,
+			Turnover:       388000000.0,
 		},
 	})
 	if err != nil {
@@ -110,7 +110,7 @@ func TestNormalizeTickerEvent(t *testing.T) {
 func TestNormalizeOrderBookEvent(t *testing.T) {
 	payload, err := anypb.New(&hqnotify.OrderBookFullNotify{
 		Security: &dto.Security{DataType: 10000, Code: "0700.HK"},
-		Side:    0,
+		Side:     0,
 		OrderBookList: []*dto.OrderBook{
 			{Level: 1, Price: 388.0, Volume: 1000},
 			{Level: 2, Price: 387.5, Volume: 2000},
@@ -194,7 +194,7 @@ func TestNormalizeTradeEvent(t *testing.T) {
 		BusinessPrice:  "388.5",
 		BusinessAmount: "1000",
 		MatchNo:        "M12345",
-		EntrustStatus: "8",
+		EntrustStatus:  "8",
 	})
 	if err != nil {
 		t.Fatalf("anypb.New: %v", err)
@@ -236,7 +236,7 @@ func TestNormalizeFuturesTradeEvent(t *testing.T) {
 		BusinessPrice:  "20000.0",
 		BusinessAmount: "1",
 		MatchNo:        "M67890",
-		EntrustStatus: "8",
+		EntrustStatus:  "8",
 	})
 	if err != nil {
 		t.Fatalf("anypb.New: %v", err)

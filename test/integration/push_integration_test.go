@@ -23,10 +23,10 @@ import (
 )
 
 type mockServerAddrRouter struct {
-	ln       net.Listener
-	connCh   chan net.Conn
-	stopCh   chan struct{}
-	wg       sync.WaitGroup
+	ln         net.Listener
+	connCh     chan net.Conn
+	stopCh     chan struct{}
+	wg         sync.WaitGroup
 	listenAddr string
 }
 

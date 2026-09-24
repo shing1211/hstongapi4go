@@ -31,7 +31,7 @@ func newMockSource() *mockEventSource {
 }
 
 func (m *mockEventSource) Updates() <-chan *domain.PushEvent { return m.updates }
-func (m *mockEventSource) Errors() <-chan error             { return m.errors }
+func (m *mockEventSource) Errors() <-chan error              { return m.errors }
 func (m *mockEventSource) Done() <-chan struct{}             { return m.done }
 
 func (m *mockEventSource) send(ev domain.PushEvent) {
