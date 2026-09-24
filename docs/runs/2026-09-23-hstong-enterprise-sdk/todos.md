@@ -13,8 +13,8 @@
 | P00 Foundation & Domain | 5 | 5 |
 | P01 REST Services | 5 | 5 |
 | P02 Push Engine | 4 | 4 |
-| P03 DevOps & Hardening | 8 | 6 |
-| **Total** | **22** | **20** |
+| P03 DevOps & Hardening | 8 | 8 |
+| **Total** | **22** | **22** |
 
 ## Tasks
 
@@ -40,8 +40,8 @@
 | E18 | Docs: README, GoDoc, compatibility matrix, examples, release checklist | docs | done | E15 | P03 | mkdocs --strict; check_links 0 |
 | E19 | Coverage ≥85% (auth/transport/domain) + fuzz suite | tester | done | E14 | P03 | coverage report in evidence/ |
 | E20 | Release: SemVer tag, push origin + gitee main | release | done | E18,E19 | P03 | both remotes at new SHA |
-| E21 | Next-phase planning | planner | todo | E20 | P03 | next-phase.md |
-| E22 | Close-out report + runs index | orchestrator | todo | E21 | P03 | artifacts complete |
+| E21 | Next-phase planning | planner | done | E20 | P03 | next-phase.md |
+| E22 | Close-out report + runs index | orchestrator | done | E21 | P03 | artifacts complete |
 
 ## Approval gates (blocking E01)
 
