@@ -49,6 +49,7 @@ type OrderBookEvent struct {
 }
 
 type OrderBookLevel struct {
+	Level    int32
 	Price    Price
 	Quantity Quantity
 }

@@ -4,30 +4,33 @@
 package domain
 
 import (
+	"fmt"
+
 	"github.com/shing1211/hstongapi4go/gen/hq/dto"
 	"github.com/shopspring/decimal"
 )
 
 type Quote struct {
-	Symbol        Symbol
-	IsSuspended   bool
-	OpenPrice     Price
-	HighPrice     Price
-	LowPrice      Price
-	LastPrice     Price
+	Symbol         Symbol
+	IsSuspended    bool
+	OpenPrice      Price
+	HighPrice      Price
+	LowPrice       Price
+	LastPrice      Price
 	LastClosePrice Price
-	PriceSpread   Price
-	Volume        Quantity
-	Turnover      Money
-	TurnoverRate  decimal.Decimal
-	Amplitude     decimal.Decimal
-	SecStatus     int32
-	ListTime      string
-	LotSize       int32
-	TradeTime     string
-	MarketTime    string
-	StockStatus   string
-	MktTmType     int32
+	PriceSpread    Price
+	Volume         Quantity
+	VolumeStr      string
+	Turnover       Money
+	TurnoverRate   Rate
+	Amplitude      Rate
+	SecStatus      int32
+	ListTime       string
+	LotSize        int32
+	TradeTime      string
+	MarketTime     string
+	StockStatus    string
+	MktTmType      int32
 }
 
 func QuoteFromDTO(b *dto.BasicQot) *Quote {
@@ -35,25 +38,26 @@ func QuoteFromDTO(b *dto.BasicQot) *Quote {
 		return nil
 	}
 	return &Quote{
-		Symbol:        SymbolFromSecurity(b.Security),
-		IsSuspended:   b.IsSuspended,
-		OpenPrice:     floatToPrice(b.OpenPrice),
-		HighPrice:     floatToPrice(b.HighPrice),
-		LowPrice:      floatToPrice(b.LowPrice),
-		LastPrice:     floatToPrice(b.LastPrice),
+		Symbol:         SymbolFromSecurity(b.Security),
+		IsSuspended:    b.IsSuspended,
+		OpenPrice:      floatToPrice(b.OpenPrice),
+		HighPrice:      floatToPrice(b.HighPrice),
+		LowPrice:       floatToPrice(b.LowPrice),
+		LastPrice:      floatToPrice(b.LastPrice),
 		LastClosePrice: floatToPrice(b.LastClosePrice),
-		PriceSpread:   floatToPrice(b.PriceSpread),
-		Volume:        Quantity{dec: decimal.NewFromInt(b.Volume)},
-		Turnover:      floatToMoney(b.Turnover),
-		TurnoverRate:  decimal.NewFromFloat(b.TurnoverRate),
-		Amplitude:     decimal.NewFromFloat(b.Amplitude),
-		SecStatus:     b.SecStatus,
-		ListTime:      b.ListTime,
-		LotSize:       b.LotSize,
-		TradeTime:     b.TradeTime,
-		MarketTime:    b.MarketTime,
-		StockStatus:   b.StockStatus,
-		MktTmType:     b.MktTmType,
+		PriceSpread:    floatToPrice(b.PriceSpread),
+		Volume:         Quantity{dec: decimal.NewFromInt(b.Volume)},
+		VolumeStr:      b.VolumeStr,
+		Turnover:       floatToMoney(b.Turnover),
+		TurnoverRate:   MustNewRate(fmt.Sprintf("%.4f", b.TurnoverRate)),
+		Amplitude:      MustNewRate(fmt.Sprintf("%.4f", b.Amplitude)),
+		SecStatus:      b.SecStatus,
+		ListTime:       b.ListTime,
+		LotSize:        b.LotSize,
+		TradeTime:      b.TradeTime,
+		MarketTime:     b.MarketTime,
+		StockStatus:    b.StockStatus,
+		MktTmType:      b.MktTmType,
 	}
 }
 
@@ -144,4 +148,23 @@ func floatToPrice(v float64) Price {
 
 func floatToMoney(v float64) Money {
 	return Money{dec: decimal.NewFromFloat(v), currency: "HKD", scale: defaultHKDScale}
+}
+
+type BrokerQueueEntry struct {
+	Level int32
+	Item  string
+	Type  int32
+	Name  string
+}
+
+func BrokerQueueEntryFromDTO(b *dto.Broker) *BrokerQueueEntry {
+	if b == nil {
+		return nil
+	}
+	return &BrokerQueueEntry{
+		Level: b.Level,
+		Item:  b.Item,
+		Type:  b.Type,
+		Name:  b.Name,
+	}
 }
