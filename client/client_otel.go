@@ -26,8 +26,9 @@ func otelSpanFactory(ctx context.Context, op string) (context.Context, func(erro
 		))
 	return ctx, func(err error) {
 		if err != nil {
-			span.SetStatus(codes.Error, err.Error())
-			span.RecordError(err)
+			safe := otel.SafeError(err)
+			span.SetStatus(codes.Error, safe.Error())
+			span.RecordError(safe)
 		} else {
 			span.SetStatus(codes.Ok, "")
 		}

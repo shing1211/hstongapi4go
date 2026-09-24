@@ -80,10 +80,12 @@ func NewFreshnessMonitor(tol time.Duration) *FreshnessMonitor {
 	return &FreshnessMonitor{entries: make(map[int]FreshnessEntry), tol: tol}
 }
 
+// Record notes activity on topicID. LastSeen is always updated, so
+// time-based staleness detection works even when no sequence number is
+// available. LastSeq only advances when a non-zero seq is supplied, because the
+// Gateway push envelope carries no per-event sequence and dedup therefore stays
+// inactive until one does.
 func (m *FreshnessMonitor) Record(topicID int, seq uint64) {
-	if seq == 0 {
-		return
-	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	entry := m.entries[topicID]

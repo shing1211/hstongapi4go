@@ -131,11 +131,11 @@ func TestManager_ReconnectSucceedsAfterTransientFailures(t *testing.T) {
 		case 2, 3:
 			return nil, errors.New("temporarily unavailable")
 		default:
+			// The walk succeeds here. The peer is closed immediately so the read
+			// loop fails again and starts another walk; the test only asserts
+			// that this attempt was made and that no dial saw an empty address.
 			client, server := net.Pipe()
-			go func() {
-				defer server.Close()
-				_, _ = server.Read(make([]byte, 1))
-			}()
+			_ = server.Close()
 			return client, nil
 		}
 	}

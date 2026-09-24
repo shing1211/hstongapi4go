@@ -7,7 +7,9 @@ package otel
 
 import (
 	"context"
+	"errors"
 
+	"github.com/shing1211/hstongapi4go/internal/logging"
 	"github.com/shing1211/hstongapi4go/internal/metrics"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -19,7 +21,7 @@ import (
 
 const (
 	tracerName = "github.com/shing1211/hstongapi4go"
-	meterName   = "github.com/shing1211/hstongapi4go"
+	meterName  = "github.com/shing1211/hstongapi4go"
 )
 
 func init() {
@@ -67,10 +69,29 @@ func StartSpan(ctx context.Context, name string, attrs ...attribute.KeyValue) (c
 	return Tracer().Start(ctx, name, trace.WithAttributes(attrs...))
 }
 
+// SafeError returns err with any credential-shaped assignment in its message
+// replaced by logging.Mask. A nil error is returned unchanged. The result is
+// for recording only: it does not wrap err, so errors.Is and errors.As do not
+// traverse it.
+func SafeError(err error) error {
+	if err == nil {
+		return nil
+	}
+	safe := logging.RedactText(err.Error())
+	if safe == err.Error() {
+		return err
+	}
+	return errors.New(safe)
+}
+
+// EndSpan records err on span and ends it. The error text is passed through
+// SafeError first, so a secret carried in an error message cannot reach a
+// trace, whatever produced the error.
 func EndSpan(span trace.Span, err error) {
 	if err != nil {
-		span.SetStatus(codes.Error, err.Error())
-		span.RecordError(err)
+		safe := SafeError(err)
+		span.SetStatus(codes.Error, safe.Error())
+		span.RecordError(safe)
 	}
 	span.End()
 }
@@ -104,10 +125,10 @@ func AttrKind(kind string) attribute.KeyValue {
 }
 
 type otelHook struct {
-	meter       metric.Meter
-	counters    map[string]metric.Int64Counter
-	histograms  map[string]metric.Float64Histogram
-	gauges      map[string]metric.Float64Gauge
+	meter      metric.Meter
+	counters   map[string]metric.Int64Counter
+	histograms map[string]metric.Float64Histogram
+	gauges     map[string]metric.Float64Gauge
 }
 
 func newOTelHook() *otelHook {
