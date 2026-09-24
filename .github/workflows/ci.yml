@@ -160,3 +160,33 @@ jobs:
           go-version-file: go.mod
       - name: Run coverage gate
         run: make coverage
+
+  goreleaser:
+    name: goreleaser check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Install GoReleaser
+        run: go install github.com/goreleaser/goreleaser@latest
+      - name: Run GoReleaser check
+        run: goreleaser check --config .goreleaser.yaml
+
+  sbom:
+    name: sbom generate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Generate SBOM
+        run: python scripts/gen_sbom.py hstongapi4go_sbom.json
+      - name: Validate SBOM JSON
+        run: python -c "import json; json.load(open('hstongapi4go_sbom.json')); print('SBOM JSON valid')"
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: hstongapi4go_sbom.json
+          retention-days: 30

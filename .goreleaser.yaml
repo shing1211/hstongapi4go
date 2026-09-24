@@ -1,0 +1,94 @@
+# Copyright 2026 shing1211
+# SPDX-License-Identifier: Apache-2.0
+
+# .goreleaser.yaml — GoReleaser configuration for hstongapi4go.
+#
+# GoReleaser is a release automation tool. Install:
+#   go install github.com/goreleaser/goreleaser@latest
+#
+# Dry-run (no changes to git, no uploads):
+#   goreleaser check --config .goreleaser.yaml
+#   goreleaser build --config .goreleaser.yaml --snapshot --clean
+#
+# Release (creates GitHub/Gitea release, uploads artifacts):
+#   GITHUB_TOKEN=... GORELAUNCHER_TOKEN=... goreleaser release --config .goreleaser.yaml
+#
+# This file is always processed by CI (see .github/workflows/release.yml), which
+# runs in check + snapshot mode for pull requests and full release for version tags.
+
+version: 2
+
+archives:
+  - id: src
+    format: zip
+    files:
+      - none:/**
+        glob: "**/*.go"
+        exclude:
+          - "**/*_test.go"
+          - "gen/"
+          - "test/"
+          - "examples/"
+    buildsums:
+      include:
+        - ossum:///usr/local/go/{{.Env.GO_VERSION}}/{{.Os}}/{{.Arch}}/{{.Name}}
+    name_template: "{{.ProjectName}}"
+
+checksum:
+  name_template: "{{.ProjectName}}_{{.Version}}_checksums.txt"
+  algorithm: sha256
+
+snapshot:
+  name_template: "{{.Tag}}-next"
+
+release:
+  github:
+    owner: shing1211
+    name: hstongapi4go
+  gitea:
+    url: https://gitee.com
+    owner: shing1211
+    name: hstongapi4go
+  draft: false
+  preclose: true
+
+builds:
+  - id: lib
+    dir: .
+    main: .
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    tags:
+      - otel
+    optional: true
+
+sboms:
+  - id: sbom
+    artifacts: archive
+    provider: spdx
+    documents:
+      - "{{ .ProjectName }}_{{ .Version }}_sbom.spdx.json"
+
+signs:
+  - id: cosign
+    env:
+      - COSIGN_EXPERIMENTAL=1
+      - COSIGN_YESES=true
+    args:
+      - sign
+      - --yes
+      - --recursive
+      - --upload=provenance
+      - "{{ .ArtifactName }}"
+    artifacts: checksums

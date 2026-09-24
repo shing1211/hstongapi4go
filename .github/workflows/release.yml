@@ -1,0 +1,57 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+jobs:
+  release:
+    name: goreleaser release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install GoReleaser
+        run: go install github.com/goreleaser/goreleaser@latest
+
+      - name: Run GoReleaser (check mode)
+        run: goreleaser check --config .goreleaser.yaml
+        env:
+          # GITHUB_TOKEN and GORELAUNCHER_TOKEN must be set in repo secrets.
+          # Gitea uses GORELAUNCHER_TOKEN (Gitea API token with repo scope).
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GORELAUNCHER_TOKEN: ${{ secrets.GORELAUNCHER_TOKEN }}
+
+  build-otel:
+    name: build with otel tag
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build with otel tag
+        run: go build -tags otel ./...
+
+      - name: Test with otel tag
+        run: go test -tags otel -count=1 ./...

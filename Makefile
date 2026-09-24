@@ -30,7 +30,7 @@ PROTOC_GEN_GO_VERSION ?= v1.36.6
 
 .PHONY: help tools build fmt vet test test-race test-integration coverage check \
         money-check proto proto-verify docs-check license license-check \
-        mock-gateway clean lint gosec govulncheck enterprise-check
+        mock-gateway clean lint gosec govulncheck enterprise-check goreleaser-check sbom
 
 help: ## List targets
 	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -137,3 +137,16 @@ enterprise-check: ## Run full enterprise pre-flight (lint + security + coverage)
 	make gosec
 	make govulncheck
 	make coverage
+
+.PHONY: goreleaser-check
+goreleaser-check: ## Verify goreleaser configuration
+	@if [ -f .goreleaser.yaml ]; then \
+		go install github.com/goreleaser/goreleaser@latest; \
+		goreleaser check --config .goreleaser.yaml; \
+	else echo "goreleaser-check: .goreleaser.yaml missing; skipping"; fi
+
+.PHONY: sbom
+sbom: ## Generate SPDX SBOM for the module
+	@if [ -f scripts/gen_sbom.py ]; then \
+		python scripts/gen_sbom.py hstongapi4go_sbom.json; \
+	else echo "sbom: gen_sbom.py missing; skipping"; fi
