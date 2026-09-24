@@ -78,6 +78,69 @@ func TestIsMutation(t *testing.T) {
 	}
 }
 
+func TestIsMutationRecognisesGatewayAliases(t *testing.T) {
+	for _, path := range MutationPaths() {
+		forms := []string{path, path + "Request", path + "RequestMsgType"}
+		for _, form := range forms {
+			if !IsMutation(form) {
+				t.Errorf("IsMutation(%q) = false, want true", form)
+			}
+			if got := ClassForPath(form); got != ClassMutation {
+				t.Errorf("ClassForPath(%q) = %q, want %q", form, got, ClassMutation)
+			}
+		}
+	}
+}
+
+func TestIsMutationAliasIsSingleAttempt(t *testing.T) {
+	for _, path := range MutationPaths() {
+		for _, form := range []string{path + "Request", path + "RequestMsgType"} {
+			p := Policy{MaxAttempts: 4, BaseBackoff: 0, Jitter: false}
+			calls := 0
+			attempts, err := p.DoRoute(context.Background(), form, func(context.Context) error {
+				calls++
+				return retryableErr()
+			})
+			if attempts != 1 || calls != 1 {
+				t.Fatalf("%s: attempts=%d calls=%d, want 1/1", form, attempts, calls)
+			}
+			if err == nil {
+				t.Fatalf("%s: err = nil, want the retryable failure", form)
+			}
+		}
+	}
+}
+
+func TestQueryAliasesStayQueries(t *testing.T) {
+	for _, path := range []string{"/hq/BasicQot", "/trade/TradeQueryRealEntrustList", "/trade/TradeQueryAsset"} {
+		for _, form := range []string{path, path + "Request", path + "RequestMsgType"} {
+			if IsMutation(form) {
+				t.Errorf("IsMutation(%q) = true, want false", form)
+			}
+			if got := ClassForPath(form); got != ClassQuery {
+				t.Errorf("ClassForPath(%q) = %q, want %q", form, got, ClassQuery)
+			}
+		}
+	}
+}
+
+func TestStripAliasSuffix(t *testing.T) {
+	tests := []struct{ in, want string }{
+		{"/trade/TradeEntrust", "/trade/TradeEntrust"},
+		{"/trade/TradeEntrustRequest", "/trade/TradeEntrust"},
+		{"/trade/TradeEntrustRequestMsgType", "/trade/TradeEntrust"},
+		{"/hq/BasicQotRequestMsgType", "/hq/BasicQot"},
+		{"/hq/BasicQotRequest", "/hq/BasicQot"},
+		{"/hq/BasicQot", "/hq/BasicQot"},
+		{"", ""},
+	}
+	for _, tt := range tests {
+		if got := stripAliasSuffix(tt.in); got != tt.want {
+			t.Errorf("stripAliasSuffix(%q) = %q, want %q", tt.in, got, tt.want)
+		}
+	}
+}
+
 func TestPolicyRetriesRetryableQuery(t *testing.T) {
 	p := Policy{MaxAttempts: 3, BaseBackoff: 0, Jitter: false}
 	calls := 0

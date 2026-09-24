@@ -8,6 +8,7 @@ import (
 	"errors"
 	"math/rand"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/shing1211/hstongapi4go/internal/errs"
@@ -59,11 +60,33 @@ var mutationSet = func() map[string]struct{} {
 	return m
 }()
 
+// aliasSuffixMsgType and aliasSuffixRequest are the two alias suffixes the
+// Gateway accepts for every route. They are duplicated from client/routes.go
+// rather than imported: client depends on this package, so importing it back
+// would create an import cycle. client.NormalizePath remains the authority for
+// turning an alias into a canonical path; this copy exists so mutation
+// classification cannot be bypassed by using an alias form.
+const (
+	aliasSuffixMsgType = "RequestMsgType"
+	aliasSuffixRequest = "Request"
+)
+
+// stripAliasSuffix removes a trailing alias suffix from p. RequestMsgType is
+// stripped before Request so "/XRequestMsgType" reduces to "/X" in one call.
+func stripAliasSuffix(p string) string {
+	if stripped := strings.TrimSuffix(p, aliasSuffixMsgType); stripped != p {
+		return stripped
+	}
+	return strings.TrimSuffix(p, aliasSuffixRequest)
+}
+
 // IsMutation reports whether path is one of the closed set of order-mutation
 // endpoints. It is the authoritative mutation test; callers must not replace it
-// with a flag.
+// with a flag. The two Gateway alias forms are reduced to their canonical path
+// first, so aliasing a mutation cannot silently reclassify it as a retryable
+// query.
 func IsMutation(path string) bool {
-	_, ok := mutationSet[path]
+	_, ok := mutationSet[stripAliasSuffix(path)]
 	return ok
 }
 
@@ -76,7 +99,7 @@ func MutationPaths() []string {
 }
 
 // ClassForPath returns ClassMutation for a mutation endpoint and ClassQuery
-// for everything else.
+// for everything else. Alias forms of a mutation are recognised as mutations.
 func ClassForPath(path string) Class {
 	if IsMutation(path) {
 		return ClassMutation
