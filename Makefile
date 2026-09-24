@@ -28,7 +28,7 @@ PROTOC_GEN_GO_VERSION ?= v1.36.6
 
 .DEFAULT_GOAL := help
 
-.PHONY: help tools build fmt vet test test-race test-integration coverage check \
+.PHONY: help tools build fmt fmt-check vet test test-race test-integration coverage check \
         money-check proto proto-verify docs-check license license-check \
         mock-gateway clean lint gosec govulncheck enterprise-check goreleaser-check sbom
 
@@ -48,6 +48,23 @@ build: ## Compile all packages
 
 fmt: ## Format Go sources
 	@if [ -f go.mod ]; then gofmt -s -w .; else echo "no go.mod yet; skipping fmt"; fi
+
+# Reports formatting exactly as the Linux CI runner sees it. A Windows checkout
+# has CRLF working-tree files, and plain `gofmt -l .` flags every one of them, so
+# it cannot be used as a local signal; this target normalises line endings to LF
+# in a scratch copy and checks that. Generated code under gen/ is excluded, as in
+# .golangci.yml and in the CI gofmt step.
+fmt-check: ## Check gofmt formatting the way CI does (LF, gen/ excluded)
+	@if [ -f go.mod ]; then \
+		work=$$(mktemp -d); \
+		trap 'rm -rf "$$work"' EXIT; \
+		git ls-files -z '*.go' | tar --null -T - -cf - | tr -d '\r' | tar -x -C "$$work"; \
+		unformatted=$$(cd "$$work" && gofmt -l . | grep -v '^gen/' || true); \
+		if [ -n "$$unformatted" ]; then \
+			echo "The following files are not gofmt-clean:"; echo "$$unformatted"; exit 1; \
+		fi; \
+		echo "fmt-check OK: no unformatted files outside gen/"; \
+	else echo "no go.mod yet; skipping fmt-check"; fi
 
 vet: ## Run go vet
 	@if [ -f go.mod ]; then $(GO) vet ./...; else echo "no go.mod yet; skipping vet"; fi
