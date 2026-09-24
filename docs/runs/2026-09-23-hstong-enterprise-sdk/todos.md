@@ -12,9 +12,9 @@
 |-------|-------|------|
 | P00 Foundation & Domain | 5 | 5 |
 | P01 REST Services | 5 | 5 |
-| P02 Push Engine | 4 | 3 |
+| P02 Push Engine | 4 | 4 |
 | P03 DevOps & Hardening | 8 | 0 |
-| **Total** | **22** | **13** |
+| **Total** | **22** | **14** |
 
 ## Tasks
 
@@ -33,7 +33,7 @@
 | E11 | Push manager (framing, registry, heartbeat, reconnect, resubscribe) | backend | done | E06 | P02 | golden-frame tests; leak-free |
 | E12 | Typed push normalizers + unknown/versioned tolerance | backend | done | E11 | P02 | decode tests incl. unknown types |
 | E13 | Fan-out, backpressure, gap/freshness, dedup, reconciliation | backend | done | E12 | P02 | race + backpressure tests |
-| E14 | Push integration/race/reconnect + fuzz tests | tester | todo | E13 | P02 | fuzz seeds; -race green |
+| E14 | Push integration/race/reconnect + fuzz tests | tester | done | E13 | P02 | fuzz seeds; -race green |
 | E15 | slog redaction + OTel traces/metrics | backend | todo | E10,E14 | P03 | metric-name tests; no secrets logged |
 | E16 | CI/CD + GoReleaser + SBOM/checksums/provenance | devops | todo | E15 | P03 | workflows run without creds |
 | E17 | Threat model + failure-injection tests | security | todo | E15 | P03 | adversarial tests in evidence/ |
