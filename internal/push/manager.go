@@ -43,9 +43,13 @@ func WithHeartbeatInterval(d time.Duration) ManagerOption {
 	}
 }
 
+// WithReconnectMaxRetries bounds how many consecutive dial failures a
+// reconnect walk tolerates before giving up. Only a positive n is accepted: an
+// unbounded reconnect walk is a reconnect storm, so 0 and negative values are
+// ignored and DefaultMaxRetries is kept.
 func WithReconnectMaxRetries(n int) ManagerOption {
 	return func(m *Manager) {
-		if n >= 0 {
+		if n > 0 {
 			m.maxRetries = n
 		}
 	}
@@ -83,6 +87,7 @@ type Manager struct {
 	minBackoff time.Duration
 	maxBackoff time.Duration
 	dialFunc   func(ctx context.Context, addr string) (net.Conn, error)
+	addr       string
 
 	done   chan struct{}
 	mu     sync.Mutex
@@ -107,6 +112,9 @@ func NewManager(_ interface{}, opts ...ManagerOption) *Manager {
 		if opt != nil {
 			opt(m)
 		}
+	}
+	if m.maxRetries <= 0 {
+		m.maxRetries = DefaultMaxRetries
 	}
 	return m
 }
@@ -142,6 +150,7 @@ func (m *Manager) Dial(ctx context.Context, addr string) error {
 
 	m.mu.Lock()
 	m.conn = conn
+	m.addr = addr
 	m.mu.Unlock()
 
 	m.wg.Add(1)
@@ -271,7 +280,7 @@ func (m *Manager) reconnectLoop() bool {
 		default:
 		}
 
-		if m.maxRetries > 0 && retries >= m.maxRetries {
+		if retries >= m.maxRetries {
 			m.reportError(fmt.Errorf("push: max reconnect retries (%d) exceeded", m.maxRetries))
 			return false
 		}
@@ -281,9 +290,11 @@ func (m *Manager) reconnectLoop() bool {
 		}
 
 		m.mu.Lock()
-		addr := ""
+		addr := m.addr
 		if m.conn != nil {
-			addr = m.conn.RemoteAddr().String()
+			if remote := m.conn.RemoteAddr(); remote != nil {
+				addr = remote.String()
+			}
 		}
 		m.mu.Unlock()
 
