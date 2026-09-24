@@ -4,6 +4,7 @@
 package domain
 
 import (
+	"github.com/shing1211/hstongapi4go/gen/hq/dto"
 	"github.com/shing1211/hstongapi4go/pkg/types"
 )
 
@@ -40,15 +41,45 @@ type Symbol struct {
 }
 
 func NewSymbol(market Market, code string, dtype types.DataType) Symbol {
+	fullCode := code
+	if market != "" {
+		fullCode = code + "." + string(market)
+	}
 	return Symbol{
 		Market:   market,
 		Code:     code,
 		DataType: dtype,
-		FullCode: code + "." + string(market),
+		FullCode: fullCode,
 	}
 }
 
 func (s Symbol) IsZero() bool { return s.Code == "" }
+
+func MarketFromCode(code string) Market {
+	switch {
+	case len(code) >= 3 && code[len(code)-3:] == ".HK":
+		return MarketHK
+	case len(code) >= 3 && code[len(code)-3:] == ".US":
+		return MarketUS
+	case len(code) >= 3 && code[len(code)-3:] == ".SZ":
+		return MarketShenzhenConnect
+	case len(code) >= 3 && code[len(code)-3:] == ".SH":
+		return MarketShanghaiConnect
+	default:
+		return ""
+	}
+}
+
+func SymbolFromSecurity(s *dto.Security) Symbol {
+	if s == nil {
+		return Symbol{}
+	}
+	return NewSymbol(
+		MarketFromCode(s.Code),
+		s.Code,
+		types.DataType(s.DataType),
+	)
+}
 
 type LotSize struct {
 	Market   Market
