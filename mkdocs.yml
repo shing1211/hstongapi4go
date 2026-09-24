@@ -73,16 +73,16 @@ nav:
       - Observability: observability.md
       - Rate Limiting: rate-limiting.md
       - Security: security.md
+      - Threat Model: threat-model.md
   - Reference:
       - Glossary: glossary.md
       - Quick Reference: quick-reference.md
       - API Reference: SPEC.md
+      - Compatibility Matrix: COMPAT.md
   - Operations:
       - Runbook: runbook.md
       - Migration Guide: MIGRATION.md
       - Release Checklist: RELEASE_CHECKLIST.md
-  - Reference:
-      - Compatibility Matrix: COMPAT.md
   - Legacy Protocol: LEGACY.md
   - Contributing: CONTRIBUTING.md
   - Architecture Decisions:
@@ -94,6 +94,10 @@ nav:
       - "0005: Push verification": adr/0005-key-model-and-push-verification.md
       - "0006: Test deps": adr/0006-test-dependencies.md
       - "0007: JSON codec": adr/0007-http-json-codec.md
+      - "0008: Decimal money": adr/0008-decimal-financial-types.md
+      - "0009: OpenTelemetry": adr/0009-opentelemetry-observability.md
+      - "0010: v-next layering": adr/0010-vnext-layered-architecture.md
+      - "0011: v0.1.x compat": adr/0011-v01x-compatibility.md
 
 extra_css:
   - stylesheets/extra.css
