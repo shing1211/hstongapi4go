@@ -14,7 +14,7 @@
 | P01 REST Services | 5 | 5 |
 | P02 Push Engine | 4 | 4 |
 | P03 DevOps & Hardening | 8 | 0 |
-| **Total** | **22** | **14** |
+| **Total** | **22** | **15** |
 
 ## Tasks
 
@@ -29,7 +29,7 @@
 | E07 | Market services (9 pull + subscribe) | backend | done | E06 | P01 | fixture round-trips; limit guard |
 | E08 | Account/asset/position services (5) | backend | done | E06 | P01 | fixture round-trips; cursor paging |
 | E09 | Trading services (13) + HK validation | backend | done | E06 | P01 | validation tests; mutation guard |
-| E10 | Mock-server integration suites | tester | todo | E09 | P01 | -race; single-attempt assertion |
+| E10 | Mock-server integration suites | tester | done | E09 | P01 | -race; single-attempt assertion |
 | E11 | Push manager (framing, registry, heartbeat, reconnect, resubscribe) | backend | done | E06 | P02 | golden-frame tests; leak-free |
 | E12 | Typed push normalizers + unknown/versioned tolerance | backend | done | E11 | P02 | decode tests incl. unknown types |
 | E13 | Fan-out, backpressure, gap/freshness, dedup, reconciliation | backend | done | E12 | P02 | race + backpressure tests |
