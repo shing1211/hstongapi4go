@@ -473,8 +473,8 @@ func (m *Manager) decodePushEvent(body []byte) (*domain.PushEvent, error) {
 	}
 }
 
-func decodeBasicQotEvent(notify *hqnotify.BasicQotNotify, notifyTime uint64) *domain.QuoteEvent {
-	event := &domain.QuoteEvent{
+func decodeBasicQotEvent(notify *hqnotify.BasicQotNotify, notifyTime uint64) domain.QuoteEvent {
+	event := domain.QuoteEvent{
 		Symbol: domain.SymbolFromSecurity(notify.GetSecurity()),
 	}
 	if q := notify.GetBasicQot(); q != nil {
@@ -490,8 +490,8 @@ func decodeBasicQotEvent(notify *hqnotify.BasicQotNotify, notifyTime uint64) *do
 	return event
 }
 
-func decodeTickerEvent(notify *hqnotify.TickerNotify, notifyTime uint64) *domain.TickerEvent {
-	event := &domain.TickerEvent{
+func decodeTickerEvent(notify *hqnotify.TickerNotify, notifyTime uint64) domain.TickerEvent {
+	event := domain.TickerEvent{
 		Symbol: domain.SymbolFromSecurity(notify.GetSecurity()),
 	}
 	if t := notify.GetTicker(); t != nil {
@@ -504,8 +504,8 @@ func decodeTickerEvent(notify *hqnotify.TickerNotify, notifyTime uint64) *domain
 	return event
 }
 
-func decodeOrderBookEvent(notify *hqnotify.OrderBookFullNotify, notifyTime uint64) *domain.OrderBookEvent {
-	event := &domain.OrderBookEvent{
+func decodeOrderBookEvent(notify *hqnotify.OrderBookFullNotify, notifyTime uint64) domain.OrderBookEvent {
+	event := domain.OrderBookEvent{
 		Symbol:    domain.SymbolFromSecurity(notify.GetSecurity()),
 		Bids:      make([]domain.OrderBookLevel, 0),
 		Asks:      make([]domain.OrderBookLevel, 0),
@@ -528,8 +528,8 @@ func decodeOrderBookEvent(notify *hqnotify.OrderBookFullNotify, notifyTime uint6
 	return event
 }
 
-func decodeBrokerEvent(notify *hqnotify.BrokerNotify, notifyTime uint64) *domain.BrokerEvent {
-	event := &domain.BrokerEvent{
+func decodeBrokerEvent(notify *hqnotify.BrokerNotify, notifyTime uint64) domain.BrokerEvent {
+	event := domain.BrokerEvent{
 		Symbol:    domain.SymbolFromSecurity(notify.GetSecurity()),
 		Buyers:    make([]domain.BrokerLevel, 0),
 		Sellers:   make([]domain.BrokerLevel, 0),
@@ -549,8 +549,8 @@ func decodeBrokerEvent(notify *hqnotify.BrokerNotify, notifyTime uint64) *domain
 	return event
 }
 
-func decodeTradeEvent(notify *tradenotify.TradeStockDeliverNotify, notifyTime uint64) *domain.TradeEvent {
-	event := &domain.TradeEvent{
+func decodeTradeEvent(notify *tradenotify.TradeStockDeliverNotify, notifyTime uint64) domain.TradeEvent {
+	event := domain.TradeEvent{
 		Symbol:      domain.NewSymbol(domain.MarketFromCode(notify.GetStockCode()), notify.GetStockCode(), 0),
 		Price:       domain.MustNewPrice(notify.GetBusinessPrice(), "0.001"),
 		Quantity:    domain.MustNewQuantity(notify.GetBusinessAmount()),
