@@ -10,11 +10,11 @@
 
 | Phase | Tasks | Done |
 |-------|-------|------|
-| P00 Foundation & Domain | 5 | 4 |
-| P01 REST Services | 5 | 0 |
+| P00 Foundation & Domain | 5 | 5 |
+| P01 REST Services | 5 | 2 |
 | P02 Push Engine | 4 | 0 |
 | P03 DevOps & Hardening | 8 | 0 |
-| **Total** | **22** | **4** |
+| **Total** | **22** | **7** |
 
 ## Tasks
 
@@ -24,8 +24,8 @@
 | E02 | v-next layout + boundaries | architect | done | E01 | P00 | go build; boundary doc; gen/ untouched |
 | E03 | Decimal financial types + typed IDs + HK models + mappers | backend | done | E02 | P00 | table tests; -race green |
 | E04 | Auth foundation (AES-ECB trade password, token lifecycle, clock) | backend | done | E02 | P00 | crypto vector; session tests |
-| E05 | Toolchain: golangci-lint/gosec/govulncheck/coverage/Makefile | devops | todo | E01 | P00 | targets run; CI-parity |
-| E06 | HTTP adapter (deadlines, caps, correlation, paging, query-only retry) | backend | todo | E03,E05 | P01 | httptest round-trips; mutation=1 attempt |
+| E05 | Toolchain: golangci-lint/gosec/govulncheck/coverage/Makefile | devops | done | E01 | P00 | targets run; CI-parity |
+| E06 | HTTP adapter (deadlines, caps, correlation, paging, query-only retry) | backend | done | E03,E05 | P01 | httptest round-trips; mutation=1 attempt |
 | E07 | Market services (9 pull + subscribe) | backend | todo | E06 | P01 | fixture round-trips; limit guard |
 | E08 | Account/asset/position services (5) | backend | todo | E06 | P01 | fixture round-trips; cursor paging |
 | E09 | Trading services (13) + HK validation | backend | todo | E06 | P01 | validation tests; mutation guard |
@@ -57,3 +57,5 @@
 |------|------|
 | 2026-09-23 | Run created from blueprint intake. Target confirmed = current 華盛 Gateway API; repo = existing `hstongapi4go`; deps = decimal + OTel (ADR-gated). Brief's HMAC/WebSocket re-mapped (Appendix A). Awaiting approval gates 1-3 before E01. |
 | 2026-09-24 | **E01 done.** Added ADRs 0008-0011 (decimal, OTel, v-next layering, v0.1.x compat); updated ADR README; updated check_money.py docstring; pushed to origin + gitee (`281f530`). Gate 1 (additive layering) and Gate 2 (superseding ADRs) approved. Gate 3 (baseline hygiene) already handled in prior commit. E01 complete. |
+| 2026-09-24 | **E05 done.** Enterprise toolchain: .github/workflows/ci.yml adds lint (golangci-lint v2.9), security (gosec + govulncheck), coverage gate jobs; Makefile adds lint, gosec, govulncheck, coverage (85% gate), enterprise-check targets; scripts/coverage_gate.go added. Pushed (`16e278f`). |
+| 2026-09-24 | **E06 done.** HTTP adapter layer: pkg/transport/middleware.go (Adapter wrapping Transport with deadlines, response-size caps, correlation IDs, query-only retry), pkg/transport/pagination.go (cursor-based pagination), tests added. Pushed (`16e278f`). |
