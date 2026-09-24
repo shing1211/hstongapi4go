@@ -24,13 +24,18 @@ jobs:
         uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+          check-latest: true
           cache: true
 
-      - name: Install GoReleaser
-        run: go install github.com/goreleaser/goreleaser@latest
-
+      # GoReleaser comes from its published binary via the official action.
+      # `go install github.com/goreleaser/goreleaser@latest` pulled
+      # golang.org/x/tools@v0.21.0, which does not compile under Go 1.26.
       - name: Run GoReleaser (check mode)
-        run: goreleaser check --config .goreleaser.yaml
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: '~> v2'
+          args: check --config .goreleaser.yaml
         env:
           # GITHUB_TOKEN and GORELAUNCHER_TOKEN must be set in repo secrets.
           # Gitea uses GORELAUNCHER_TOKEN (Gitea API token with repo scope).
@@ -48,6 +53,7 @@ jobs:
         uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+          check-latest: true
           cache: true
 
       - name: Build with otel tag

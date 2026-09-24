@@ -1,67 +1,44 @@
 # Copyright 2026 shing1211
 # SPDX-License-Identifier: Apache-2.0
 
-# .goreleaser.yaml — GoReleaser configuration for hstongapi4go.
+# .goreleaser.yaml — release artefacts for hstongapi4go.
 #
-# GoReleaser is a release automation tool. Install:
-#   go install github.com/goreleaser/goreleaser@latest
+# hstongapi4go is a library. Its only main package is the standalone mock
+# Gateway, so that is what this file builds; the library itself is consumed
+# through `go get` and needs no binary.
 #
-# Dry-run (no changes to git, no uploads):
+# Validate the configuration (no artefacts, no uploads):
 #   goreleaser check --config .goreleaser.yaml
+#
+# Build a snapshot locally:
 #   goreleaser build --config .goreleaser.yaml --snapshot --clean
 #
-# Release (creates GitHub/Gitea release, uploads artifacts):
-#   GITHUB_TOKEN=... GORELAUNCHER_TOKEN=... goreleaser release --config .goreleaser.yaml
+# Publish a real release:
+#   GITHUB_TOKEN=... goreleaser release --config .goreleaser.yaml
 #
-# This file is always processed by CI (see .github/workflows/release.yml), which
-# runs in check + snapshot mode for pull requests and full release for version tags.
+# CI runs `goreleaser check` on every push (.github/workflows/ci.yml) and again
+# on a version tag (.github/workflows/release.yml). Publishing is a manual
+# `goreleaser release`; see docs/RELEASE_CHECKLIST.md.
+#
+# Signing and attestation are intentionally not configured here. Cosign and SLSA
+# provenance both need key or OIDC credentials that this repository does not
+# manage, and an unverifiable signing stanza would fail the release rather than
+# protect it. Add them once the credentials exist.
 
 version: 2
 
-archives:
-  - id: src
-    format: zip
-    files:
-      - none:/**
-        glob: "**/*.go"
-        exclude:
-          - "**/*_test.go"
-          - "gen/"
-          - "test/"
-          - "examples/"
-    buildsums:
-      include:
-        - ossum:///usr/local/go/{{.Env.GO_VERSION}}/{{.Os}}/{{.Arch}}/{{.Name}}
-    name_template: "{{.ProjectName}}"
-
-checksum:
-  name_template: "{{.ProjectName}}_{{.Version}}_checksums.txt"
-  algorithm: sha256
-
-snapshot:
-  name_template: "{{.Tag}}-next"
-
-release:
-  github:
-    owner: shing1211
-    name: hstongapi4go
-  gitea:
-    url: https://gitee.com
-    owner: shing1211
-    name: hstongapi4go
-  draft: false
-  preclose: true
+project_name: hstongapi4go
 
 builds:
-  - id: lib
-    dir: .
-    main: .
+  - id: mock-gateway
+    main: ./cmd/hstong-mock-gateway
+    binary: hstong-mock-gateway
+    env:
+      - CGO_ENABLED=0
     flags:
       - -trimpath
     ldflags:
       - -s -w
-    env:
-      - CGO_ENABLED=0
     goos:
       - linux
       - darwin
@@ -69,26 +46,26 @@ builds:
     goarch:
       - amd64
       - arm64
-    tags:
-      - otel
-    optional: true
+
+archives:
+  - id: mock-gateway
+    ids:
+      - mock-gateway
+    formats:
+      - zip
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: "{{ .ProjectName }}_{{ .Version }}_checksums.txt"
+  algorithm: sha256
 
 sboms:
   - id: sbom
     artifacts: archive
-    provider: spdx
-    documents:
-      - "{{ .ProjectName }}_{{ .Version }}_sbom.spdx.json"
 
-signs:
-  - id: cosign
-    env:
-      - COSIGN_EXPERIMENTAL=1
-      - COSIGN_YESES=true
-    args:
-      - sign
-      - --yes
-      - --recursive
-      - --upload=provenance
-      - "{{ .ArtifactName }}"
-    artifacts: checksums
+release:
+  github:
+    owner: shing1211
+    name: hstongapi4go
+  draft: false
+  prerelease: auto

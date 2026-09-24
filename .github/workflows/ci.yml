@@ -3,8 +3,12 @@ name: CI
 # Public Go SDK module: github.com/shing1211/hstongapi4go (Apache-2.0).
 #
 # The Go toolchain version is NOT hard-coded here: actions/setup-go reads it
-# from the `go` directive in go.mod via `go-version-file`, so go.mod remains the
-# single source of truth (currently `go 1.26`).
+# from go.mod via `go-version-file`, so go.mod remains the single source of
+# truth. go.mod carries both a `go 1.26` language floor for consumers and a
+# `toolchain go1.26.6` directive for the toolchain this module is built and
+# scanned with. Every setup-go step also sets `check-latest: true` so a runner
+# never builds or scans with a stale patch release, because actions/setup-go
+# exports GOTOOLCHAIN=local and would otherwise refuse to move forward.
 
 on:
   push:
@@ -71,6 +75,7 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+          check-latest: true
           cache: true
       - name: Install buf
         run: go install github.com/bufbuild/buf/cmd/buf@v1.47.2
@@ -89,7 +94,10 @@ jobs:
         with:
           python-version: '3.11'
       - name: Install doc tools
-        run: pip install --quiet mkdocs 'mkdocs-material[imaging]'
+        # mkdocs.yml lists the git-revision-date-localized plugin, so it must be
+        # installed too or the strict build aborts on a config error.
+        run: |
+          pip install --quiet mkdocs 'mkdocs-material[imaging]' mkdocs-git-revision-date-localized-plugin
       - name: Check links
         run: python scripts/check_links.py
       - name: Check i18n lockstep
@@ -106,6 +114,7 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+          check-latest: true
           cache: true
       - name: Check SPDX headers
         run: |
@@ -141,6 +150,7 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+          check-latest: true
       # gosec lives in github.com/securego/gosec. The previous path
       # (honnef.co/go/tools/cmd/gosec) is staticcheck's module and does not
       # exist, so this job failed at install and govulncheck never ran.
@@ -163,6 +173,7 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+          check-latest: true
       - name: Run coverage gate
         run: make coverage
 
@@ -171,14 +182,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-go@v7
-        with:
-          go-version-file: go.mod
-          cache: true
-      - name: Install GoReleaser
-        run: go install github.com/goreleaser/goreleaser@latest
+      # GoReleaser is installed from its published binary by the official action.
+      # `go install github.com/goreleaser/goreleaser@latest` resolved a dependency
+      # on golang.org/x/tools@v0.21.0, which does not compile under the Go 1.26
+      # compiler ("invalid array length -delta * delta"), so this job failed
+      # before the configuration was ever checked.
       - name: Run GoReleaser check
-        run: goreleaser check --config .goreleaser.yaml
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: '~> v2'
+          args: check --config .goreleaser.yaml
 
   sbom:
     name: sbom generate
