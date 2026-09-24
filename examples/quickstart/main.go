@@ -44,7 +44,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("client.New: %v", err)
 	}
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 
 	fmt.Printf("gateway http: %s\n", c.BaseURL())
 	fmt.Printf("gateway push: %s\n", c.PushAddr())

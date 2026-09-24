@@ -6,7 +6,6 @@ package services
 import (
 	"context"
 	"fmt"
-	"math/big"
 	"strconv"
 	"time"
 
@@ -650,17 +649,6 @@ func isConditionalOrder(t types.EntrustType) bool {
 	default:
 		return false
 	}
-}
-
-func parsePositive(s string) (*big.Rat, bool) {
-	if s == "" {
-		return nil, false
-	}
-	r, ok := new(big.Rat).SetString(s)
-	if !ok || r.Sign() <= 0 {
-		return nil, false
-	}
-	return r, true
 }
 
 type commonStringResponse struct {

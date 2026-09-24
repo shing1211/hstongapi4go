@@ -5,6 +5,7 @@ package logging_test
 
 import (
 	"bytes"
+	"context"
 	"log/slog"
 	"strings"
 	"testing"
@@ -97,7 +98,7 @@ func TestRedactAttrs(t *testing.T) {
 func TestRedactingHandlerMasksSecrets(t *testing.T) {
 	var buf bytes.Buffer
 	logger := slog.New(logging.Redacting(slog.NewTextHandler(&buf, nil)))
-	logger.LogAttrs(nil, slog.LevelInfo, "trade login",
+	logger.LogAttrs(context.TODO(), slog.LevelInfo, "trade login",
 		slog.String("tradePassword", "hunter2"),
 		slog.String("accessToken", "tok_secret_123"),
 		slog.String("EncryptedKey", "ZW5jcnlwdGVk"),

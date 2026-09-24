@@ -42,13 +42,13 @@ func main() {
 	if err != nil {
 		log.Fatalf("client.New: %v", err)
 	}
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 
 	s := stream.New(c)
 	if err := s.Connect(ctx); err != nil {
 		log.Fatalf("stream.Connect: %v", err)
 	}
-	defer s.Close()
+	defer func() { _ = s.Close() }()
 
 	code := envOr("HSTONG_EXAMPLE_SECURITY", "0700.HK")
 	sub, err := s.Subscribe(ctx, types.TopicBasicQot,

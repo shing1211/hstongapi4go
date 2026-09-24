@@ -94,7 +94,3 @@ func (tm *TokenManager) clearLoginPending(accountID domain.AccountID) {
 	defer tm.mu.Unlock()
 	delete(tm.pending, accountID)
 }
-
-type fixedClock int64
-
-func (fixedClock) Now() int64 { return 0 }

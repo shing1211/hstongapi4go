@@ -6,7 +6,6 @@ package push
 import (
 	"context"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -51,12 +50,6 @@ func (m *mockEventSource) close() {
 	m.closed = true
 	close(m.done)
 	m.mu.Unlock()
-}
-
-func (m *mockEventSource) isClosed() bool {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.closed
 }
 
 func TestFanout_Subscribe(t *testing.T) {
@@ -288,14 +281,4 @@ func waitFor(t *testing.T, d time.Duration, fn func() bool) {
 			time.Sleep(10 * time.Millisecond)
 		}
 	}
-}
-
-type mockSourceWithCounter struct {
-	*mockEventSource
-	closeCount atomic.Int32
-}
-
-func (m *mockSourceWithCounter) close() {
-	m.closeCount.Add(1)
-	m.mockEventSource.close()
 }

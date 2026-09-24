@@ -1,26 +1,33 @@
 // Copyright 2026 shing1211
 // SPDX-License-Identifier: Apache-2.0
 
-// Package auth handles session and token lifecycle management for the v-next SDK.
+// Package auth holds the v-next session and token lifecycle.
 //
 // It provides:
 //
-//   - TradePassword: AES-ECB encryption of the user-supplied trade password
-//     (PKCS7 padding, no IV — matching the legacy platform protocol).
-//   - Session: encapsulates the login token, refresh timestamp, expiry, and
-//     account number returned by the Gateway.
-//   - TokenManager: issues new sessions, refreshes expiring sessions, and
-//     enforces a single concurrent login per AccountID.
-//   - injectable Clock so that token expiry can be tested without wall-clock
-//     dependence.
+//   - EncryptTradePassword: AES-192-ECB/PKCS7 encryption of the user-supplied
+//     trade password, matching the fixed key published by HStong.
+//   - Session: the login token, its expiry and refresh timestamps, and the
+//     account it belongs to.
+//   - TokenManager: issues and clears sessions against a SessionStore, with an
+//     injectable Clock so expiry can be tested without wall-clock dependence.
+//   - Authenticator: encrypts the password, calls an injected login function,
+//     and stores the returned token.
 //
 // Rules (per ADR 0001, ADR 0005):
 //
 //   - No RSA signing or platform key handling; the Gateway owns all signing.
 //   - The SDK never stores or logs the plaintext trade password.
-//   - Re-login is automatic when the token expires during an active operation,
-//     with a backoff to prevent thundering-herd on shared token expiry.
-//   - This package is the only place in the v-next layer that uses
-//     decimal.Decimal at the wire bridge (for fee/money calculations returned
-//     by the login response); all other wire-to-domain conversion uses string.
+//
+// Not yet implemented, and therefore not claimed here:
+//
+//   - Automatic re-login when a token expires mid-operation.
+//   - Re-login backoff. The public pkg/hstong.SessionManager has a
+//     single-flight EnsureLoggedIn; Authenticator has no equivalent yet.
+//   - A refresh action driven by Session.ShouldRefresh. Callers read RefreshAt
+//     and decide.
+//
+// This package is not yet wired into the released client. See
+// docs/threat-model.md for which controls are active and which are
+// forward-looking.
 package auth

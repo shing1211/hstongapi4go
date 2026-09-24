@@ -52,6 +52,8 @@ func extractCoverage(output string) float64 {
 		return 0
 	}
 	var pct float64
-	fmt.Sscanf(rest[:end], "%f", &pct)
+	if _, err := fmt.Sscanf(rest[:end], "%f", &pct); err != nil {
+		return 0
+	}
 	return pct
 }

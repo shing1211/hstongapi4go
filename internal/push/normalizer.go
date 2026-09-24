@@ -108,12 +108,7 @@ func DecodeAny(a *anypb.Any) (proto.Message, error) {
 		return nil, fmt.Errorf("push: DecodeAny: UnmarshalNew: %w", err)
 	}
 
-	protoMsg, ok := msg.(proto.Message)
-	if !ok {
-		return nil, fmt.Errorf("push: DecodeAny: result does not implement proto.Message")
-	}
-
-	return protoMsg, nil
+	return msg, nil
 }
 
 func normalizeUnknownEvent(a *anypb.Any) (*domain.PushEvent, error) {

@@ -45,7 +45,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("client.New: %v", err)
 	}
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 
 	session := hstong.NewSessionManager(c)
 	if err := session.Login(ctx); err != nil {

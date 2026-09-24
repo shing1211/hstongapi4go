@@ -10,7 +10,6 @@ import (
 )
 
 const defaultHKDScale = 3
-const defaultCNYScale = 2
 
 type Money struct {
 	dec      decimal.Decimal

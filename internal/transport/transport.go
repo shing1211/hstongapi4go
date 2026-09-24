@@ -182,7 +182,7 @@ func (t *Transport) Do(ctx context.Context, op, path string, params any, codec C
 	if err != nil {
 		return transportError(op, err)
 	}
-	defer httpResp.Body.Close()
+	defer func() { _ = httpResp.Body.Close() }()
 
 	body, err := io.ReadAll(httpResp.Body)
 	if err != nil {
@@ -286,7 +286,7 @@ func classifyFailure(errText string) (types.StatusCode, string) {
 	if end >= 4 && end <= 5 {
 		code := types.StatusCode(trimmed[:end])
 		if errs.KnownCode(code) {
-			rest := strings.TrimSpace(strings.TrimLeft(trimmed[end:], " :-:："))
+			rest := strings.TrimSpace(strings.TrimLeft(trimmed[end:], " :-："))
 			if rest == "" {
 				rest = errs.MessageForCode(code)
 			}

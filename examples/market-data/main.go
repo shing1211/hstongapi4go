@@ -40,7 +40,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("client.New: %v", err)
 	}
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 
 	code := envOr("HSTONG_EXAMPLE_SECURITY", "0700.HK")
 	sec := &dto.Security{DataType: int32(types.DataTypeHKStock), Code: code}

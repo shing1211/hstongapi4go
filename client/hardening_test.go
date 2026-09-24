@@ -83,8 +83,10 @@ func TestIsQueryHelper(t *testing.T) {
 			t.Errorf("IsQuery(%q) = %v, want %v", path, got, wantQuery)
 		}
 		if got == wantQuery && got == !resilience.IsMutation(path) {
-			// consistent
+			continue
 		}
+		t.Errorf("IsQuery(%q) = %v, inconsistent with !resilience.IsMutation(%q) = %v",
+			path, got, path, !resilience.IsMutation(path))
 	}
 }
 

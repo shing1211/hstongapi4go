@@ -5,14 +5,9 @@ package auth
 
 import (
 	"context"
-	"sync"
-	"time"
 
 	"github.com/shing1211/hstongapi4go/pkg/domain"
 )
-
-const defaultRetryDelay = 500 * time.Millisecond
-const defaultMaxRetryDelay = 30 * time.Second
 
 type LoginRequest struct {
 	AccountID      domain.AccountID
@@ -28,7 +23,6 @@ type LoginResult struct {
 type Authenticator struct {
 	tokenManager *TokenManager
 	loginFn      func(context.Context, LoginRequest) (string, error)
-	mu           sync.Mutex
 }
 
 func NewAuthenticator(store SessionStore, loginFn func(context.Context, LoginRequest) (string, error), opts ...TokenManagerOption) *Authenticator {

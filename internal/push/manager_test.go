@@ -7,7 +7,6 @@ import (
 	"bytes"
 	"context"
 	"net"
-	"sync"
 	"testing"
 	"time"
 
@@ -90,25 +89,6 @@ func TestManagerCloseIsIdempotent(t *testing.T) {
 	if err := mgr.Close(); err != nil {
 		t.Fatalf("second Close: %v", err)
 	}
-}
-
-type managerAddrRouter struct {
-	mu   sync.Mutex
-	addr string
-}
-
-func (r *managerAddrRouter) set(addr string) {
-	r.mu.Lock()
-	r.addr = addr
-	r.mu.Unlock()
-}
-
-func (r *managerAddrRouter) dial(ctx context.Context, addr string) (net.Conn, error) {
-	r.mu.Lock()
-	actualAddr := r.addr
-	r.mu.Unlock()
-	d := &net.Dialer{}
-	return d.DialContext(ctx, "tcp", actualAddr)
 }
 
 func marshalManagerNotifyFrame(t *testing.T, typ types.NotifyMsgType, id string, ts uint64, payload proto.Message) []byte {
