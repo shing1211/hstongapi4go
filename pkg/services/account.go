@@ -113,9 +113,7 @@ func (s *AccountService) MarginFundInfo(ctx context.Context, accountID domain.Ac
 		return nil, errs.New(types.StatusInvalidParam, opMarginFundInfo, "accountID must not be empty")
 	}
 	var out domain.MarginFundInfoWire
-	if err := s.client.Do(ctx, opMarginFundInfo, client.RouteTradeQueryMarginFundInfo, marginFundInfoWireRequest{
-		ExchangeType: req.ExchangeType,
-	}, s.client.JSON(), &out); err != nil {
+	if err := s.client.Do(ctx, opMarginFundInfo, client.RouteTradeQueryMarginFundInfo, marginFundInfoWireRequest(req), s.client.JSON(), &out); err != nil {
 		return nil, err
 	}
 	return domain.AccountBalanceFromDTO(&out), nil
@@ -144,9 +142,7 @@ func (s *AccountService) HoldsList(ctx context.Context, accountID domain.Account
 	}
 
 	var out holdsListWireResponse
-	if err := s.client.Do(ctx, opHoldsList, client.RouteTradeQueryHoldsList, holdsListWireRequest{
-		ExchangeType: filter.ExchangeType,
-	}, s.client.JSON(), &out); err != nil {
+	if err := s.client.Do(ctx, opHoldsList, client.RouteTradeQueryHoldsList, holdsListWireRequest(filter), s.client.JSON(), &out); err != nil {
 		return nil, err
 	}
 

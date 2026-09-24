@@ -122,9 +122,10 @@ func (s *TradingService) Entrust(ctx context.Context, accountID domain.AccountID
 	}
 
 	exchangeType := types.ExchangeType("")
-	if order.Symbol.Market == domain.MarketHK {
+	switch order.Symbol.Market {
+	case domain.MarketHK:
 		exchangeType = types.ExchangeHK
-	} else if order.Symbol.Market == domain.MarketUS {
+	case domain.MarketUS:
 		exchangeType = types.ExchangeUS
 	}
 
@@ -233,9 +234,10 @@ func (s *TradingService) MaxAvailableAsset(ctx context.Context, accountID domain
 	}
 
 	exchangeType := types.ExchangeType("")
-	if symbol.Market == domain.MarketHK {
+	switch symbol.Market {
+	case domain.MarketHK:
 		exchangeType = types.ExchangeHK
-	} else if symbol.Market == domain.MarketUS {
+	case domain.MarketUS:
 		exchangeType = types.ExchangeUS
 	}
 
@@ -452,9 +454,10 @@ func (s *TradingService) BeforeAndAfterSupport(ctx context.Context, symbol domai
 	}
 
 	exchangeType := types.ExchangeType("")
-	if symbol.Market == domain.MarketHK {
+	switch symbol.Market {
+	case domain.MarketHK:
 		exchangeType = types.ExchangeHK
-	} else if symbol.Market == domain.MarketUS {
+	case domain.MarketUS:
 		exchangeType = types.ExchangeUS
 	}
 

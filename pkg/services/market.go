@@ -340,12 +340,7 @@ func (s *MarketService) UsOptionChainCode(ctx context.Context, req UsOptionChain
 	var resp struct {
 		OptionCode []string `json:"optionCode"`
 	}
-	if err := s.client.Do(ctx, opUsOptionChainCode, client.RouteHqUsOptionChainCode, usOptionChainCodeRequest{
-		SecurityCode: req.SecurityCode,
-		ExpireDate:   req.ExpireDate,
-		FlagInOut:    req.FlagInOut,
-		OptionType:   req.OptionType,
-	}, s.client.JSON(), &resp); err != nil {
+	if err := s.client.Do(ctx, opUsOptionChainCode, client.RouteHqUsOptionChainCode, usOptionChainCodeRequest(req), s.client.JSON(), &resp); err != nil {
 		return UsOptionChainCodeResponse{}, err
 	}
 	return UsOptionChainCodeResponse{OptionCode: resp.OptionCode}, nil
@@ -370,9 +365,7 @@ func (s *MarketService) UsOptionChainExpireDate(ctx context.Context, req UsOptio
 	var resp struct {
 		ExpireDate []string `json:"expireDate"`
 	}
-	if err := s.client.Do(ctx, opUsOptionChainExpireDate, client.RouteHqUsOptionChainExpireDate, usOptionChainExpireDateRequest{
-		SecurityCode: req.SecurityCode,
-	}, s.client.JSON(), &resp); err != nil {
+	if err := s.client.Do(ctx, opUsOptionChainExpireDate, client.RouteHqUsOptionChainExpireDate, usOptionChainExpireDateRequest(req), s.client.JSON(), &resp); err != nil {
 		return UsOptionChainExpireDateResponse{}, err
 	}
 	return UsOptionChainExpireDateResponse{ExpireDate: resp.ExpireDate}, nil

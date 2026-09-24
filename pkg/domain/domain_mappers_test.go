@@ -7,9 +7,10 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/shopspring/decimal"
+
 	"github.com/shing1211/hstongapi4go/gen/hq/dto"
 	"github.com/shing1211/hstongapi4go/pkg/types"
-	"github.com/shopspring/decimal"
 )
 
 func TestIDTypes(t *testing.T) {

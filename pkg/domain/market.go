@@ -6,8 +6,9 @@ package domain
 import (
 	"fmt"
 
-	"github.com/shing1211/hstongapi4go/gen/hq/dto"
 	"github.com/shopspring/decimal"
+
+	"github.com/shing1211/hstongapi4go/gen/hq/dto"
 )
 
 type Quote struct {

@@ -22,7 +22,7 @@ func TestCodec_Alias(t *testing.T) {
 	}
 	defer c.Close()
 
-	var jsonCodec Codec = c.JSON()
+	var jsonCodec = c.JSON()
 	if jsonCodec == nil {
 		t.Fatal("JSON() returned nil")
 	}

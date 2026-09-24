@@ -12,14 +12,15 @@ import (
 	"testing"
 	"time"
 
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/anypb"
+
 	"github.com/shing1211/hstongapi4go/gen/common/constant"
 	pbmsg "github.com/shing1211/hstongapi4go/gen/common/msg"
 	"github.com/shing1211/hstongapi4go/gen/hq/dto"
 	hqnotify "github.com/shing1211/hstongapi4go/gen/hq/notify"
 	"github.com/shing1211/hstongapi4go/internal/push"
 	"github.com/shing1211/hstongapi4go/pkg/types"
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/anypb"
 )
 
 type mockServerAddrRouter struct {

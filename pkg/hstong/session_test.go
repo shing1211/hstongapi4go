@@ -157,7 +157,7 @@ func (t *countingTransport) CloseIdleConnections() {
 func newCountingTestClient(t *testing.T, baseURL, password string) (*client.Client, *countingTransport) {
 	t.Helper()
 
-	var base http.RoundTripper = http.DefaultTransport
+	var base = http.DefaultTransport
 	if tr, ok := http.DefaultTransport.(*http.Transport); ok {
 		base = tr.Clone()
 	}

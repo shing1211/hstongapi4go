@@ -10,8 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/shing1211/hstongapi4go/pkg/domain"
 	"go.uber.org/goleak"
+
+	"github.com/shing1211/hstongapi4go/pkg/domain"
 )
 
 type mockEventSource struct {

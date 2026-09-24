@@ -380,7 +380,7 @@ func (m *Manager) sendTopicRequest(ctx context.Context, topicID int, securities 
 }
 
 func (m *Manager) buildTopicRequest(topicID int, securities []*dto.Security) []byte {
-	var bodyLen int = 4
+	var bodyLen = 4
 	for _, s := range securities {
 		if s != nil {
 			bodyLen += 8
