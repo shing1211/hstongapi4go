@@ -30,7 +30,7 @@ PROTOC_GEN_GO_VERSION ?= v1.36.6
 
 .PHONY: help tools build fmt vet test test-race test-integration coverage check \
         money-check proto proto-verify docs-check license license-check \
-        mock-gateway clean
+        mock-gateway clean lint gosec govulncheck enterprise-check
 
 help: ## List targets
 	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -63,12 +63,8 @@ test-integration: ## Run env-gated integration tests (HSTONG_INTEGRATION=1 requi
 		$(GO) test ./test/integration/... -count=1 -v; \
 	else echo "test-integration: not yet available"; fi
 
-coverage: ## Write coverage.out and coverage.html
-	@if [ -f go.mod ]; then \
-		$(GO) test ./... -coverprofile=coverage.out -count=1 && \
-		$(GO) tool cover -html=coverage.out -o coverage.html && \
-		echo "wrote coverage.out and coverage.html"; \
-	else echo "no go.mod yet; skipping"; fi
+coverage: ## Run tests with coverage gate (>=85% on pkg/domain, internal/auth, internal/transport)
+	$(GO) run scripts/coverage_gate.go
 
 check: fmt vet money-check test ## Format, vet, check money types, and test
 
@@ -116,3 +112,28 @@ mock-gateway: ## Run the standalone mock HStong gateway
 clean: ## Remove build artifacts
 	rm -f coverage.out coverage.html
 	rm -rf "$(CURDIR)/dist"
+
+# Enterprise toolchain targets (E05)
+
+LINTER := golangci-lint
+GOSEC := gosec
+GOVULN := govulncheck
+
+.PHONY: lint
+lint: ## Run golangci-lint
+	$(LINTER) run ./...
+
+.PHONY: gosec
+gosec: ## Run gosec security scanner
+	$(GOSEC) ./...
+
+.PHONY: govulncheck
+govulncheck: ## Run govulncheck vulnerability scanner
+	$(GOVULN) ./...
+
+.PHONY: enterprise-check
+enterprise-check: ## Run full enterprise pre-flight (lint + security + coverage)
+	make lint
+	make gosec
+	make govulncheck
+	make coverage
