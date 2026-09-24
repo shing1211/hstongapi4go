@@ -124,6 +124,10 @@ func (m *Manager) Errors() <-chan error {
 	return m.errors
 }
 
+func (m *Manager) Done() <-chan struct{} {
+	return m.done
+}
+
 func (m *Manager) Dial(ctx context.Context, addr string) error {
 	if m.closed.Load() {
 		return ErrManagerClosed
