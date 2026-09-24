@@ -49,12 +49,13 @@ func TestIsSensitiveKey(t *testing.T) {
 		"password", "Password", "tradePassword", "trade_password",
 		"trade-password", "token", "accessToken", "EncryptedKey",
 		"encrypted_key", "apiKey", "privateKey", "authorization",
+		"accountId", "account_id", "fundAccount", "fund_account",
 	} {
 		if !logging.IsSensitiveKey(key) {
 			t.Errorf("IsSensitiveKey(%q) = false, want true", key)
 		}
 	}
-	for _, key := range []string{"user", "code", "route", "op", "category", "stockCode"} {
+	for _, key := range []string{"user", "code", "route", "op", "category", "stockCode", "account", "passwordHash"} {
 		if logging.IsSensitiveKey(key) {
 			t.Errorf("IsSensitiveKey(%q) = true, want false", key)
 		}
@@ -135,5 +136,56 @@ func TestRedactNilValue(t *testing.T) {
 	attr := logging.Redact("token", nil)
 	if attr.Value.String() != "" {
 		t.Fatalf("Redact(token, nil) = %q, want empty", attr.Value.String())
+	}
+}
+
+func TestRedactTextMasksSecrets(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"empty", "", ""},
+		{"query form", "password=hunter2", "password=***"},
+		{"colon form", "apiKey: sk-live-1", "apiKey: ***"},
+		{"json form", `{"token":"abc.def"}`, `{"token":"***"}`},
+		{"single quoted json", `{'secret':'top-secret'}`, `{'secret':'***'}`},
+		{"comma terminated", "user=bob,password=pw1,op=x", "user=bob,password=***,op=x"},
+		{"two secrets", "token=aaa secret=bbb", "token=*** secret=***"},
+		{"bearer credential", "Authorization: Bearer tok-9f8e7d", "Authorization: ***"},
+		{"basic credential", "Authorization: Basic dXNlcjpwdw==", "Authorization: ***"},
+		{"bearer then field", "Authorization: Bearer abc, op=x", "Authorization: ***, op=x"},
+		{"trailing separator", "password=", "password="},
+		{"key with no value", "password", "password"},
+		{"empty quoted value", `{"token":""}`, `{"token":""}`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := logging.RedactText(tt.in); got != tt.want {
+				t.Errorf("RedactText(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRedactTextLeavesNonSecrets(t *testing.T) {
+	for _, in := range []string{
+		`{"user":"bob","stockCode":"00700"}`,
+		"code=10000&route=/hq/BasicQot",
+		"passwordHash=abc",
+		"myTokenCount=5",
+		"plain text with no assignments",
+	} {
+		if got := logging.RedactText(in); got != in {
+			t.Errorf("RedactText(%q) = %q, want unchanged", in, got)
+		}
+	}
+}
+
+func TestRedactTextNeverRevealsSecretLength(t *testing.T) {
+	short := logging.RedactText("token=a")
+	long := logging.RedactText("token=aaaaaaaaaaaaaaaa")
+	if short != long {
+		t.Errorf("masked output varies with secret length: %q vs %q", short, long)
 	}
 }

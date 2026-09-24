@@ -185,3 +185,62 @@ func TestBodySnippet(t *testing.T) {
 		t.Fatalf("bodySnippet(long) length = %d, want it truncated", len(got))
 	}
 }
+
+func TestBodySnippetRedactsSecrets(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+		leak string
+	}{
+		{"query assignment", "password=hunter2&user=bob", "hunter2"},
+		{"json body", `{"password":"hunter2","accountId":"A1"}`, "hunter2"},
+		{"json token", `{"accessToken":"abc.def.ghi","ok":false}`, "abc.def.ghi"},
+		{"colon separated", "apiKey: sk-live-1234", "sk-live-1234"},
+		{"authorization", "Authorization: Bearer tok-9f8e7d", "tok-9f8e7d"},
+		{"single quoted", "secret='top-secret-value'", "top-secret-value"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := bodySnippet([]byte(tt.body))
+			if strings.Contains(got, tt.leak) {
+				t.Fatalf("bodySnippet(%q) = %q, must not contain %q", tt.body, got, tt.leak)
+			}
+			if !strings.Contains(got, "***") {
+				t.Fatalf("bodySnippet(%q) = %q, want a masked value", tt.body, got)
+			}
+		})
+	}
+}
+
+func TestBodySnippetPreservesNonSecrets(t *testing.T) {
+	body := `{"user":"bob","stockCode":"00700","code":10000,"passwordHash":"abc"}`
+	got := bodySnippet([]byte(body))
+	if got != ": "+body {
+		t.Fatalf("bodySnippet(%q) = %q, want the body unchanged", body, got)
+	}
+}
+
+func TestTransportDoDoesNotLeakBodySecret(t *testing.T) {
+	const secret = "sup3rs3cret"
+	client := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		body := `{"error":"rejected","tradePassword":"` + secret + `"}`
+		return &http.Response{
+			StatusCode: http.StatusInternalServerError,
+			Status:     "500 Internal Server Error",
+			Body:       io.NopCloser(strings.NewReader(body)),
+			Header:     make(http.Header),
+		}, nil
+	})}
+	tr := New(WithHTTPClient(client))
+
+	err := tr.Do(context.Background(), "op", "/hq/BasicQot", struct{}{}, JSONCodec{}, &struct{}{})
+	if err == nil {
+		t.Fatal("Do() error = nil, want a non-2xx error")
+	}
+	if strings.Contains(err.Error(), secret) {
+		t.Fatalf("Do() error leaked the echoed secret: %q", err.Error())
+	}
+	if !strings.Contains(err.Error(), "***") {
+		t.Fatalf("Do() error = %q, want the secret masked", err.Error())
+	}
+}

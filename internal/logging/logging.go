@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"regexp"
 	"strings"
 )
 
@@ -57,6 +58,8 @@ var sensitiveKeys = map[string]struct{}{
 	"sessionid":     {},
 	"credential":    {},
 	"credentials":   {},
+	"accountid":     {},
+	"fundaccount":   {},
 }
 
 // normalizeKey lower-cases key and strips separators for sensitive matching.
@@ -100,6 +103,108 @@ func RedactValue(value string) string {
 		return ""
 	}
 	return Mask
+}
+
+// textKeyPattern matches a candidate field name inside free-form text. The
+// matched run is normalized and tested against sensitiveKeys, so a key is
+// redacted exactly when IsSensitiveKey would redact the equivalent attribute.
+var textKeyPattern = regexp.MustCompile(`[A-Za-z0-9_.\-]+`)
+
+// RedactText masks secret-looking assignments inside free-form text and returns
+// the rewritten string. It recognises `key=value`, `key: value`, and the
+// quoted JSON forms `"key":"value"` for every key IsSensitiveKey accepts, and
+// replaces the value with Mask.
+//
+// It is intended for untrusted text that has to be embedded in an error or a
+// trace, such as an HTTP error body, where structured attribute redaction does
+// not apply. Matching is key-driven and exact: a key that merely contains a
+// sensitive word, such as `passwordHash`, is not redacted.
+func RedactText(s string) string {
+	if s == "" {
+		return s
+	}
+	var b strings.Builder
+	last := 0
+	for _, loc := range textKeyPattern.FindAllStringIndex(s, -1) {
+		start, end := loc[0], loc[1]
+		if !IsSensitiveKey(normalizeKey(s[start:end])) {
+			continue
+		}
+		i := skipSpace(s, end)
+		if i < len(s) && (s[i] == '"' || s[i] == '\'') {
+			i++
+			i = skipSpace(s, i)
+		}
+		if i >= len(s) || (s[i] != ':' && s[i] != '=') {
+			continue
+		}
+		i = skipSpace(s, i+1)
+		quoted := false
+		if i < len(s) && (s[i] == '"' || s[i] == '\'') {
+			quoted = true
+			i++
+		}
+		valStart := i
+		for i < len(s) && !isValueTerminator(s[i], quoted) {
+			i++
+		}
+		if i == valStart {
+			continue
+		}
+		if i < len(s) && !quoted && isAuthScheme(s[valStart:i]) {
+			for i < len(s) && !isCredentialTerminator(s[i]) {
+				i++
+			}
+		}
+		b.WriteString(s[last:valStart])
+		b.WriteString(Mask)
+		last = i
+	}
+	if last == 0 {
+		return s
+	}
+	b.WriteString(s[last:])
+	return b.String()
+}
+
+// authSchemes are the credential prefixes whose remainder is a single opaque
+// secret. "Authorization: Bearer abc123" carries the secret after the space, so
+// the scheme word alone must not be masked in its place.
+var authSchemes = map[string]struct{}{
+	"bearer": {}, "basic": {}, "digest": {}, "negotiate": {}, "token": {},
+}
+
+func isAuthScheme(word string) bool {
+	_, ok := authSchemes[strings.ToLower(strings.TrimSuffix(word, ":"))]
+	return ok
+}
+
+func skipSpace(s string, i int) int {
+	for i < len(s) && (s[i] == ' ' || s[i] == '\t') {
+		i++
+	}
+	return i
+}
+
+func isValueTerminator(c byte, quoted bool) bool {
+	if quoted {
+		return c == '"' || c == '\''
+	}
+	switch c {
+	case ' ', '\t', '\n', '\r', ',', ';', '&', '}', ']', '"', '\'':
+		return true
+	}
+	return false
+}
+
+// isCredentialTerminator ends a scheme-prefixed credential. Spaces are part of
+// the credential, so they do not terminate it.
+func isCredentialTerminator(c byte) bool {
+	switch c {
+	case '\n', '\r', ',', ';', '&', '}', ']', '"', '\'':
+		return true
+	}
+	return false
 }
 
 // Redact returns the attribute to log for key. A sensitive key is logged as a

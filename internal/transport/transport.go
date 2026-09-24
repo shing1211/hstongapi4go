@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/shing1211/hstongapi4go/internal/errs"
+	"github.com/shing1211/hstongapi4go/internal/logging"
 	"github.com/shing1211/hstongapi4go/pkg/types"
 )
 
@@ -296,14 +297,17 @@ func classifyFailure(errText string) (types.StatusCode, string) {
 }
 
 // bodySnippet returns a short, single-line excerpt of an error response body
-// for a non-2xx error message. It never returns credentials and is empty for an
-// empty body.
+// for a non-2xx error message. It is empty for an empty body. Values assigned
+// to a sensitive key are masked with logging.Mask before the excerpt is
+// returned, so an echoing Gateway or proxy cannot inject a password or token
+// into the returned error and, through it, into a recorded span.
 func bodySnippet(body []byte) string {
 	const maxSnippet = 256
 	text := strings.TrimSpace(string(body))
 	if text == "" {
 		return ""
 	}
+	text = logging.RedactText(text)
 	if len(text) > maxSnippet {
 		text = text[:maxSnippet] + "..."
 	}
