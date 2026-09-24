@@ -1,0 +1,51 @@
+E19 — Coverage >=85% gate evidence
+=================================
+
+Command: make coverage   (go run scripts/coverage_gate.go)
+Gate:    85.0% per package (pkg/domain, internal/auth, internal/transport)
+
+Result (2026-09-24):
+
+  PASS: github.com/shing1211/hstongapi4go/pkg/domain        94.3%
+  PASS: github.com/shing1211/hstongapi4go/internal/auth     92.9%
+  PASS: github.com/shing1211/hstongapi4go/internal/transport 99.0%
+
+  All packages meet the 85% coverage gate
+
+Baseline before E19 work:
+
+  pkg/domain         25.4%   (below gate)
+  internal/auth      44.3%   (below gate)
+  internal/transport 99.0%   (already passing)
+
+New tests added:
+
+  internal/auth/authenticator_test.go
+    - Authenticator.Login success / loginFn error
+    - Authenticator.Logout, GetSession (found + missing)
+    - Authenticator.MustBeAuthenticated (ok, not-logged-in, expired)
+    - AuthError.Error
+    - TokenManager IsLoginInProgress / markLoginPending / clearLoginPending
+    - sessionManager state-machine wrappers (BeginLogin, LoginSucceeded,
+      LoginFailed, Logout, State)
+
+  pkg/domain/domain_mappers_test.go
+    - ID types (AccountID/OrderID/EntrustID/ContractID/SessionToken) + ParseAccountID
+    - Money Sub/Mul/Currency/Scale/MustNewMoneyWithScale/UnmarshalJSON
+    - Price accessors, Round, JSON round-trip
+    - Quantity accessors + JSON round-trip
+    - Rate accessors + JSON round-trip
+    - Quote/KLine/TimeSharePoint/TickerTick/BrokerQueueEntry DTO mappers
+    - AccountBalance/Position/FundJournalEntry/InterestRate wire mappers
+    - Entrust/Fill/Fare/CondOrder/MaxAvailable/MarginInfo/SessionSupport wire mappers
+    - Symbol helpers (IsZero, MarketFromCode, SymbolFromSecurity)
+    - PushEvent interface implementations
+
+Fuzz suite:
+
+  internal/push/fuzz_test.go  FuzzReadFrame   (E14)
+
+Reproduce:
+
+  make coverage
+  go test -coverprofile=cov.out ./pkg/domain/... ./internal/auth/... ./internal/transport/...
