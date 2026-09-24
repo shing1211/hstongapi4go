@@ -80,6 +80,9 @@ nav:
   - Operations:
       - Runbook: runbook.md
       - Migration Guide: MIGRATION.md
+      - Release Checklist: RELEASE_CHECKLIST.md
+  - Reference:
+      - Compatibility Matrix: COMPAT.md
   - Legacy Protocol: LEGACY.md
   - Contributing: CONTRIBUTING.md
   - Architecture Decisions:

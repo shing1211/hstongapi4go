@@ -13,8 +13,8 @@
 | P00 Foundation & Domain | 5 | 5 |
 | P01 REST Services | 5 | 5 |
 | P02 Push Engine | 4 | 4 |
-| P03 DevOps & Hardening | 8 | 2 |
-| **Total** | **22** | **17** |
+| P03 DevOps & Hardening | 8 | 3 |
+| **Total** | **22** | **18** |
 
 ## Tasks
 
@@ -37,7 +37,7 @@
 | E15 | slog redaction + OTel traces/metrics | backend | done | E10,E14 | P03 | metric-name tests; no secrets logged |
 | E16 | CI/CD + GoReleaser + SBOM/checksums/provenance | devops | done | E15 | P03 | workflows run without creds |
 | E17 | Threat model + failure-injection tests | security | todo | E15 | P03 | adversarial tests in evidence/ |
-| E18 | Docs: README, GoDoc, compatibility matrix, examples, release checklist | docs | todo | E15 | P03 | mkdocs --strict; check_links 0 |
+| E18 | Docs: README, GoDoc, compatibility matrix, examples, release checklist | docs | done | E15 | P03 | mkdocs --strict; check_links 0 |
 | E19 | Coverage ≥85% (auth/transport/domain) + fuzz suite | tester | todo | E14 | P03 | coverage report in evidence/ |
 | E20 | Release: SemVer tag, push origin + gitee main | release | todo | E18,E19 | P03 | both remotes at new SHA |
 | E21 | Next-phase planning | planner | todo | E20 | P03 | next-phase.md |
