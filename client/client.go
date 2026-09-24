@@ -22,6 +22,17 @@ import (
 // with the operation name so errors.Is(err, ErrClientClosed) keeps working.
 var ErrClientClosed = errors.New("client: client is closed")
 
+// spanFactory creates a span for op. The returned end function must be called
+// with the error from the operation (nil for success). When no tracer is
+// configured, this is a no-op factory.
+var spanFactory func(ctx context.Context, op string) (context.Context, func(error))
+
+func init() {
+	spanFactory = func(ctx context.Context, op string) (context.Context, func(error)) {
+		return ctx, func(error) {}
+	}
+}
+
 // Client is the SDK entry point. It holds the resolved configuration and the
 // HTTP transport, dispatches calls to canonical Gateway routes with the
 // endpoint's codec, and closes cleanly. A Client is immutable after New and
@@ -138,11 +149,15 @@ func (c *Client) Do(ctx context.Context, op string, route Route, params any, cod
 		return err
 	}
 
+	ctx, endSpan := spanFactory(ctx, op)
+	var err error
+	defer endSpan(err)
+
 	start := time.Now()
 	if c.cfg.Logger != nil {
 		c.cfg.Logger.Debug("http request", "op", op, "route", route.Path())
 	}
-	err := c.execute(ctx, op, route, params, codec, out)
+	err = c.execute(ctx, op, route, params, codec, out)
 	if c.instruments != nil {
 		c.instruments.HTTPRequest(op)
 		c.instruments.HTTPLatency(op, time.Since(start), err)
