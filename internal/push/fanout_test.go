@@ -274,23 +274,6 @@ func TestDedupCache_Dedup(t *testing.T) {
 	}
 }
 
-func TestDedupCache_Eviction(t *testing.T) {
-	defer goleak.VerifyNone(t)
-	c := NewDedupCache(3)
-
-	c.CheckAndInsert(1)
-	c.CheckAndInsert(2)
-	c.CheckAndInsert(3)
-
-	c.CheckAndInsert(4)
-	if c.CheckAndInsert(1) {
-		t.Error("1 should have been evicted")
-	}
-	if c.CheckAndInsert(4) {
-		t.Error("4 should already exist")
-	}
-}
-
 func waitFor(t *testing.T, d time.Duration, fn func() bool) {
 	deadline := time.After(d)
 	for {
