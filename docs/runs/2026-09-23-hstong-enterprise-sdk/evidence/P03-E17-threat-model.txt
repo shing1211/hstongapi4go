@@ -1,0 +1,237 @@
+E17 — Threat model + failure-injection evidence
+================================================
+
+Run: 2026-09-23-hstong-enterprise-sdk   Phase: P03   Date: 2026-09-24
+Baseline: c8b6084 (v0.1.6)   Deliverable: docs/threat-model.md
+
+
+1. Defects found and fixed
+--------------------------
+
+All seven were confirmed in source before any change. Each fix has a test that
+was verified to FAIL against the pre-fix code (method: git stash the production
+file, run the new test, confirm failure, restore).
+
+ID    Defect                                                   Layer
+----  -------------------------------------------------------  -----------
+F1    bodySnippet embedded the first 256 bytes of a non-2xx     active
+      response body verbatim, so a Gateway or proxy that echoed
+      a credential put it into the returned error, and from
+      there into a recorded span via EndSpan(err.Error()).
+      Its comment claimed "never returns credentials".
+
+F2    IsMutation did an exact map lookup. The Gateway also       active
+      accepts "<path>Request" and "<path>RequestMsgType" for
+      every route, so /trade/TradeEntrustRequest fell through
+      to ClassQuery and became RETRYABLE — an alias could
+      bypass the ADR 0003 single-attempt guarantee.
+
+F3    RealFundJourList and HistoryFundJourList looped on        forward
+      queryParamStr with no stalled-cursor guard, no page cap,
+      and no page-size clamp (documented max 99). A Gateway
+      repeating a cursor produced an unbounded loop. A
+      mid-walk error also discarded completed pages.
+
+F4    reconnectLoop read the dial address from m.conn, but      forward
+      readLoop calls closeConnLocked first, so the dialer
+      received "". Separately, the retry bound was guarded by
+      "maxRetries > 0", making 0 mean UNLIMITED.
+
+F5    accountid and fundaccount were absent from                active
+      sensitiveKeys, contradicting ADR 0009 which states
+      internal/logging redacts "account".
+
+F6    EndSpan and the client span factory recorded                active (otel)
+      err.Error() verbatim into span status and
+      exception.message.
+
+F7    FreshnessMonitor.Record returned early when seq == 0,     forward
+      and seqOf always returns 0, so time-based staleness
+      detection never populated in the dispatch path at all.
+
+"active" = runs in code a current v0.1.x caller already executes.
+"forward" = implemented in the v-next layer, which no production
+            package imports yet (only scripts/coverage_gate.go does).
+
+
+2. Pre-fix failure measurements
+-------------------------------
+
+F4 retry bound — maxRetries=0, 1ms backoff, expected 11 dials:
+
+    --- FAIL: TestManager_ReconnectRetriesAreBounded/zero_is_not_unlimited
+        dials = 53, want 11: the reconnect walk must stop at its bound
+
+    53 dials where 11 were expected: a measured reconnect storm.
+
+F4 dial address — after a read failure:
+
+    --- FAIL: TestManager_ReconnectNeverDialsEmptyAddress
+        dial 1 received an empty address; the configured address
+        must be reused after the connection is cleared
+
+F7 freshness — dispatching a quote event then checking:
+
+    --- FAIL: TestFreshnessMonitor_RecordWithoutSequence
+        Check after Record(topic, 0): push: no freshness record
+        for topic 1: push: not stale, want a freshness record
+    --- FAIL: TestFanout_DispatchPopulatesFreshness
+        Freshness(1) after a dispatch = push: no freshness record
+
+All pass after the fix.
+
+
+3. Adversarial test inventory
+-----------------------------
+
+internal/logging/logging_test.go
+  TestIsSensitiveKey                    accountId/fund_account added (F5)
+  TestRedactTextMasksSecrets            11 cases: query, colon, JSON,
+                                        single-quoted, auth schemes
+  TestRedactTextLeavesNonSecrets        user, stockCode, passwordHash untouched
+  TestRedactTextNeverRevealsSecretLength mask is constant width
+
+internal/transport/extra_test.go
+  TestBodySnippetRedactsSecrets         6 credential shapes
+  TestBodySnippetPreservesNonSecrets    non-secret body unchanged
+  TestTransportDoDoesNotLeakBodySecret  end-to-end through Transport.Do
+
+internal/otel/otel_security_test.go     (build tag: otel)
+  TestEndSpanRedactsKeyShapedSecrets    4 cases, checks status + events
+  TestSafeErrorLeavesUnkeyedTextAlone   pins the key-driven boundary
+  TestTransportErrorIsSafeForSpans      end-to-end, echoed body -> span
+
+internal/resilience/resilience_test.go
+  TestIsMutationRecognisesGatewayAliases   12 paths x 3 alias forms
+  TestIsMutationAliasIsSingleAttempt       every alias issues 1 attempt
+  TestQueryAliasesStayQueries
+  TestStripAliasSuffix
+
+internal/auth/session_security_test.go
+  TestTokenReplayRejectedAfterRelogin   captured token no longer resolves
+  TestStaleTokenRejectedAfterLogout
+  TestClockDriftForwardExpiresToken     59 min ok, 61 min rejected (1h TTL)
+  TestClockDriftBackwardDoesNotCorruptState  documents the accepted limitation
+  TestTokenManagerSaveComputesExpiryAndRefresh  pins both boundaries
+
+pkg/services/account_test.go            (first tests in this package)
+  TestClampPageSize
+  TestWalkFundJourPagesStopsOnStalledCursor
+  TestWalkFundJourPagesStopsOnEmptyCursorAndEmptyPage
+  TestWalkFundJourPagesAccumulatesPages
+  TestWalkFundJourPagesReturnsPartialOnError
+  TestWalkFundJourPagesStopsOnCancelledContext
+  TestWalkFundJourPagesBoundsPageCount
+
+internal/push/manager_reconnect_test.go
+  TestManager_ReconnectNeverDialsEmptyAddress
+  TestManager_ReconnectRetriesAreBounded    explicit / zero / negative
+  TestManager_ReconnectSucceedsAfterTransientFailures
+
+internal/push/fanout_stale_test.go
+  TestFreshnessMonitor_RecordWithoutSequence
+  TestFreshnessMonitor_ZeroSequenceDoesNotAdvanceLastSeq
+  TestFanout_DispatchPopulatesFreshness
+  TestFanout_DedupInertWithoutSequence   pins the accepted dedup gap
+
+Also: internal/auth/authenticator.go — removed a redundant same-type
+assertion (S1040) flagged by lint in a package E17 hardens.
+
+
+4. Verification
+---------------
+
+Command                                          Result
+----------------------------------------------  --------------------------
+go build ./...                                    PASS
+go build -tags otel ./...                         PASS
+go vet ./...                                      PASS
+gofmt (E17 files, CRLF-normalised)                clean
+go test ./... -count=1                            PASS, 24 packages
+go test -tags otel ./... -count=1                 PASS, 24 packages
+go test ./internal/push/... x20                   0 failures (was 1/12: a
+                                                  goleak leak in an E17 test,
+                                                  fixed)
+python scripts/check_money.py                     OK, no float money fields
+addlicense -check client pkg internal cmd scripts  exit 0
+python scripts/check_links.py                     80 files, 0 unresolved
+python scripts/check_i18n.py                      6 languages consistent
+python -m mkdocs build --strict                   exit 0
+
+NOT RUN on this host:
+  go test -race            no gcc on this Windows host; CI runs it on Linux
+  golangci-lint            FAILS — see section 5. Not an E17 regression.
+  gosec / govulncheck      see section 5
+  goreleaser check         see section 5
+
+
+5. Pre-existing red CI (not caused by E17)
+-------------------------------------------
+
+main has been red since at least E15, and v0.1.6 was tagged and pushed while
+red. Verified against c8b6084 (the v0.1.6 commit) in a clean worktree:
+
+  golangci-lint @ c8b6084:  37 issues (errcheck 6, gofmt 3,
+                              staticcheck 15, unused 13)
+  golangci-lint after E17:  37 issues (identical distribution)
+
+E17 introduced zero new lint findings.
+
+GitHub run 35986135126 (CI, c8b6084) job results:
+
+  build, vet, test        FAILURE at step 5 "gofmt check"
+                            -> unformatted files from E10/E13/E14:
+                               internal/push/fanout_test.go:34
+                               test/integration/push_integration_test.go:26 (gofmt)
+                               test/integration/push_integration_test.go:14 (goimports)
+                            -> vet, tests, race, and money-check were SKIPPED
+  golangci-lint           FAILURE (the 37 above)
+  gosec + govulncheck     FAILURE
+  goreleaser check        FAILURE
+  coverage gate           success
+  sbom generate           success
+  license / proto / docs  SKIPPED (a prior job failed)
+
+GitHub run 35986151579 (Release, v0.1.6):
+  goreleaser release      FAILURE
+  build with otel tag     success
+
+Consequence: v0.1.6 is a false release. Recorded as R13 in the threat model
+and carried into the next-phase plan. E17 does not repair it, because the
+repair (37 lint findings plus three failing jobs) is a separate body of work
+that needs its own task and sign-off.
+
+
+6. Residual risk accepted in E17
+---------------------------------
+
+  - Redaction is key-driven. A secret in prose with no recognisable key is
+    undetectable. Pinned by TestSafeErrorLeavesUnkeyedTextAlone.
+  - No replay defence: the protocol has no nonce and no idempotency key
+    (ADR 0003), and the AES-ECB trade-password transform is deterministic.
+  - Dedup and sequence-gap detection stay inert: the Gateway envelope carries
+    no per-event sequence, so gap detection is not implementable today.
+  - A backward clock jump can make an expired token acceptable again, because
+    expiry is a pure comparison against the caller's clock.
+  - Bare "account" and "passwordHash" stay unredacted by decision, so support
+    correlation keeps working.
+
+Full analysis, assets, trust boundaries, adversaries, and the 14-entry risk
+register: docs/threat-model.md
+
+
+7. Commits
+----------
+
+  6dfdc82  fix(transport): mask credentials in error body snippets;
+            redact account ids (F1, F5)
+  5a3ab81  fix(resilience): classify Gateway route aliases as mutations (F2)
+  2402c03  fix(services): bound AccountService cursor walks (F3)
+  e198bb4  fix(push): bound reconnect retries and reuse the configured
+            address (F4)
+  c778f5d  test(security): adversarial coverage for OTel leak, token replay,
+            clock drift, stale data (F6, F7)
+  025766f  docs(security): add threat model with E17 risk register
+
+Docs-only extras in 025766f: ADR 0008-0011 added to the mkdocs nav (they were
+unreachable in the built site), and the duplicate "Reference" nav key merged.

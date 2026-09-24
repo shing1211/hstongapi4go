@@ -13,8 +13,8 @@
 | P00 Foundation & Domain | 5 | 5 |
 | P01 REST Services | 5 | 5 |
 | P02 Push Engine | 4 | 4 |
-| P03 DevOps & Hardening | 8 | 5 |
-| **Total** | **22** | **19** |
+| P03 DevOps & Hardening | 8 | 6 |
+| **Total** | **22** | **20** |
 
 ## Tasks
 
@@ -36,7 +36,7 @@
 | E14 | Push integration/race/reconnect + fuzz tests | tester | done | E13 | P02 | fuzz seeds; -race green |
 | E15 | slog redaction + OTel traces/metrics | backend | done | E10,E14 | P03 | metric-name tests; no secrets logged |
 | E16 | CI/CD + GoReleaser + SBOM/checksums/provenance | devops | done | E15 | P03 | workflows run without creds |
-| E17 | Threat model + failure-injection tests | security | todo | E15 | P03 | adversarial tests in evidence/ |
+| E17 | Threat model + failure-injection tests | security | done | E15 | P03 | adversarial tests in evidence/ |
 | E18 | Docs: README, GoDoc, compatibility matrix, examples, release checklist | docs | done | E15 | P03 | mkdocs --strict; check_links 0 |
 | E19 | Coverage ≥85% (auth/transport/domain) + fuzz suite | tester | done | E14 | P03 | coverage report in evidence/ |
 | E20 | Release: SemVer tag, push origin + gitee main | release | done | E18,E19 | P03 | both remotes at new SHA |
@@ -65,3 +65,4 @@
 | 2026-09-24 | **E11 done.** Push manager: internal/push/manager.go (TCP dial, 151-byte framing, PBNotify decode, subscription registry, heartbeat, reconnect with exponential backoff, resubscribe). Tests in manager_test.go. Pushed (`b98e416`). |
 | 2026-09-24 | **E19 done.** Coverage gate now green: pkg/domain 25.4%→94.3%, internal/auth 44.3%→92.9%, internal/transport 99.0% (gate 85%). Added internal/auth/authenticator_test.go (Login/Logout/GetSession/MustBeAuthenticated, token manager pending flags, session state machine) and pkg/domain/domain_mappers_test.go (ID types, Money/Price/Quantity/Rate, market/account/trading wire mappers, symbol, push events). Evidence: evidence/P03-E19-coverage.txt. Fuzz suite = internal/push FuzzReadFrame (E14). |
 | 2026-09-24 | **E20 done.** Released **v0.1.6** (patch): CHANGELOG `[0.1.6]` section (services, domain mappers, HTTP adapter, push engine, OTel, CI/CD, coverage), README release badge bumped to v0.1.6 and Last synced → 2026-09-24 across all six READMEs, RELEASE_CHECKLIST example tag updated. Annotated tag pushed to `origin` and `gitee`; `main` pushed to both. |
+| 2026-09-24 | **E17 done.** Seven defects found, fixed, and regression-tested: F1 credential leak from `bodySnippet` into errors/spans; F2 route-alias mutations classified as retryable queries (ADR 0003 bypass); F3 unbounded AccountService cursor walks; F4 `maxRetries=0` meaning infinite (measured 53 dials vs 11 expected) plus empty reconnect address; F5 `accountid`/`fundaccount` not redacted (ADR 0009 divergence); F6 raw `err.Error()` in OTel spans; F7 freshness never populating because `Record` returned early on `seq == 0`. New `docs/threat-model.md` (assets, trust boundaries, adversaries, 7 scenarios, 14-entry risk register) added to the mkdocs nav. Evidence: `evidence/P03-E17-threat-model.txt`. Also fixed two pre-existing nav defects: ADR 0008-0011 were unreachable, and a duplicate `Reference` key shadowed Compatibility Matrix. **Not an E17 regression:** main has been red in CI since E15 and v0.1.6 shipped red — the `gofmt` step fails on three files, skipping vet/tests/race/money-check; golangci-lint has 37 findings (identical count before and after E17); gosec, govulncheck, goreleaser, and the release job also fail. Recorded as R13 for the next phase. |

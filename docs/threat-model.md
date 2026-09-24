@@ -50,6 +50,25 @@ The SDK makes **no** cryptographic claim about B1: it trusts the loopback socket
 and the Gateway binary. Anything stronger would require authenticating the
 Gateway, which is out of scope (ADR 0001, ADR 0005).
 
+## Which layer is live
+
+This matters when reading the tables below, because the repository contains two
+SDK layers and only one is reachable by a caller today.
+
+| Layer | Packages | Status |
+|-------|----------|--------|
+| **Released (v0.1.x)** | `client`, `internal/transport`, `internal/push.Client`, `internal/resilience`, `internal/errs`, `internal/crypto`, `internal/session`, `internal/logging`, `pkg/hstong/*`, `pkg/types` | **Active.** This is what `pkg/hstong` and `client` callers use. |
+| **v-next** | `pkg/domain`, `pkg/services`, `pkg/transport.Adapter`, `internal/auth`, `internal/push.Manager`, `internal/push.Fanout`, `internal/otel` | **Not wired in.** No production package imports these yet; only `scripts/coverage_gate.go` does, for the coverage gate. |
+
+A **Mitigated** row therefore means one of two things, and the distinction is
+called out where it matters:
+
+- **Active** — the control runs in code a current caller already executes.
+- **Forward-looking** — the control is implemented and tested in the v-next layer
+  but will not protect anyone until that layer is wired into the public client.
+
+The F-numbered fixes in the risk register are tagged accordingly.
+
 ## Adversary model
 
 | Adversary | Capability | In scope |
@@ -140,6 +159,21 @@ The single most consequential failure mode: a retry that resubmits a mutation.
 | Query retry amplifying load | **Mitigated.** Query-only retry with exponential backoff, rate limiting, and separate query/mutation circuit breakers. |
 | Non-2xx classified as retryable | **Gap.** HTTP 500/503 map to an empty status code and are therefore **not** retryable, even though the Gateway reports overload as `1011` inside a 200 envelope. |
 
+## What E17 fixed
+
+All five defects were confirmed in source before the change, and each fix is
+backed by a test that fails against the pre-fix code.
+
+| ID | Defect | Layer | Test |
+|----|--------|-------|------|
+| E17-F1 | `bodySnippet` embedded the first 256 bytes of a non-2xx body verbatim, so an echoing Gateway could put a password into an error and from there into a trace | Active | `TestBodySnippetRedactsSecrets`, `TestTransportDoDoesNotLeakBodySecret` |
+| E17-F2 | `IsMutation` did an exact lookup, so `/trade/TradeEntrustRequest` classified as a retryable query and could duplicate an order | Active | `TestIsMutationRecognisesGatewayAliases`, `TestIsMutationAliasIsSingleAttempt` |
+| E17-F3 | Cursor walks had no stalled-cursor, page-count, or page-size bound, and discarded completed pages on error | Forward-looking | `TestWalkFundJourPagesStopsOnStalledCursor` and six siblings |
+| E17-F4 | `maxRetries == 0` meant *infinite* (measured at 53 dials where 11 were expected), and the dialer received an empty address after a read failure | Forward-looking | `TestManager_ReconnectRetriesAreBounded`, `TestManager_ReconnectNeverDialsEmptyAddress` |
+| E17-F5 | `accountid` and `fundaccount` were not redacted, contradicting ADR 0009 | Active | `TestIsSensitiveKey` |
+| E17-F6 | `EndSpan` and the client span factory recorded raw `err.Error()` into spans | Active (with the `otel` tag) | `TestEndSpanRedactsKeyShapedSecrets`, `TestTransportErrorIsSafeForSpans` |
+| E17-F7 | `FreshnessMonitor.Record` returned early on `seq == 0`, so staleness detection never populated in the dispatch path | Forward-looking | `TestFreshnessMonitor_RecordWithoutSequence`, `TestFanout_DispatchPopulatesFreshness` |
+
 ## Risk register
 
 Accepted or deferred, with the reason. Ordered by residual risk.
@@ -147,17 +181,19 @@ Accepted or deferred, with the reason. Ordered by residual risk.
 | # | Risk | Severity | Status | Rationale |
 |---|------|----------|--------|-----------|
 | R1 | No client-side replay defence (token or password ciphertext) | Medium | **Accepted** | The wire protocol defines neither a nonce nor an idempotency key. Adding one would require a protocol change and break compatibility (ADR 0003). |
-| R2 | Route alias classification is a closed set | **High** | **Open** | A mutation route missing from `mutationSet` is retried. Mitigated today because the public client validates canonical routes, but `Adapter.Do` accepts a raw string. Needs a route-inventory test. |
-| R3 | Half-open push connection blocks indefinitely | Medium | **Open** | Needs a read deadline or heartbeat-liveness check. Deferred because it changes the read loop's blocking contract. |
-| R4 | Dedup and gap detection inert | Medium | **Accepted** | The Gateway sends no per-event sequence. Correct gap detection is impossible without one; the limitation is now pinned by a test. |
-| R5 | Free-prose secrets are not redacted | Low | **Accepted** | Redaction is key-driven. Detecting arbitrary secrets in prose is unreliable in both directions; callers must keep secrets out of message text. |
-| R6 | Backward clock jump can revive a token | Low | **Accepted** | Would need a monotonic deadline. Low impact: the Gateway independently rejects an expired token. |
-| R7 | No read cap in the active transport executor | Medium | **Open** | The cap exists only in the unused v-next adapter. |
-| R8 | HTTP 5xx not retryable | Low | **Open** | Would change documented retry semantics; the Gateway uses `1011` in a 200 envelope. |
-| R9 | `pkg/transport.Adapter` unreachable and mis-wired | Low | **Open** | `inner` is unused, the base URL is hardcoded, and `WithDeadline` stores one shared cancel that can cancel a previous caller. Dead code today; a trap for the next adopter. |
-| R10 | `passwordHash` and bare `account` not redacted | Low | **Accepted** | `IsSensitiveKey` matches whole names, and `account` is a common word. Chosen deliberately so support correlation keeps working; revisit if the data policy changes. |
+| R2 | Route alias classification is a closed set | **High** | **Open (active path)** | A mutation route missing from `mutationSet` is retried. The public client validates canonical routes, so aliasing is blocked there, but `resilience` is shared and a future caller could pass a raw path. Needs a route-inventory test. |
+| R3 | Half-open push connection blocks indefinitely | Medium | **Open (active path)** | `push.Client`, the released read loop, sets no read deadline, so a silently dead TCP connection blocks until the OS gives up. |
+| R4 | Dedup and gap detection inert | Medium | **Accepted (forward-looking)** | `push.Fanout` supplies no per-event sequence. Correct gap detection is impossible without one; pinned by `TestFanout_DedupInertWithoutSequence`. |
+| R5 | Free-prose secrets are not redacted | Low | **Accepted (active path)** | Redaction is key-driven. Callers must keep secrets out of message text. |
+| R6 | Backward clock jump can revive a token | Low | **Accepted (forward-looking)** | Would need a monotonic deadline. Low impact: the Gateway independently rejects an expired token. |
+| R7 | No read cap in the active transport executor | Medium | **Open (active path)** | The cap exists only in the unused v-next adapter; `internal/transport` uses `io.ReadAll`. |
+| R8 | HTTP 5xx not retryable | Low | **Open (active path)** | Would change documented retry semantics; the Gateway reports overload as `1011` inside a 200 envelope. |
+| R9 | `pkg/transport.Adapter` unreachable and mis-wired | Low | **Open (forward-looking)** | `inner` is unused, the base URL is hardcoded, and `WithDeadline` stores one shared cancel that can cancel a previous caller. A trap for the next adopter. |
+| R10 | `passwordHash` and bare `account` not redacted | Low | **Accepted (active path)** | `IsSensitiveKey` matches whole names and `account` is a common word. Chosen so support correlation keeps working; revisit if the data policy changes. |
 | R11 | No secret scanning in CI | Medium | **Open** | `gosec` and `govulncheck` run, but nothing scans commits for credentials. |
-| R12 | `gosec`/`govulncheck` pinned to `@latest` | Low | **Open** | Non-reproducible CI; a new upstream release can change results without a commit. |
+| R12 | `gosec`/`govulncheck` pinned to `@latest` | Low | **Open** | Non-reproducible CI; an upstream release can change results without a commit. |
+| R13 | `main` is red in CI and v0.1.6 shipped that way | **High** | **Open** | The `gofmt` step fails on three files from E10/E13/E14, which skips vet, tests, race, and the money check. `golangci-lint`, `gosec + govulncheck`, and `goreleaser check` also fail, as does the `goreleaser release` job. Tracked for the next phase, not an E17 regression. |
+| R14 | `internal/auth` declares backoff, single-flight, and refresh that do not exist | Medium | **Open (forward-looking)** | `defaultRetryDelay`, `defaultMaxRetryDelay`, and `Authenticator.mu` are unused, and `doc.go` claims refresh and backoff behaviour that is not implemented. The public `SessionManager` provides single-flight `EnsureLoggedIn`; the v-next `Authenticator` does not. |
 
 ## What the SDK deliberately does not do
 

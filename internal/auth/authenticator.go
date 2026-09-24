@@ -74,7 +74,7 @@ func (a *Authenticator) MustBeAuthenticated(ctx context.Context, accountID domai
 	if !ok {
 		return errNotLoggedIn
 	}
-	if sess.IsExpired(a.tokenManager.clock.(Clock).Now()) {
+	if sess.IsExpired(a.tokenManager.clock.Now()) {
 		return errTokenExpired
 	}
 	return nil
