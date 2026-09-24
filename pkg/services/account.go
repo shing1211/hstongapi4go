@@ -21,7 +21,62 @@ const (
 	opRateQueryList       = "hs/rate/queryList"
 )
 
-const DefaultPageSize = 50
+const (
+	// DefaultPageSize is the page size applied when the requested size is
+	// missing or non-positive.
+	DefaultPageSize = 50
+	// MaxPageSize is the largest page size the Gateway accepts. The documented
+	// limit is strictly less than 100, so the cap is 99.
+	MaxPageSize = 99
+	// maxPages bounds a cursor walk so a Gateway that keeps issuing fresh
+	// cursors cannot make the walk unbounded.
+	maxPages = 1000
+)
+
+// clampPageSize bounds a requested page size to [1, MaxPageSize], substituting
+// DefaultPageSize for a non-positive value.
+func clampPageSize(pageSize int) int {
+	if pageSize <= 0 {
+		return DefaultPageSize
+	}
+	if pageSize > MaxPageSize {
+		return MaxPageSize
+	}
+	return pageSize
+}
+
+// walkFundJourPages walks a queryParamStr cursor list and returns every row
+// gathered, in order. It issues exactly one fetch per page and never retries.
+//
+// The walk stops when a page is empty, when the Gateway reports no further
+// cursor, when the cursor fails to advance, or after maxPages, so a Gateway
+// that ignores queryParamStr cannot cause an unbounded loop. A fetch or context
+// failure returns the rows gathered so far together with the error, so a partial
+// outage is visible to the caller without discarding completed pages.
+func walkFundJourPages(
+	ctx context.Context,
+	pageSize int,
+	cursor string,
+	fetch func(context.Context, int, string) ([]*domain.FundJournalEntry, string, error),
+) ([]*domain.FundJournalEntry, error) {
+	size := clampPageSize(pageSize)
+	var all []*domain.FundJournalEntry
+	for page := 0; page < maxPages; page++ {
+		if err := ctx.Err(); err != nil {
+			return all, err
+		}
+		entries, next, err := fetch(ctx, size, cursor)
+		if err != nil {
+			return all, err
+		}
+		all = append(all, entries...)
+		if len(entries) == 0 || next == "" || next == cursor {
+			return all, nil
+		}
+		cursor = next
+	}
+	return all, nil
+}
 
 type AccountService struct {
 	client *client.Client
@@ -135,38 +190,26 @@ func (s *AccountService) RealFundJourList(ctx context.Context, accountID domain.
 		return nil, errs.New(types.StatusInvalidParam, opRealFundJourList, "accountID must not be empty")
 	}
 
-	var allEntries []*domain.FundJournalEntry
-	cursor := pagination.Cursor
-	pageSize := pagination.PageSize
-	if pageSize <= 0 {
-		pageSize = DefaultPageSize
-	}
-
-	for {
-		var out fundJourListWireResponse
-		if err := s.client.Do(ctx, opRealFundJourList, client.RouteTradeQueryRealFundJourList, realFundJourListWireRequest{
-			ExchangeType:  filter.ExchangeType,
-			QueryCount:    pageSize,
-			QueryParamStr: cursor,
-		}, s.client.JSON(), &out); err != nil {
-			return nil, err
-		}
-
-		for i := range out.Data {
-			allEntries = append(allEntries, domain.FundJournalEntryFromDTO(&out.Data[i]))
-		}
-
-		if len(out.Data) == 0 {
-			break
-		}
-		nextCursor := out.Data[len(out.Data)-1].QueryParamStr
-		if nextCursor == "" {
-			break
-		}
-		cursor = nextCursor
-	}
-
-	return allEntries, nil
+	return walkFundJourPages(ctx, pagination.PageSize, pagination.Cursor,
+		func(ctx context.Context, pageSize int, cursor string) ([]*domain.FundJournalEntry, string, error) {
+			var out fundJourListWireResponse
+			if err := s.client.Do(ctx, opRealFundJourList, client.RouteTradeQueryRealFundJourList, realFundJourListWireRequest{
+				ExchangeType:  filter.ExchangeType,
+				QueryCount:    pageSize,
+				QueryParamStr: cursor,
+			}, s.client.JSON(), &out); err != nil {
+				return nil, "", err
+			}
+			entries := make([]*domain.FundJournalEntry, 0, len(out.Data))
+			for i := range out.Data {
+				entries = append(entries, domain.FundJournalEntryFromDTO(&out.Data[i]))
+			}
+			next := ""
+			if len(out.Data) > 0 {
+				next = out.Data[len(out.Data)-1].QueryParamStr
+			}
+			return entries, next, nil
+		})
 }
 
 type HistoryFundJourListRequest struct {
@@ -194,40 +237,28 @@ func (s *AccountService) HistoryFundJourList(ctx context.Context, accountID doma
 		return nil, errs.New(types.StatusInvalidParam, opHistoryFundJourList, "accountID must not be empty")
 	}
 
-	var allEntries []*domain.FundJournalEntry
-	cursor := pagination.Cursor
-	pageSize := pagination.PageSize
-	if pageSize <= 0 {
-		pageSize = DefaultPageSize
-	}
-
-	for {
-		var out fundJourListWireResponse
-		if err := s.client.Do(ctx, opHistoryFundJourList, client.RouteTradeQueryHistoryFundJourList, historyFundJourListWireRequest{
-			ExchangeType:  filter.ExchangeType,
-			QueryCount:    pageSize,
-			QueryParamStr: cursor,
-			StartDate:     filter.StartDate,
-			EndDate:       filter.EndDate,
-		}, s.client.JSON(), &out); err != nil {
-			return nil, err
-		}
-
-		for i := range out.Data {
-			allEntries = append(allEntries, domain.FundJournalEntryFromDTO(&out.Data[i]))
-		}
-
-		if len(out.Data) == 0 {
-			break
-		}
-		nextCursor := out.Data[len(out.Data)-1].QueryParamStr
-		if nextCursor == "" {
-			break
-		}
-		cursor = nextCursor
-	}
-
-	return allEntries, nil
+	return walkFundJourPages(ctx, pagination.PageSize, pagination.Cursor,
+		func(ctx context.Context, pageSize int, cursor string) ([]*domain.FundJournalEntry, string, error) {
+			var out fundJourListWireResponse
+			if err := s.client.Do(ctx, opHistoryFundJourList, client.RouteTradeQueryHistoryFundJourList, historyFundJourListWireRequest{
+				ExchangeType:  filter.ExchangeType,
+				QueryCount:    pageSize,
+				QueryParamStr: cursor,
+				StartDate:     filter.StartDate,
+				EndDate:       filter.EndDate,
+			}, s.client.JSON(), &out); err != nil {
+				return nil, "", err
+			}
+			entries := make([]*domain.FundJournalEntry, 0, len(out.Data))
+			for i := range out.Data {
+				entries = append(entries, domain.FundJournalEntryFromDTO(&out.Data[i]))
+			}
+			next := ""
+			if len(out.Data) > 0 {
+				next = out.Data[len(out.Data)-1].QueryParamStr
+			}
+			return entries, next, nil
+		})
 }
 
 type RateQueryListRequest struct {
