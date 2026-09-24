@@ -67,9 +67,9 @@ func TestMarketFromExchange(t *testing.T) {
 
 func TestDefaultHKTickSchedule(t *testing.T) {
 	tests := []struct {
-		dtype     int32
-		wantLot   uint64
-		wantTick  string
+		dtype    int32
+		wantLot  uint64
+		wantTick string
 	}{
 		{10000, 100, "0.001"},
 		{10002, 100, "0.001"},

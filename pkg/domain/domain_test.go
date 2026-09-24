@@ -11,14 +11,14 @@ import (
 
 func TestMoney(t *testing.T) {
 	tests := []struct {
-		name    string
-		value   string
+		name     string
+		value    string
 		currency string
-		scale   uint8
-		want    string
-		isZero  bool
-		isPos   bool
-		isNeg   bool
+		scale    uint8
+		want     string
+		isZero   bool
+		isPos    bool
+		isNeg    bool
 	}{
 		{"HKD 100.500", "100.500", "HKD", 3, "100.5", false, true, false},
 		{"HKD zero", "0", "HKD", 3, "0", true, false, false},
