@@ -5,6 +5,48 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.6] - 2026-09-24
+
+### Added
+
+- **REST service layer (`pkg/services`).** Market (9 pull endpoints plus
+  Subscribe/Unsubscribe), account/asset/position (5), and trading (13) endpoints
+  wired through the new HTTP adapter, with HK lot/tick/session/type/TIF
+  validation and a closed order-mutation set that is never retried.
+- **Domain wire mappers (`pkg/domain`).** Mappers for `BasicQot`, `KLine`,
+  `TimeShare`, `Ticker`, `Broker`, margin funds, holdings, fund journals,
+  interest rates, entrusts, fills, fares, conditional orders, max-available, and
+  margin info, plus typed `Symbol`/`Market` helpers.
+- **HTTP adapter (`pkg/transport`).** Deadlines, response-size caps, correlation
+  IDs, cursor-based pagination, and query-only retry layered over the core
+  transport.
+- **Push engine (`internal/push`).** TCP client (151-byte framing, `PBNotify`
+  decode, subscription registry, heartbeat, reconnect with exponential backoff,
+  resubscribe), typed normalizers with unknown/versioned tolerance, and fan-out
+  with dedup, gap/freshness detection, and drop-oldest backpressure.
+- **OpenTelemetry (`otel` build tag).** Traces and metrics (`internal/otel`),
+  `client` options `WithTracerProvider`, `WithMeterProvider`, and
+  `WithPropagator`, and the `OTelHook` helper; stdlib-only when the tag is absent.
+- **Integration and fuzz suites.** Env-gated mock/real-Gateway push integration
+  tests and `FuzzReadFrame` for the frame reader.
+- **Enterprise toolchain and CI/CD.** `golangci-lint`, `gosec`, `govulncheck`,
+  a coverage gate (>=85% on `pkg/domain`, `internal/auth`, `internal/transport`),
+  GoReleaser config with checksums, SPDX SBOM, and Cosign provenance, and the
+  GitHub + Gitea release workflow.
+- **Documentation.** `docs/COMPAT.md` compatibility matrix and
+  `docs/RELEASE_CHECKLIST.md`.
+
+### Changed
+
+- `make coverage` now enforces the 85% gate via `scripts/coverage_gate.go`.
+- `go.mod` adds `go.opentelemetry.io/otel` v1.36.0 (otel build tag only) and
+  `go.uber.org/goleak` v1.3.0 (test-only).
+
+### Fixed
+
+- Pre-existing coverage gaps in `pkg/domain` (25.4% to 94.3%) and
+  `internal/auth` (44.3% to 92.9%) closed with targeted unit tests.
+
 ## [0.1.5] - 2026-09-24
 
 ### Added
@@ -245,10 +287,11 @@ canonical in [docs/SPEC.md](./docs/SPEC.md).
 - The plaintext trade password is held in memory only, encrypted before it
   leaves the process, and never logged or embedded in an error.
 
-[Unreleased]: https://github.com/shing1211/hstongapi4go/compare/v0.1.5...HEAD
+[Unreleased]: https://github.com/shing1211/hstongapi4go/compare/v0.1.6...HEAD
 [0.1.0]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.0
 [0.1.1]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.1
 [0.1.2]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.2
 [0.1.3]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.3
 [0.1.4]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.4
 [0.1.5]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.5
+[0.1.6]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.6

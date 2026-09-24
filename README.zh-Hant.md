@@ -23,7 +23,7 @@
 [English](./README.md) · [简体中文](./README.zh-Hans.md) · [繁體中文](./README.zh-Hant.md) · [日本語](./README.ja.md) · [한국어](./README.ko.md) · [Español](./README.es.md)
 
 > 本文件是英文 [README](./README.md) 的社群翻譯。**英文版本為準。**
-> 同步於 / Last synced: 2026-09-23
+> 同步於 / Last synced: 2026-09-24
 
 ## 目錄
 

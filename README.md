@@ -26,7 +26,7 @@
 
 [English](./README.md) · [简体中文](./README.zh-Hans.md) · [繁體中文](./README.zh-Hant.md) · [日本語](./README.ja.md) · [한국어](./README.ko.md) · [Español](./README.es.md)
 
-> Canonical English source. Last synced: 2026-09-23
+> Canonical English source. Last synced: 2026-09-24
 
 ## Key Concepts
 
@@ -80,7 +80,7 @@ Before writing your first call, understand these SDK abstractions:
 | Documentation (READMEs, MkDocs site, ADRs, SPEC, LEGACY) | Implemented |
 | Offline tests + all-endpoint SDK-to-mock e2e | Implemented |
 | Integration tests against a real Gateway | Written and env-gated; live confirmation pending a user run |
-| Release (GitHub + Gitee) | v0.1.4 ✓ |
+| Release (GitHub + Gitee) | v0.1.6 ✓ |
 
 All 51 HTTP endpoints and 11 market push topics are implemented. Counts are
 canonical in [docs/SPEC.md](./docs/SPEC.md); do not hand-edit them elsewhere.
