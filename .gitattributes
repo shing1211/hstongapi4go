@@ -1,2 +1,30 @@
-# Auto detect text files and perform LF normalization
-* text=auto
+# Line-ending policy.
+#
+# All text is stored with LF endings in the repository, and checked out with LF
+# on every platform, including Windows.
+#
+# The `eol=lf` rules matter for correctness, not just tidiness:
+#
+#   * Protobuf codegen. buf's comment normalisation differs between CRLF and LF
+#     input. For the vendored CJK comment in common/constant/NotifyMsgType.proto
+#     it emits "//行情..." from a CRLF input and "// 行情..." from an LF input, so
+#     `make proto-verify` reported drift that depended on the contributor's
+#     platform. Pinning the input to LF makes generation byte-identical
+#     everywhere.
+#
+#   * Local gofmt. On a CRLF checkout `gofmt -l .` lists every file, because
+#     gofmt normalises to LF. That made a plain gofmt check useless on Windows
+#     while CI, which sees LF, was authoritative. With LF checkouts the local
+#     result matches CI and `make fmt-check` is no longer needed to emulate it.
+#
+# proto/ is vendored byte-for-byte from the vendor SDK (see proto/PROVENANCE.md).
+# Storing LF does not re-encode or reformat it; the committed bytes are the
+# normalised form git already produced.
+* text=auto eol=lf
+*.go text eol=lf
+*.proto text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.py text eol=lf
+*.sh text eol=lf

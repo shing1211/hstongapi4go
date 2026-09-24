@@ -90,6 +90,11 @@ jobs:
     needs: [build, lint]
     steps:
       - uses: actions/checkout@v7
+        with:
+          # The git-revision-date-localized plugin needs real history; with the
+          # default shallow fetch it warns, and `mkdocs build --strict` turns
+          # that warning into a failure.
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
