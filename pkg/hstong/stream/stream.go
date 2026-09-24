@@ -606,7 +606,7 @@ func notifyTime(ms uint64) time.Time {
 	if ms == 0 {
 		return time.Time{}
 	}
-	return time.UnixMilli(int64(ms)).UTC()
+	return time.UnixMilli(int64(ms)).UTC() // #nosec G115 -- Gateway notifyTime; a wrapped value yields an implausible timestamp, not an unsafe one
 }
 
 // Event is one decoded market push message delivered on a Subscription's

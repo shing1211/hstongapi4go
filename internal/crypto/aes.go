@@ -13,7 +13,7 @@ import (
 // HStong Gateway trade/TradeLogin documentation. It is public reference data
 // from the protocol specification, not a secret, and it decodes to a 24-byte
 // AES-192 key.
-const tradePasswordKeyBase64 = "m+qS04/2CH1OweCnmXZ3TDZkCQS+hBzY"
+const tradePasswordKeyBase64 = "m+qS04/2CH1OweCnmXZ3TDZkCQS+hBzY" // #nosec G101 -- published by HStong as protocol reference data, not a secret (ADR 0005)
 
 // ErrInvalidKeyLength is returned when the trade-password key is not a valid
 // AES key length (16, 24, or 32 bytes). The error never includes key material

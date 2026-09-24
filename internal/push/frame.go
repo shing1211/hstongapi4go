@@ -122,14 +122,14 @@ type Header struct {
 func EncodeHeader(h Header) [HeaderSize]byte {
 	var b [HeaderSize]byte
 	copy(b[offHeaderFlag:offHeaderFlag+2], h.HeaderFlag[:])
-	binary.LittleEndian.PutUint16(b[offMsgType:offMsgType+2], uint16(h.MsgType))
+	binary.LittleEndian.PutUint16(b[offMsgType:offMsgType+2], uint16(h.MsgType)) // #nosec G115 -- unsigned encoding of a signed field; the wire form is fixed-width little-endian
 	b[offProtoFmtType] = h.ProtoFmtType
 	b[offProtoVer] = h.ProtoVer
-	binary.LittleEndian.PutUint32(b[offSerialNo:offSerialNo+4], uint32(h.SerialNo))
-	binary.LittleEndian.PutUint32(b[offBodyLen:offBodyLen+4], uint32(h.BodyLen))
+	binary.LittleEndian.PutUint32(b[offSerialNo:offSerialNo+4], uint32(h.SerialNo)) // #nosec G115 -- unsigned encoding of a signed field; the wire form is fixed-width little-endian
+	binary.LittleEndian.PutUint32(b[offBodyLen:offBodyLen+4], uint32(h.BodyLen)) // #nosec G115 -- unsigned encoding of a signed field; ReadFrame range-checks the decoded value before use
 	copy(b[offBodySHA1:offBodySHA1+BodySHA1Len], h.BodySHA1[:])
 	b[offCompressAlgo] = h.CompressAlgorithm
-	binary.LittleEndian.PutUint64(b[offReserved:offReserved+8], uint64(h.Reserved))
+	binary.LittleEndian.PutUint64(b[offReserved:offReserved+8], uint64(h.Reserved)) // #nosec G115 -- unsigned encoding of a signed field; the wire form is fixed-width little-endian
 	return b
 }
 
@@ -148,14 +148,14 @@ func DecodeHeader(b []byte) (Header, error) {
 	if string(h.HeaderFlag[:]) != Magic {
 		return Header{}, fmt.Errorf("%w: got %q, want %q", ErrBadMagic, string(h.HeaderFlag[:]), Magic)
 	}
-	h.MsgType = MsgType(int16(binary.LittleEndian.Uint16(b[offMsgType : offMsgType+2])))
+	h.MsgType = MsgType(int16(binary.LittleEndian.Uint16(b[offMsgType : offMsgType+2]))) // #nosec G115 -- decode of a fixed-width wire field; not an arithmetic conversion
 	h.ProtoFmtType = b[offProtoFmtType]
 	h.ProtoVer = b[offProtoVer]
-	h.SerialNo = int32(binary.LittleEndian.Uint32(b[offSerialNo : offSerialNo+4]))
-	h.BodyLen = int32(binary.LittleEndian.Uint32(b[offBodyLen : offBodyLen+4]))
+	h.SerialNo = int32(binary.LittleEndian.Uint32(b[offSerialNo : offSerialNo+4])) // #nosec G115 -- decode of a fixed-width wire field; not an arithmetic conversion
+	h.BodyLen = int32(binary.LittleEndian.Uint32(b[offBodyLen : offBodyLen+4])) // #nosec G115 -- decode of a fixed-width wire field; ReadFrame range-checks BodyLen before use
 	copy(h.BodySHA1[:], b[offBodySHA1:offBodySHA1+BodySHA1Len])
 	h.CompressAlgorithm = b[offCompressAlgo]
-	h.Reserved = int64(binary.LittleEndian.Uint64(b[offReserved : offReserved+8]))
+	h.Reserved = int64(binary.LittleEndian.Uint64(b[offReserved : offReserved+8])) // #nosec G115 -- decode of a fixed-width wire field; not an arithmetic conversion
 	return h, nil
 }
 
@@ -210,7 +210,7 @@ func WriteFrame(w io.Writer, h Header, body []byte) error {
 		return fmt.Errorf("%w: %d exceeds %d", ErrBodyTooLarge, len(body), MaxBodyLen)
 	}
 	h.HeaderFlag = [2]byte{Magic[0], Magic[1]}
-	h.BodyLen = int32(len(body))
+	h.BodyLen = int32(len(body)) // #nosec G115 -- len(body) is bounded by MaxBodyLen immediately above, so it fits in int32
 	raw := EncodeHeader(h)
 	if err := writeFull(w, raw[:]); err != nil {
 		return err

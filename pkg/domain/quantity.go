@@ -5,6 +5,7 @@ package domain
 
 import (
 	"fmt"
+	"math"
 
 	"github.com/shopspring/decimal"
 )
@@ -33,9 +34,15 @@ func (q Quantity) ValidateInteger() error {
 	return nil
 }
 
+// ValidateLot reports whether the quantity is an exact multiple of lot. A lot
+// that does not fit in an int64 is rejected rather than converted, because
+// wrapping it would produce a negative modulus and a wrong answer.
 func (q Quantity) ValidateLot(lot uint64) error {
 	if lot == 0 {
 		return nil
+	}
+	if lot > math.MaxInt64 {
+		return fmt.Errorf("domain: Quantity: lot %d is out of range", lot)
 	}
 	lotDec := decimal.NewFromInt(int64(lot))
 	remainder := q.dec.Mod(lotDec)

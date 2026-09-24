@@ -27,7 +27,7 @@ const (
 	EnvTimeout = "HSTONG_TIMEOUT"
 	// EnvTradePassword is the plaintext trade password. It is sensitive and is
 	// never logged. Default: unset.
-	EnvTradePassword = "HSTONG_TRADE_PASSWORD"
+	EnvTradePassword = "HSTONG_TRADE_PASSWORD" // #nosec G101 -- environment variable name, not a credential value
 	// EnvVerifyPush enables push-frame signature verification and is parsed
 	// with strconv.ParseBool ("1", "t", "true", "0", "f", "false"). Default:
 	// false.

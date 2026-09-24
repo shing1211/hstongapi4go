@@ -393,13 +393,13 @@ func (m *Manager) buildTopicRequest(topicID int, securities []*dto.Security) []b
 	buf[0] = 'H'
 	buf[1] = 'S'
 	binary.LittleEndian.PutUint16(buf[2:4], uint16(MsgRequest))
-	binary.LittleEndian.PutUint32(buf[6:10], uint32(topicID))
-	binary.LittleEndian.PutUint32(buf[10:14], uint32(bodyLen))
+	binary.LittleEndian.PutUint32(buf[6:10], uint32(topicID))       // #nosec G115 -- topicID is a caller-supplied int written to a fixed 4-byte wire field
+	binary.LittleEndian.PutUint32(buf[10:14], uint32(bodyLen))      // #nosec G115 -- bodyLen is this frame's own marshalled length, written to a fixed 4-byte wire field
 
 	offset := 151
 	for i, s := range securities {
 		if s != nil {
-			binary.LittleEndian.PutUint32(buf[offset:offset+4], uint32(i))
+			binary.LittleEndian.PutUint32(buf[offset:offset+4], uint32(i)) // #nosec G115 -- i is a slice index bounded by the number of securities, written to a fixed 4-byte wire field
 			offset += 4
 		}
 	}

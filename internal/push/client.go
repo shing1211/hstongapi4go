@@ -661,6 +661,6 @@ func nextBackoff(cur, max time.Duration) time.Duration {
 	if next <= 0 {
 		return cur
 	}
-	jitter := time.Duration(rand.Int63n(int64(next)))
+	jitter := time.Duration(rand.Int63n(int64(next))) // #nosec G404 -- reconnect backoff jitter only; not a security-sensitive random value
 	return next/2 + jitter/2
 }

@@ -141,12 +141,17 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+      # gosec lives in github.com/securego/gosec. The previous path
+      # (honnef.co/go/tools/cmd/gosec) is staticcheck's module and does not
+      # exist, so this job failed at install and govulncheck never ran.
+      # Both are pinned rather than @latest so a scanner result is reproducible
+      # and cannot change without a commit.
       - name: Install gosec
-        run: go install honnef.co/go/tools/cmd/gosec@latest
+        run: go install github.com/securego/gosec/v2/cmd/gosec@v2.22.10
       - name: Run gosec
-        run: gosec ./...
+        run: gosec -exclude-generated ./...
       - name: Install govulncheck
-        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+        run: go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
       - name: Run govulncheck
         run: govulncheck ./...
 

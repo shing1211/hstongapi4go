@@ -23,7 +23,7 @@ func main() {
 	failed := false
 
 	for _, pkg := range pkgs {
-		cmd := exec.Command("go", "test", "-coverprofile=coverage_tmp.out", "-covermode=atomic", "-cover", pkg.path)
+		cmd := exec.Command("go", "test", "-coverprofile=coverage_tmp.out", "-covermode=atomic", "-cover", pkg.path) // #nosec G204 -- fixed argv from a hardcoded package list in a developer script; no external input
 		cmd.Dir = "."
 		out, _ := cmd.CombinedOutput()
 		pct := extractCoverage(string(out))

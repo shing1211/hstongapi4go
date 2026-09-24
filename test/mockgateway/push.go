@@ -85,7 +85,7 @@ func encodeNotify(msgType types.NotifyMsgType, payload proto.Message, typeURL st
 	notify := &pbmsg.PBNotify{
 		NotifyMsgType: pbconstant.NotifyMsgType(msgType),
 		NotifyId:      notifyID(payload),
-		NotifyTime:    uint64(time.Now().UnixMilli()),
+		NotifyTime:    uint64(time.Now().UnixMilli()), // #nosec G115 -- UnixMilli is positive for any realistic wall clock
 		Payload:       packed,
 	}
 	body, err := proto.Marshal(notify)

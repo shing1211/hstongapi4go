@@ -7,7 +7,7 @@ import (
 	"bytes"
 	"crypto"
 	"crypto/rsa"
-	"crypto/sha1"
+	"crypto/sha1" // #nosec G505 -- the Gateway signs bodySHA1 with SHA1WithRSA; the algorithm is fixed by the wire protocol and verification is opt-in (ADR 0005)
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/pem"
@@ -68,7 +68,7 @@ func (v *Verifier) Verify(h Header, body []byte) error {
 	if h.BodySHA1 == zero {
 		return ErrMissingSignature
 	}
-	sum := sha1.Sum(body)
+	sum := sha1.Sum(body) // #nosec G401 -- mandated by the Gateway's SHA1WithRSA push signature; not a security choice by the SDK
 	if err := rsa.VerifyPKCS1v15(v.key, crypto.SHA1, sum[:], h.BodySHA1[:]); err != nil {
 		return fmt.Errorf("%w: %v", ErrSignatureMismatch, err)
 	}

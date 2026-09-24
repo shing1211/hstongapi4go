@@ -214,7 +214,7 @@ func (p Policy) Delay(n int) time.Duration {
 	if p.Jitter && d > 0 {
 		half := d / 2
 		if half > 0 {
-			d = half + time.Duration(rand.Int63n(int64(half)+1))
+			d = half + time.Duration(rand.Int63n(int64(half)+1)) // #nosec G404 -- retry jitter only; not a security-sensitive random value
 		}
 	}
 	return d

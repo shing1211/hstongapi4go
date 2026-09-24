@@ -115,7 +115,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("AlgoQueryEntrustIdList: %v", err)
 	}
-	log.Printf("child entrusts of %s: %d", orderID, len(entrustIDs))
+	log.Printf("child entrusts of %s: %d", orderID, len(entrustIDs)) // #nosec G706 -- example code logging a Gateway-assigned order identifier; no user-controlled input
 
 	if stop, _ := strconv.ParseBool(envOr("HSTONG_EXAMPLE_PLACE_ORDER", "false")); stop {
 		id, err := m.ActionOrder(ctx, algo.ActionOrderParams{
@@ -124,7 +124,7 @@ func main() {
 			TargetStrategy: algo.StrategyVWAP,
 		})
 		if err != nil {
-			log.Printf("AlgoActionOrder stop %s: %v", orderID, err)
+			log.Printf("AlgoActionOrder stop %s: %v", orderID, err) // #nosec G706 -- example code logging a Gateway-assigned order identifier; no user-controlled input
 		} else {
 			log.Printf("stopped algo master order %s", id)
 		}

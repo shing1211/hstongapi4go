@@ -125,7 +125,7 @@ lint: ## Run golangci-lint
 
 .PHONY: gosec
 gosec: ## Run gosec security scanner
-	$(GOSEC) ./...
+	$(GOSEC) -exclude-generated ./...
 
 .PHONY: govulncheck
 govulncheck: ## Run govulncheck vulnerability scanner

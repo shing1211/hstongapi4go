@@ -695,7 +695,7 @@ func (m *Manager) historyParams(op string, req HistoryQueryRequest) (HistoryQuer
 		req.PageNo = defaultPageNo
 	}
 	if req.PageSize <= 0 {
-		req.PageSize = int32(m.defaultPageSize)
+		req.PageSize = int32(m.defaultPageSize) // #nosec G115 -- WithDefaultPageSize bounds defaultPageSize to [1, maxPageSizeExclusive), so it fits in int32
 	}
 	if req.PageSize >= maxPageSizeExclusive {
 		return HistoryQueryRequest{}, invalidParam(op, "pageSize must be below 100")
