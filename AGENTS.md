@@ -90,7 +90,7 @@ make vet               # go vet ./...
 make test              # unit tests
 make test-race         # unit tests with -race -count=1
 make test-integration  # env-gated real-Gateway tests (HSTONG_INTEGRATION=1)
-make coverage          # coverage gate: >=85% on pkg/domain, internal/auth, internal/transport, pkg/hstong{,/stream,/trade,/algo}, pkg/types
+make coverage          # coverage gate: >=85% on pkg/domain, internal/auth, internal/transport, internal/push, pkg/hstong{,/stream,/trade,/algo}, pkg/types, pkg/transport
 make check             # fmt + vet + tests + money-check
 make money-check       # reject float misuse of money fields
 make lint              # golangci-lint (v2.9+, required for the go 1.26 directive)

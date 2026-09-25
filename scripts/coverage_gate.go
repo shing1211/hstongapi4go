@@ -23,6 +23,8 @@ func main() {
 		{"./pkg/hstong/trade", "github.com/shing1211/hstongapi4go/pkg/hstong/trade"},
 		{"./pkg/hstong/algo", "github.com/shing1211/hstongapi4go/pkg/hstong/algo"},
 		{"./pkg/types", "github.com/shing1211/hstongapi4go/pkg/types"},
+		{"./pkg/transport", "github.com/shing1211/hstongapi4go/pkg/transport"},
+		{"./internal/push", "github.com/shing1211/hstongapi4go/internal/push"},
 	}
 	gate := 85.0
 	failed := false

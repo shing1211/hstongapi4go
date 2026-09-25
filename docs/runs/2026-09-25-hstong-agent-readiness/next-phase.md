@@ -81,7 +81,7 @@ be worse than failing.
 | `pkg/transport/mappers.go` | **Done** (`c6b5226`). All mappers covered, including nil-safety; package coverage 58.8% → 88.7% | — |
 | `otel`-tag test job | **Done** (`5a14c99`). Builds, vets, and tests with the tag on every push, not only on a release tag | — |
 | Bounded fuzz job | **Done** (`5a14c99`). 30s on `FuzzReadFrame`; verified locally at 734k executions, 18 newly interesting inputs, no crash | — |
-| Coverage gate scope | **Done.** Gate widened to eight packages: the released public surface `pkg/hstong` 90.7%, `stream` 85.9%, `trade` 86.3%, `algo` 87.5%, `pkg/types` 100.0%, alongside `pkg/domain` 93.8%, `internal/auth` 94.2%, `internal/transport` 99.1%. `internal/push` 80.0% remains ungated (step 1c) | — |
+| Coverage gate scope | **Done.** Gate covers ten packages: the released public surface `pkg/hstong` 90.7%, `stream` 85.9%, `trade` 86.3%, `algo` 87.5%, `pkg/types` 100.0%, `pkg/transport` 100.0%, alongside `pkg/domain` 93.8%, `internal/auth` 94.2%, `internal/transport` 97.6%, `internal/push` 86.1%. Every package in the release path is now gated | — |
 
 ## 4. The Option A programme
 
@@ -111,10 +111,13 @@ In summary, in order:
   declares itself with `client.Client` injected, rather than on the concrete
   type. That is the real remaining layering question now that the second
   pipeline is gone.
-- R14 — rewrite `internal/auth/doc.go` to match reality rather than adding a
-  second login implementation.
-- Step 1c — re-gate `internal/push`, which is still 80.0% and whose gap is in
-  `client.go` rather than in the retired code.
+- R14 — **done as a correction.** `doc.go` was already accurate; the register was
+  wrong to claim it advertised unimplemented behaviour. Re-scoped: the
+  single-flight and refresh primitives exist with no non-test caller, so they
+  are un-composed rather than undeclared. `doc.go` now says so explicitly.
+- Step 8 and step 1c — **done.** `pkg/transport` is at 100% and `internal/push`
+  at 86.1%; both are gated. The gate now covers ten packages, and every package
+  in the release path is covered.
 - Then: `depguard` boundary rule, `pkg/services` tests, the migration guide,
   and the v1.0 schedule.
 
@@ -168,9 +171,10 @@ What remains, in order:
    findings could change §4 — it is also the only way to finish R3.
 
 The coverage gate was widened ahead of the decision, on released public surface
-only (`pkg/hstong*` and `pkg/types`). Those packages are live public surface, so
-their tests survive either N1 outcome; the deliberate omission is
-`internal/push`, now waiting on step 1c.
+only, precisely so those tests would survive either N1 outcome. `internal/push`
+and `pkg/transport` were left out at that point because the v-next decision could
+have deleted most of them; with the decision made, both are gated and the gate
+covers every package in the release path.
 
 ## 8. Documented acceptances — not to be fixed
 

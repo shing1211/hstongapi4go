@@ -27,6 +27,15 @@
 //   - A refresh action driven by Session.ShouldRefresh. Callers read RefreshAt
 //     and decide.
 //
+// The primitives for the last two exist but nothing composes them:
+// Session.ShouldRefresh, TokenManager.IsLoginInProgress, markLoginPending, and
+// clearLoginPending have no caller outside tests. Concurrent logins are
+// therefore not coalesced, and the refresh window is never acted on.
+// Authenticator does check Session.IsExpired, so it re-logs-in on an expired
+// token; the single-flight wrapper and the refresh trigger are what is missing.
+// Do not read the presence of those methods as evidence that either behaviour
+// is active.
+//
 // This package is not yet wired into the released client. See
 // docs/threat-model.md for which controls are active and which are
 // forward-looking.
