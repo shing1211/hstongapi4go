@@ -193,6 +193,44 @@ jobs:
           # credential that landed in an earlier commit is still reported.
           args: detect --source . --redact --no-banner
 
+  otel:
+    name: build and test with otel tag
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          check-latest: true
+          cache: true
+      # The OTel instrumentation is behind the `otel` build tag, so the default
+      # build never compiles or exercises it. The release workflow already built
+      # and tested it, but only on a version tag; this job runs on every push and
+      # pull request so a break is caught before release rather than during it.
+      - name: Build with otel tag
+        run: go build -tags otel ./...
+      - name: Vet with otel tag
+        run: go vet -tags otel ./...
+      - name: Test with otel tag
+        run: go test -tags otel ./... -count=1
+
+  fuzz:
+    name: bounded fuzz seeds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          check-latest: true
+      # A normal `go test ./...` runs only the seed corpus. This runs the fuzz
+      # target for a bounded wall-clock budget so it explores beyond the twelve
+      # inline `f.Add` seeds without turning CI into a long fuzzing campaign.
+      # The budget is deliberately small: a smoke test for new inputs, not a
+      # substitute for a dedicated fuzzing run.
+      - name: Fuzz ReadFrame
+        run: go test ./internal/push/ -run=^$ -fuzz=FuzzReadFrame -fuzztime=30s
+
   coverage:
     name: coverage gate
     runs-on: ubuntu-latest
