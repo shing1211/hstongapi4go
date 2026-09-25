@@ -251,6 +251,36 @@ One capability is genuinely worth carrying forward: **correlation-ID injection**
 feature rather than a repair, it is wire-visible, and ADR 0011 means it has to be
 opt-in — so it is tracked as its own step below rather than smuggled in here.
 
+### 5.5 Correlation IDs, now on the live path
+
+Step 3 is done. `client.WithCorrelationIDHeader(name)` sends a header named
+`name` whose value is a fresh 32-character lowercase hex identifier per request.
+The default is off, so an existing caller sends exactly what it sent before.
+
+Three decisions worth recording, because each was a choice rather than an
+obvious default:
+
+- **`crypto/rand`, not `math/rand`.** The value lands in Gateway and proxy logs.
+  A predictable identifier is useful to anyone trying to collide requests or
+  forge a plausible one, so 128 bits from `crypto/rand` costs nothing to get
+  right.
+- **A header *name* is configured, not a fixed name.** A caller with an existing
+  convention should not have to strip ours. A custom name does not also enable
+  `X-Correlation-ID`, which is asserted.
+- **A whitespace-only name disables it.** `net/http` rejects a header name
+  containing invalid characters, so `WithCorrelationIDHeader("   ")` would turn a
+  typo into every request failing. The name is trimmed and an empty result
+  behaves as off.
+
+The tests assert the properties that make the feature useful rather than just
+its presence: ids are 32 lowercase hex characters, decode to 16 bytes, and are
+**distinct across 25 sequential and 80 concurrent requests**. Uniqueness is the
+whole point — a shared id would make a log line ambiguous, which is the failure
+this feature exists to prevent. The header is also asserted to be present on a
+request that is about to fail, since that is when correlating a log line matters
+most. Ten tests in total; the transport-level ones were verified to fail with the
+header-setting code removed.
+
 ## 6. Programme
 
 Option A is a multi-release programme. Order matters: step 1 decides what
@@ -262,7 +292,7 @@ Option A is a multi-release programme. Order matters: step 1 decides what
 | 1b | ~~Execute the retirement~~ | **Done.** Deleted `manager.go`, `fanout.go`, their 5 test files, and `test/integration/push_integration_test.go`. `FreshnessMonitor` lifted to `freshness.go` with its tests. R4's rationale rewritten, since `DedupCache` no longer exists. |
 | 1c | Re-gate `internal/push` | **Still needed.** At 80.0% after the retirement — the deleted code was well covered by its own tests, so removing it did not raise the ratio. The gap is in `client.go`, not in what was removed. |
 | ~~2~~ | ~~Rewire `pkg/services` through `pkg/transport.Adapter`~~ | **Cancelled, and the Adapter removed instead.** Reading both `Do` implementations showed the rewire would have dropped rate limiting, circuit breaking, metrics, and tracing from every v-next call. `Adapter` had no production caller and three defects. Evidence in §5.4. R9 resolved. `pkg/transport` went 88.7% → 100%. |
-| 3 | Add opt-in correlation-ID injection to `client` | The one capability the Adapter had that the live path lacks. Must be opt-in and off by default: it is wire-visible, and ADR 0011 forbids changing what v0.1.x puts on the wire without opt-in. |
+| 3 | ~~Add opt-in correlation-ID injection to `client`~~ | **Done.** `client.WithCorrelationIDHeader` and `internal/transport.WithCorrelationIDHeader`. Off by default, 32-char lowercase hex from `crypto/rand`, fresh per request. 10 tests, verified to fail with the header-setting code removed. |
 | 4 | Resolve R14 | Recommend rewriting `doc.go` to describe only what exists rather than adding a second login implementation — the released `SessionManager.EnsureLoggedIn` already covers the released path, and a second one is new risk rather than a fix. |
 | 5 | Decide the `pkg/services` request path | **Newly open, and it is the real remaining question for Option A.** `pkg/services` calls `client.Do` directly. That is *correct* — `client.Client` is the better pipeline — so the question is no longer "route it through the Adapter" but whether `pkg/services` should depend on a narrow interface it declares itself (dependency inversion, as ADR 0010 intends) with `client.Client` as the injected implementation, rather than on the concrete type. That keeps the layering testable without a second pipeline. |
 | 6 | Add a `depguard` boundary rule | Makes the intended layering machine-enforced in `.golangci.yml`, so drift is caught by CI rather than by review. |

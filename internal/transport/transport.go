@@ -6,6 +6,8 @@ package transport
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -75,6 +77,11 @@ type Config struct {
 	// MaxResponseBytes is the largest response body that will be read. A body
 	// above the cap is rejected with a typed error instead of being buffered.
 	MaxResponseBytes int64
+	// CorrelationIDHeader, when non-empty, names a request header that Transport
+	// sets to a freshly generated 16-byte hex identifier on every request. An
+	// empty value, the default, sends no such header: the field is opt-in because
+	// it changes what the SDK puts on the wire, which ADR 0011 freezes for v0.1.x.
+	CorrelationIDHeader string
 }
 
 // Option mutates a Config. Options are applied in order on top of the defaults
@@ -111,14 +118,23 @@ func WithMaxResponseBytes(n int64) Option {
 	return func(c *Config) { c.MaxResponseBytes = n }
 }
 
+// WithCorrelationIDHeader sets the name of a header that receives a fresh
+// per-request correlation identifier. An empty or whitespace-only name disables
+// the header, matching the default. Each request gets a distinct value, so two
+// concurrent calls are never conflated in Gateway or proxy logs.
+func WithCorrelationIDHeader(name string) Option {
+	return func(c *Config) { c.CorrelationIDHeader = name }
+}
+
 // Transport executes Gateway HTTP requests. It is immutable after New and safe
 // for concurrent use; it holds no per-request state. Each Do call issues
 // exactly one HTTP attempt and never retries (docs/adr/0003-no-auto-retry-orders.md).
 type Transport struct {
-	baseURL          string
-	client           *http.Client
-	defaultTimeout   time.Duration
-	maxResponseBytes int64
+	baseURL             string
+	client              *http.Client
+	defaultTimeout      time.Duration
+	maxResponseBytes    int64
+	correlationIDHeader string
 }
 
 // New builds a Transport from opts, applying them in order on top of
@@ -144,6 +160,7 @@ func New(opts ...Option) *Transport {
 	if cfg.MaxResponseBytes <= 0 {
 		cfg.MaxResponseBytes = DefaultMaxResponseBytes
 	}
+	cfg.CorrelationIDHeader = strings.TrimSpace(cfg.CorrelationIDHeader)
 
 	client := cfg.HTTPClient
 	if client == nil {
@@ -156,11 +173,24 @@ func New(opts ...Option) *Transport {
 	}
 
 	return &Transport{
-		baseURL:          strings.TrimRight(cfg.BaseURL, "/"),
-		client:           client,
-		defaultTimeout:   cfg.DefaultTimeout,
-		maxResponseBytes: cfg.MaxResponseBytes,
+		baseURL:             strings.TrimRight(cfg.BaseURL, "/"),
+		client:              client,
+		defaultTimeout:      cfg.DefaultTimeout,
+		maxResponseBytes:    cfg.MaxResponseBytes,
+		correlationIDHeader: cfg.CorrelationIDHeader,
 	}
+}
+
+// newCorrelationID returns a 128-bit identifier rendered as 32 lowercase hex
+// characters. crypto/rand is used rather than math/rand because the value ends
+// up in Gateway and proxy logs, where a predictable identifier is useful to an
+// attacker trying to collide requests or forge a plausible one.
+func newCorrelationID() (string, error) {
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b[:]), nil
 }
 
 // Do performs one POST to baseURL+path and decodes the response into out.
@@ -201,6 +231,13 @@ func (t *Transport) Do(ctx context.Context, op, path string, params any, codec C
 		return errs.Wrap(err, "", op, "build request")
 	}
 	req.Header.Set("Content-Type", "application/json")
+	if t.correlationIDHeader != "" {
+		corrID, err := newCorrelationID()
+		if err != nil {
+			return errs.Wrap(err, "", op, "generate correlation id")
+		}
+		req.Header.Set(t.correlationIDHeader, corrID)
+	}
 
 	httpResp, err := t.client.Do(req)
 	if err != nil {

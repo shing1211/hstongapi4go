@@ -54,6 +54,10 @@ type Config struct {
 	// VerifyPush enables verification of the push frame's SHA1WithRSA
 	// signature. It is off by default. Later phases consume it.
 	VerifyPush bool
+	// CorrelationIDHeader, when non-empty, names a request header that carries
+	// a freshly generated 16-byte hex identifier, unique per request. The empty
+	// string, the default, sends no such header.
+	CorrelationIDHeader string
 
 	// Logger, when non-nil, receives structured SDK diagnostics. It is inert
 	// by default: with no logger the SDK emits nothing. The SDK never logs
@@ -117,6 +121,22 @@ func WithBaseURL(baseURL string) Option {
 			return
 		}
 		c.BaseURL = baseURL
+	}
+}
+
+// WithCorrelationIDHeader sets the name of a request header that carries a
+// freshly generated per-request correlation identifier, for example
+// "X-Correlation-ID". Every request through the returned Client gets a distinct
+// 32-character hex value, so a Gateway or proxy log line can be tied back to one
+// SDK call.
+//
+// It is **off by default** and an empty or whitespace-only name keeps it off.
+// The header is visible to the Gateway and anything proxying it, so a caller who
+// needs it should confirm their deployment tolerates the extra header before
+// enabling it.
+func WithCorrelationIDHeader(name string) Option {
+	return func(c *Config) {
+		c.CorrelationIDHeader = name
 	}
 }
 

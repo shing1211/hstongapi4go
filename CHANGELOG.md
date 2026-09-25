@@ -5,6 +5,21 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Opt-in correlation IDs on the request path.** `client.WithCorrelationIDHeader`
+  adds a request header carrying a fresh 32-character hex identifier per request,
+  so a Gateway or proxy log line can be tied back to one SDK call. **Off by
+  default**: the header is visible to the Gateway and anything proxying it, so
+  ADR 0011 keeps it opt-in and a caller who enables it should confirm their
+  deployment tolerates the extra header. Identifiers come from `crypto/rand`,
+  because a predictable value in a log is useful to anyone trying to collide
+  requests or forge a plausible one. The header *name* is configurable rather
+  than fixed, and a whitespace-only name is treated as off rather than producing
+  a request `net/http` rejects.
+
 ## [0.1.9] - 2026-09-25
 
 ### Fixed

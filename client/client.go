@@ -84,6 +84,7 @@ func New(opts ...Option) (*Client, error) {
 			transport.WithBaseURL(cfg.BaseURL),
 			transport.WithHTTPClient(cfg.HTTPClient),
 			transport.WithDefaultTimeout(cfg.Timeout),
+			transport.WithCorrelationIDHeader(cfg.CorrelationIDHeader),
 		),
 	}
 	if cfg.Metrics != nil {
