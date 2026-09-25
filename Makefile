@@ -81,7 +81,7 @@ test-integration: ## Run env-gated integration tests (HSTONG_INTEGRATION=1 requi
 		$(GO) test ./test/integration/... -count=1 -v; \
 	else echo "test-integration: not yet available"; fi
 
-coverage: ## Run tests with coverage gate (>=85% on pkg/domain, internal/auth, internal/transport)
+coverage: ## Run tests with coverage gate (>=85% on pkg/domain, internal/auth, internal/transport, pkg/hstong{,/stream,/trade,/algo})
 	$(GO) run scripts/coverage_gate.go
 
 check: fmt vet money-check test ## Format, vet, check money types, and test

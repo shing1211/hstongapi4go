@@ -69,7 +69,7 @@ be worse than failing.
 | `pkg/transport/mappers.go` | **Done** (`c6b5226`). All mappers covered, including nil-safety; package coverage 58.8% → 88.7% | — |
 | `otel`-tag test job | **Done** (`5a14c99`). Builds, vets, and tests with the tag on every push, not only on a release tag | — |
 | Bounded fuzz job | **Done** (`5a14c99`). 30s on `FuzzReadFrame`; verified locally at 734k executions, 18 newly interesting inputs, no crash | — |
-| Coverage gate scope | Still three packages. Released surface ungated, and **five packages below 85%**: `pkg/hstong` 84.7%, `algo` 81.2%, `trade` 81.3%, `internal/push` 79.9%, `stream` 76.3% | **Deferred, partly gated on §1** — `internal/push` holds three implementations, two of which §1 may remove. 2–4 days of test writing |
+| Coverage gate scope | **Done.** Gate widened to seven packages: the released public managers `pkg/hstong` 90.7%, `stream` 85.6%, `trade` 86.3%, `algo` 87.5%, alongside `pkg/domain` 93.8%, `internal/auth` 94.2%, `internal/transport` 99.1%. `internal/push` 79.9% remains ungated | — |
 
 ## 4. Gated on §1
 
@@ -125,13 +125,16 @@ What remains, in order:
 
 1. **Read `docs/VNEXT.md` and make the N1 call.** The draft reaches the evidence
    and lands on Option A being the better product, while being a multi-release
-   programme. Everything in §3's coverage row and all of §4 waits on it.
-2. **Widen the coverage gate** to the released surface, 2–4 days, after N1 so the
-   tests are not written against code that gets deleted.
-3. **§4** immediately after N1 resolves: R9's adapter rewiring or removal, R14's
+   programme. §4 waits on it.
+2. **§4** immediately after N1 resolves: R9's adapter rewiring or removal, R14's
    documented-but-absent auth behaviour, and push consolidation (N2).
-4. **§5** whenever credentials arrive. G6 should be scheduled early because its
+3. **§5** whenever credentials arrive. G6 should be scheduled early because its
    findings could change both §1 and §4 — it is also the only way to finish R3.
+
+The coverage gate was widened ahead of N1, on the four released managers only.
+Those packages are live public surface, so their tests survive either N1
+outcome; the deliberate omission is `internal/push`, which holds three
+implementations, two of which N1 may delete.
 
 ## 8. Documented acceptances — not to be fixed
 
