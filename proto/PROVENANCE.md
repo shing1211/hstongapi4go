@@ -17,12 +17,27 @@ type source of truth for the generated code under `gen/hstong/...`.
 | Extracted by | task T03 (data), run `2026-09-21-hstong-full-surface` |
 
 Re-download the archive, verify the SHA-256 above, then extract it over this
-directory. The committed tree must stay byte-for-byte identical to the archive
-contents.
+directory.
+
+## Line endings
+
+The committed tree is not literally byte-for-byte identical to the archive, and
+should not be described as such. `.gitattributes` applies `text=auto eol=lf` to
+`*.proto`, so git normalises CRLF to LF in the repository. A `.proto` file that
+used CRLF in the vendor archive is therefore stored here with LF endings.
+
+This is the only transformation, and it is applied by git rather than by any
+tool in this repository: no file is re-encoded, reformatted, or hand-edited. It
+is also load-bearing, not cosmetic. buf normalises comments differently for CRLF
+and LF input, so before `.gitattributes` was added, `make proto-verify` reported
+drift that depended on the contributor's platform.
+
+To compare against the archive, normalise line endings on both sides before
+hashing, or read the SHA-256 values in the table below as authoritative.
 
 ## Extracted files (17)
 
-All files are copied **byte-for-byte**; none are re-encoded, reformatted, or
+All files are copied unmodified; none are re-encoded, reformatted, or
 hand-edited. The Chinese comments are UTF-8 in the vendor archive and are
 preserved as-is.
 

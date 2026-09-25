@@ -83,6 +83,7 @@ nav:
   - Operations:
       - Runbook: runbook.md
       - Migration Guide: MIGRATION.md
+      - Adopting the v-next layer: VNEXT.md
       - Release Checklist: RELEASE_CHECKLIST.md
   - Legacy Protocol: LEGACY.md
   - Contributing: CONTRIBUTING.md
@@ -121,6 +122,12 @@ markdown_extensions:
 plugins:
   - search
   - git-revision-date-localized:
+      # `!ENV [CI, false]` reads as if the plugin were disabled in CI. It is the
+      # opposite: the tag substitutes the string "true" when CI is set, so the
+      # plugin is enabled on the runner and disabled locally. That is deliberate.
+      # The plugin needs real history, and a shallow local clone makes it warn;
+      # `mkdocs build --strict` turns that warning into a failure. The CI docs job
+      # therefore checks out with fetch-depth: 0.
       enabled: !ENV [CI, false]
       fallback_to_build_date: true
       type: timeago
