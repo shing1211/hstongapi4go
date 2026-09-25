@@ -79,16 +79,16 @@ func walkFundJourPages(
 }
 
 type AccountService struct {
-	client *client.Client
+	client Executor
 }
 
 type AccountOption func(*AccountService)
 
-func WithAccountClient(c *client.Client) AccountOption {
+func WithAccountClient(c Executor) AccountOption {
 	return func(s *AccountService) { s.client = c }
 }
 
-func NewAccountService(c *client.Client, opts ...AccountOption) *AccountService {
+func NewAccountService(c Executor, opts ...AccountOption) *AccountService {
 	s := &AccountService{client: c}
 	for _, opt := range opts {
 		opt(s)

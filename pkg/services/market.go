@@ -31,16 +31,16 @@ const (
 const MaxTickerLimit = 100
 
 type MarketService struct {
-	client *client.Client
+	client Executor
 }
 
 type MarketOption func(*MarketService)
 
-func WithMarketClient(c *client.Client) MarketOption {
+func WithMarketClient(c Executor) MarketOption {
 	return func(s *MarketService) { s.client = c }
 }
 
-func NewMarketService(c *client.Client, opts ...MarketOption) *MarketService {
+func NewMarketService(c Executor, opts ...MarketOption) *MarketService {
 	s := &MarketService{client: c}
 	for _, opt := range opts {
 		opt(s)

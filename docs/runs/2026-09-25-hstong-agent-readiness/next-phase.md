@@ -107,10 +107,16 @@ In summary, in order:
 - Step 3 — add **opt-in** correlation-ID injection to `client`. The one
   capability the Adapter had that the live path lacks; it is wire-visible, so it
   must default off under ADR 0011.
-- Step 5 — decide whether `pkg/services` should depend on an interface it
-  declares itself with `client.Client` injected, rather than on the concrete
-  type. That is the real remaining layering question now that the second
-  pipeline is gone.
+- Step 5 — **done.** `pkg/services` now depends on an `Executor` interface it
+  declares itself, with `*client.Client` injected, which is ADR 0010 rule 6 and
+  needs no second pipeline. The constructors and their `With*Client` options take
+  the interface, so the layer is testable against a fake instead of a Gateway.
+- Step 6 — **done, but not with depguard.** depguard in golangci-lint v2.9
+  silently ignores path globs in `files`, so scoped rules enforce nothing while
+  appearing to. Replaced with `internal/layering`, a test that parses the
+  repository's imports and asserts six boundary rules, and which also checks
+  that no rule matches zero packages. Verified by planting a violating import.
+  Evidence in `../../../docs/VNEXT.md` §5.6.
 - R14 — **done as a correction.** `doc.go` was already accurate; the register was
   wrong to claim it advertised unimplemented behaviour. Re-scoped: the
   single-flight and refresh primitives exist with no non-test caller, so they
@@ -160,14 +166,14 @@ programme's own order.
 
 What remains, in order:
 
-1. **§4 step 3 — add opt-in correlation-ID injection to `client`.** Small, and
-   the one capability the retired Adapter had that the live path lacks.
-2. **§4 step 5 — decide the `pkg/services` request path.** Whether it should
-   depend on an interface it declares itself, with `client.Client` injected,
-   rather than on the concrete type. This is the remaining layering question
-   for Option A, and the `depguard` rule cannot be written until it is answered.
-3. **§4 steps 4, 6-9**, in the order given in `../../../docs/VNEXT.md` §6.
-4. **§5** whenever credentials arrive. G6 should be scheduled early because its
+1. **§4 step 7 — test `pkg/services`.** `market.go` 579 and `trading.go` 780
+   lines sit at ~4% coverage. The `Executor` interface landed first specifically so
+   these can be written against a fake rather than a live Gateway, so they are not
+   written twice.
+2. **§4 steps 8-9**: the migration guide and the v1.0 schedule, plus a full
+   `ARCHITECTURE.md` regeneration, since the derived diagram still shows the
+   removed push implementations.
+3. **§5** whenever credentials arrive. G6 should be scheduled early because its
    findings could change §4 — it is also the only way to finish R3.
 
 The coverage gate was widened ahead of the decision, on released public surface

@@ -281,6 +281,37 @@ request that is about to fail, since that is when correlating a log line matters
 most. Ten tests in total; the transport-level ones were verified to fail with the
 header-setting code removed.
 
+### 5.6 The layering boundary is a test, not a depguard rule
+
+Step 6 was specified as a `depguard` rule in `.golangci.yml`. It could not be
+done that way, and the reason is worth recording because the failure is silent.
+
+`depguard`'s `files` field, in golangci-lint v2.9, honours only the `$all` and
+`$test` tokens. A path glob such as `pkg/hstong/**` is **accepted without
+warning and then matches no files**, so a rule scoped that way reports nothing
+forever. Five such rules were written, all of them correct as specifications, and
+all of them silently enforced nothing — they reported "0 issues" both when the
+graph was clean and when a deliberately planted `pkg/hstong` → `pkg/domain` import
+was present. That is worse than no rule, because it looks like enforcement.
+
+`internal/layering` replaces it. The test walks the module, parses each file's
+imports, and asserts the boundary table directly. Two properties make it
+trustworthy in a way the depguard version was not:
+
+- It asserts the import walk found something, so a refactor that breaks the walk
+  cannot turn it into a test that passes because it inspected nothing.
+- It asserts every rule's prefix matches at least one real package, so a rule
+  cannot pass by matching nothing — the exact failure depguard exhibited.
+
+Verified by planting a `pkg/domain` import in `pkg/hstong/session.go`: the test
+failed with `pkg/hstong imports pkg/domain`, and passed again once removed.
+
+The six rules encode the graph as it exists, so they are regression guards rather
+than aspirations. The one known deviation, `pkg/domain` importing `gen/hq/dto`, is
+deliberately **not** encoded: it is real, it is recorded in `ARCHITECTURE.md` §6,
+and encoding it would fail every build until it is fixed. Rules are added as
+deviations close, not before.
+
 ## 6. Programme
 
 Option A is a multi-release programme. Order matters: step 1 decides what
@@ -294,8 +325,8 @@ Option A is a multi-release programme. Order matters: step 1 decides what
 | ~~2~~ | ~~Rewire `pkg/services` through `pkg/transport.Adapter`~~ | **Cancelled, and the Adapter removed instead.** Reading both `Do` implementations showed the rewire would have dropped rate limiting, circuit breaking, metrics, and tracing from every v-next call. `Adapter` had no production caller and three defects. Evidence in §5.4. R9 resolved. `pkg/transport` went 88.7% → 100%. |
 | 3 | ~~Add opt-in correlation-ID injection to `client`~~ | **Done.** `client.WithCorrelationIDHeader` and `internal/transport.WithCorrelationIDHeader`. Off by default, 32-char lowercase hex from `crypto/rand`, fresh per request. 10 tests, verified to fail with the header-setting code removed. |
 | 4 | ~~Resolve R14~~ | **Done as a correction, not a rewrite.** `doc.go` turned out to be accurate — it already disclosed the missing behaviour. The register was wrong to claim otherwise. Re-scoped: `Session.ShouldRefresh`, `TokenManager.IsLoginInProgress`, `markLoginPending`, and `clearLoginPending` exist with **no non-test caller**, so single-flight and refresh are un-composed. `Authenticator` does check `IsExpired`, so expiry detection exists. `doc.go` now says so explicitly, so a reader does not mistake the methods for live behaviour. |
-| 5 | Decide the `pkg/services` request path | **Newly open, and it is the real remaining question for Option A.** `pkg/services` calls `client.Do` directly. That is *correct* — `client.Client` is the better pipeline — so the question is no longer "route it through the Adapter" but whether `pkg/services` should depend on a narrow interface it declares itself (dependency inversion, as ADR 0010 intends) with `client.Client` as the injected implementation, rather than on the concrete type. That keeps the layering testable without a second pipeline. |
-| 6 | Add a `depguard` boundary rule | Makes the intended layering machine-enforced in `.golangci.yml`, so drift is caught by CI rather than by review. |
+| 5 | ~~Decide the `pkg/services` request path~~ | **Done.** `pkg/services` now depends on an `Executor` interface it declares itself, with `*client.Client` as the injected implementation — ADR 0010 rule 6, and no second pipeline. The three constructors and their `With*Client` options take the interface, so a fake can drive the layer without a Gateway. `pkg/services` still names `client.Route` and `client.Codec` in the signature: inverting the dependency removes the dependency on the concrete type, not on the client's shared route vocabulary, and private copies of those types would duplicate the canonical route table in `docs/SPEC.md`. |
+| 6 | ~~Add a `depguard` boundary rule~~ | **Done, but not with depguard.** depguard in golangci-lint v2.9 honours only the `$all` and `$test` tokens in `files`; a glob like `pkg/hstong/**` is accepted silently and matches nothing, so the rule passes forever while enforcing nothing. Replaced with `internal/layering`, a test that parses the repository's own imports. It also asserts that every rule's prefix matches at least one real package, so a rule cannot pass by matching nothing. See §5.6. |
 | 7 | Test `pkg/services` | `market.go` 579 and `trading.go` 780 lines sit at ~4% coverage. Written after the request-path decision, so they are not written twice. |
 | 8 | ~~Re-gate `pkg/transport`~~ | **Done.** `pkg/transport` is at 100% after the Adapter removal and is now gated. |
 | 9 | Publish the migration guide and schedule v1.0 | The guide in §2 is the draft; it becomes a supported document. Refresh the `ARCHITECTURE.md` deviations table at the same time — a full graph regeneration is due, since the derived diagram still shows the removed push implementations. |

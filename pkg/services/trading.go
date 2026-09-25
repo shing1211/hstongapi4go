@@ -70,16 +70,16 @@ var hkSessionWindows = map[string]struct {
 }
 
 type TradingService struct {
-	client *client.Client
+	client Executor
 }
 
 type TradingOption func(*TradingService)
 
-func WithTradingClient(c *client.Client) TradingOption {
+func WithTradingClient(c Executor) TradingOption {
 	return func(s *TradingService) { s.client = c }
 }
 
-func NewTradingService(c *client.Client, opts ...TradingOption) *TradingService {
+func NewTradingService(c Executor, opts ...TradingOption) *TradingService {
 	s := &TradingService{client: c}
 	for _, opt := range opts {
 		opt(s)
