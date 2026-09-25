@@ -1,10 +1,12 @@
 # Adopting the v-next layer
 
-- **Status:** decision draft. No code changed; nothing here is released.
+- **Status:** **N1 decided 2026-09-25 — Option A, commit to the layered API.**
+  No code changed for the decision; the programme is tracked in §6.
 - **Purpose:** the forcing function for the N1 decision recorded in
-  `runs/2026-09-25-hstong-agent-readiness/next-phase.md` §1.
-- **Reader:** whoever decides whether this SDK ships one layered API or the
-  released flat API.
+  `runs/2026-09-25-hstong-agent-readiness/next-phase.md` §1, and the record of
+  what was decided.
+- **Reader:** whoever implements the layered API, and whoever maintains the
+  released flat API until v1.0.
 
 ## 1. The question
 
@@ -86,42 +88,88 @@ Four obstacles, none of which is a bug and all of which are design consequences.
    on the very path the layer was built for. Adopting v-next as-is would adopt
    that bypass too, unless the services are rewired first.
 
-## 4. Recommendation
+## 4. The decision
 
-**Do not wire v-next in as the default within v0.1.x.** ADR 0011 forbids it and
-the migration above is a flag-day change per endpoint family.
+**Option A — commit to the layered API — was chosen on 2026-09-25.** The
+deliberation below is kept because it is the evidence for the decision, and
+because the rejected options record why the obvious cheaper path was not taken.
 
-The decision that remains is narrower and should be made explicitly:
+The options as they stood:
 
 - **Option A — commit to the layered API.** Write the migration guide as a real
   document, schedule a v1.0 with breaking type changes, rewire `pkg/services`
   through `pkg/transport.Adapter`, and consolidate the push implementations
-  first. This is a multi-release programme, not a patch.
+  first. A multi-release programme, not a patch.
 - **Option B — delete the v-next layer.** Keep the released stack, delete
   `pkg/domain`, `pkg/services`, `pkg/transport`, and `internal/auth`, and record
-  the decimal-money and layering decisions as superseded. The SDK keeps one
-  implementation, and the money-precision problem is addressed inside the
-  released types instead.
+  the decimal-money and layering decisions as superseded.
 - **Option C — leave it unwired (status quo).** Acceptable only with a deadline
-  and an owner. Without one, the next maintainer cannot tell which
-  implementation is authoritative, and the deviations table in
-  `runs/2026-09-23-hstong-enterprise-sdk/ARCHITECTURE.md` will drift further from
-  the truth.
+  and an owner.
 
-For what it is worth, the evidence gathered while writing this document points
-toward **Option A being the better product** — decimal money is a real
-correctness win, and the push problems have to be solved regardless — but it is
-not a small decision, and nothing in the current release obliges anyone to make
-it under time pressure.
+Option A was chosen because decimal money is a real correctness win, and because
+the push layer has to end up with one implementation whichever way this goes.
+That second point is sharper than the original draft implied: because
+`Manager`, `Fanout`, and `Normalizer` are v-next-coupled, the two options
+required *opposite* work on the same files — Option B would have deleted them,
+Option A consolidates them. Push work therefore could not be de-risked as
+shared groundwork in front of the decision. It is sequenced first inside the
+programme instead. §5 records the evidence.
 
-## 5. What would make this decision cheap to revisit
+**Option C is now foreclosed.** Leaving the layer unwired without an owner and a
+deadline is what made this repository ambiguous in the first place; a positive
+decision is strictly better than the status quo.
 
-Whichever option is chosen, three things would reduce the cost of changing it
-later:
+## 5. Push implementation status
 
-1. A `depguard` rule making the intended boundary machine-enforced, so drift is
-   caught by CI rather than by review.
-2. A published status for each of the three push implementations, so the choice
-   is documented rather than inferred from which file a symbol lives in.
-3. `internal/auth`'s documented-but-absent backoff, single-flight, and refresh
-   either implemented or removed from `doc.go` (R14).
+`internal/push` holds three push implementations, and until this table existed
+the choice between them had to be inferred from which file a symbol happened to
+live in. Reachability was measured two ways: a `gitnexus` upstream walk, and an
+exhaustive text search for every exported constructor and type across the
+repository. Both agree.
+
+| Implementation | File | Lines | Imports `pkg/domain` | Reachable from a caller | Status |
+|---|---|---|---|---|---|
+| `Client` | `client.go` | 708 | no | **yes** — owned by `pkg/hstong/stream` (`stream.go:118`) | **Released.** The only implementation a caller reaches today. |
+| `Manager` | `manager.go` | 594 | yes | **no** | Forward-looking, v-next. `gitnexus` reports 1 upstream edge, its own `NewManager`; 0 affected processes. |
+| `Fanout` | `fanout.go` | 388 | yes | **no** | Forward-looking, v-next. No reference outside its own definition and its internal tests. |
+| `Normalizer` | `normalizer.go` | 135 | yes | no (library) | Forward-looking, v-next. Shared decode helper for the two above. |
+
+`frame.go` (236) and `verify.go` (139) are not alternatives to the above: they
+are the wire framing and signature verification used by all of them, and they
+import no v-next package.
+
+**This changes the sequencing.** `Manager`, `Fanout`, and `Normalizer` are
+1,117 lines that are simultaneously v-next-coupled *and* unreachable from
+production. Their fate therefore depends on N1 — under Option B they would have
+been deleted along with `pkg/domain`, and they survive only because Option A was
+chosen. The consequence for planning is that push consolidation cannot be done
+as independent groundwork: item 3 in the obstacle list above reads as though it
+could be, and it cannot. It is the first step *inside* the programme, not a
+parallel task.
+
+Two behavioural differences still need resolving, whichever is kept.
+Reconnect and backoff are handled by `Client` (31 references to the knobs) and
+`Manager` (12), but `Fanout` has neither — so `Fanout` currently offers no
+reconnect bound at all. Separately, `Fanout` is the only implementation that
+populates a `FreshnessMonitor` (15 references, against 0 in the other two), so
+adopting it would *add* staleness detection rather than merely preserve it.
+`Client` is the released behaviour, so consolidation defaults to preserving it.
+
+## 6. Programme
+
+Option A is a multi-release programme. Order matters: step 1 decides what
+`pkg/services` will talk to, so it precedes the rewire in step 2.
+
+| # | Step | Notes |
+|---|---|---|
+| 1 | Decide the push implementation | §5. Defaults to preserving released `Client` behaviour. |
+| 2 | Rewire `pkg/services` through `pkg/transport.Adapter` | **Highest-risk step and not mechanical.** `pkg/services` holds a `*client.Client` and calls `s.client.Do(...)` (`account.go:116,145,192,239` plus market and trading), while `Adapter` wraps `internal/transport.Transport` (`middleware.go:22-47`). These sit at different layers, so this needs a narrow executor interface both satisfy, or `Adapter` accepting an interface. Decide the shape before coding. |
+| 3 | Fix R9 while the Adapter is in hand | `inner` is unused, `baseURL` is hardcoded, and `WithDeadline` (`middleware.go:136`) shares one cancel across callers. |
+| 4 | Resolve R14 | Recommend rewriting `doc.go` to describe only what exists rather than adding a second login implementation — the released `SessionManager.EnsureLoggedIn` already covers the released path, and a second one is new risk rather than a fix. |
+| 5 | Add a `depguard` boundary rule | Makes the intended layering machine-enforced in `.golangci.yml`, so drift is caught by CI rather than by review. |
+| 6 | Test `pkg/services` | `market.go` 579 and `trading.go` 780 lines sit at ~4% coverage. Written *after* the rewire, against the final interface. |
+| 7 | Re-gate `internal/push` | Currently 80.3% and ungated. Measure it against the kept implementation only. |
+| 8 | Publish the migration guide and schedule v1.0 | The guide in §2 is the draft; it becomes a supported document. Refresh the `ARCHITECTURE.md` deviations table at the same time. |
+
+ADR 0011 continues to hold for all of v0.1.x: none of these steps may change a
+released type or wire shape before v1.0.

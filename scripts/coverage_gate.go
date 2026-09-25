@@ -22,6 +22,7 @@ func main() {
 		{"./pkg/hstong/stream", "github.com/shing1211/hstongapi4go/pkg/hstong/stream"},
 		{"./pkg/hstong/trade", "github.com/shing1211/hstongapi4go/pkg/hstong/trade"},
 		{"./pkg/hstong/algo", "github.com/shing1211/hstongapi4go/pkg/hstong/algo"},
+		{"./pkg/types", "github.com/shing1211/hstongapi4go/pkg/types"},
 	}
 	gate := 85.0
 	failed := false

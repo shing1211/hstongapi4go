@@ -6,8 +6,10 @@ boundary, the trade password, and the redaction rules an application should
 follow. This page asks the other question: **what can go wrong, and what does the
 SDK already stop?**
 
-Scope: the code in this repository as of **v0.1.6 + E17**. The canonical endpoint
-inventory is [SPEC.md](./SPEC.md); it is not restated here.
+Scope: the code in this repository as of **v0.1.9**. The canonical endpoint
+inventory is [SPEC.md](./SPEC.md); it is not restated here. The risk register is
+maintained in place — each row records its own current status and the commit that
+changed it.
 
 ## Assets
 
@@ -155,7 +157,7 @@ The single most consequential failure mode: a retry that resubmits a mutation.
 |--------|--------|
 | Unbounded pagination | **Mitigated (E17).** Cursor walks stop on an empty page, an empty cursor, a non-advancing cursor, or `maxPages`; page size is clamped to 99. Previously a Gateway repeating a cursor looped forever. |
 | Partial results discarded on error | **Mitigated (E17).** A mid-walk failure returns the pages already read **together with** the error, so a partial outage is visible instead of silently empty. |
-| Oversized response | **Partial.** The v-next adapter caps the body with `http.MaxBytesReader`, but the active `internal/transport` executor still uses `io.ReadAll` with no cap. |
+| Oversized response | **Mitigated (R7).** Both executors cap the body. The active `internal/transport` executor previously used an unbounded `io.ReadAll`; it now applies `WithMaxResponseBytes` (default 8 MiB) via the same `MaxBytesReader` pattern the v-next adapter already used, so there is one mechanism rather than two. A non-positive value restores the default rather than disabling the cap, so an accidental zero cannot reinstate unbounded reads. |
 | Query retry amplifying load | **Mitigated.** Query-only retry with exponential backoff, rate limiting, and separate query/mutation circuit breakers. |
 | Non-2xx classified as retryable | **Gap.** HTTP 500/503 map to an empty status code and are therefore **not** retryable, even though the Gateway reports overload as `1011` inside a 200 envelope. |
 
@@ -176,24 +178,27 @@ backed by a test that fails against the pre-fix code.
 
 ## Risk register
 
-Accepted or deferred, with the reason. Ordered by residual risk.
+14 entries: **5 fixed**, 1 partially fixed (R3, awaiting a live Gateway run), **3
+open** (R8, R9, R14), and 5 accepted with a stated reason. Rows carry the commit
+that changed their status, so a stale status is visible as a commit that exists
+but is not cited here.
 
 | # | Risk | Severity | Status | Rationale |
 |---|------|----------|--------|-----------|
 | R1 | No client-side replay defence (token or password ciphertext) | Medium | **Accepted** | The wire protocol defines neither a nonce nor an idempotency key. Adding one would require a protocol change and break compatibility (ADR 0003). |
-| R2 | Route alias classification is a closed set | **High** | **Open (active path)** | A mutation route missing from `mutationSet` is retried. The public client validates canonical routes, so aliasing is blocked there, but `resilience` is shared and a future caller could pass a raw path. Needs a route-inventory test. |
+| R2 | Route alias classification is a closed set | **High** | **Fixed (`3926655`)** | A mutation route missing from `mutationSet` was retried, which would break the ADR 0003 single-attempt guarantee. The defence is exhaustion rather than inference, because `docs/SPEC.md` does not mark mutations and no naming rule catches every future one: `client/route_mutation_test.go` walks `client.Routes()` and fails if any route is in neither the expected-mutation nor the known-safe list, so adding a route forces a deliberate classification decision. Covers the 3x12 Gateway alias matrix and over-classification in both directions. Verified the guard fires by removing an entry and watching the suite fail. |
 | R3 | Half-open push connection blocks indefinitely | Medium | **Partially fixed (client.go)** | `WithReadDeadline` now arms a per-read deadline in the released `push.Client` read loop, bounding the gap between frames so a silent peer is detected. It is **off by default**: the local Gateway documents no heartbeat cadence on this stream (`docs/LEGACY.md` records that the Gateway path replaced heartbeat keep-alive with `SessionManager.StartKeepAlive` polling), so any non-zero default would risk tearing down a healthy connection in a quiet market. Fully closing this needs the observed inter-frame gap from a live Gateway run. |
 | R4 | Dedup and gap detection inert | Medium | **Accepted (forward-looking)** | `push.Fanout` supplies no per-event sequence. Correct gap detection is impossible without one; pinned by `TestFanout_DedupInertWithoutSequence`. |
 | R5 | Free-prose secrets are not redacted | Low | **Accepted (active path)** | Redaction is key-driven. Callers must keep secrets out of message text. |
 | R6 | Backward clock jump can revive a token | Low | **Accepted (forward-looking)** | Would need a monotonic deadline. Low impact: the Gateway independently rejects an expired token. |
-| R7 | No read cap in the active transport executor | Medium | **Open (active path)** | The cap exists only in the unused v-next adapter; `internal/transport` uses `io.ReadAll`. |
+| R7 | No read cap in the active transport executor | Medium | **Fixed (`de933f5`)** | `internal/transport` read every response with an unbounded `io.ReadAll`, so a malformed or hostile Gateway body could force an arbitrarily large allocation; the cap existed only in the unwired v-next adapter. Now bounded by `WithMaxResponseBytes` (default 8 MiB), reusing the `MaxBytesReader` pattern already reviewed in `pkg/transport`. An over-limit body returns a typed error naming the cap. The test was verified to fail against the pre-fix code. `gitnexus` rates the symbol **critical** because every request flows through `Do`; it was validated with the all-51-route e2e suite rather than by inspection. |
 | R8 | HTTP 5xx not retryable | Low | **Open (active path)** | Would change documented retry semantics; the Gateway reports overload as `1011` inside a 200 envelope. |
 | R9 | `pkg/transport.Adapter` unreachable and mis-wired | Low | **Open (forward-looking)** | `inner` is unused, the base URL is hardcoded, and `WithDeadline` stores one shared cancel that can cancel a previous caller. A trap for the next adopter. |
 | R10 | `passwordHash` and bare `account` not redacted | Low | **Accepted (active path)** | `IsSensitiveKey` matches whole names and `account` is a common word. Chosen so support correlation keeps working; revisit if the data policy changes. |
 | R11 | No secret scanning in CI | Medium | **Fixed (ADR 0012)** | A `secrets` job runs `gitleaks` as a pinned Action over the full history of the pushed ref (`fetch-depth: 0`). `.gitleaks.toml` allowlists five paths by justification — the public platform keys and the published AES-192 protocol key (ADR 0005), the vendored `proto/` tree, the AES test vector, and the redaction test fixtures — and never disables a rule class. `go.mod` is untouched, so consumers gain no dependency. **Verified locally** in a container against all 90 commits: 4 findings on the first run, all false positives, reduced to 0 after the allowlist was completed. The rules were separately proven to fire by planting fake credentials in a non-allowlisted file. |
 | R12 | `gosec`/`govulncheck` were pinned to `@latest` | Low | **Fixed (f8535b9)** | Both scanners are now pinned: `gosec@v2.22.10` and `govulncheck@v1.1.4` in `.github/workflows/ci.yml`, so a scanner result cannot change without a commit. Corrected 2026-09-25; the entry previously still read Open. |
 | R13 | `main` is red in CI and v0.1.6 shipped that way | **High** | **Fixed (d20e0ed)** | Repaired after v0.1.6: the gofmt gate that was skipping four steps, 39 lint findings, a gosec install path that pointed at staticcheck's module, a GoReleaser config that did not parse, 14 standard-library vulnerabilities, and a platform-dependent codegen drift. Run 36025226892 is 9/9 green. Details in `evidence/P03-CI-repair.txt`. |
-| R14 | `internal/auth` declares backoff, single-flight, and refresh that do not exist | Medium | **Open (forward-looking)** | `defaultRetryDelay`, `defaultMaxRetryDelay`, and `Authenticator.mu` are unused, and `doc.go` claims refresh and backoff behaviour that is not implemented. The public `SessionManager` provides single-flight `EnsureLoggedIn`; the v-next `Authenticator` does not. |
+| R14 | `internal/auth` declares backoff, single-flight, and refresh that do not exist | Medium | **Open (forward-looking)** | `Authenticator` has no single-flight equivalent of the released `SessionManager.EnsureLoggedIn`, and `internal/auth/doc.go` says so while describing a re-login backoff and a `Session.ShouldRefresh`-driven refresh action that the v-next authenticator does not implement. **Corrected 2026-09-25:** the entry previously also named `defaultRetryDelay`, `defaultMaxRetryDelay`, and `Authenticator.mu` as unused; those symbols no longer exist, so that part of the rationale was stale. The real gap is the missing single-flight plus the doc/implementation mismatch, and it is on the critical path for the Option A decision. |
 
 ## What the SDK deliberately does not do
 

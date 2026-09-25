@@ -10,6 +10,10 @@
 
 ## 1. The one decision that gates the most work
 
+**N1 was decided on 2026-09-25: Option A, commit to the layered API.** See
+`../../../VNEXT.md` §4 for the decision and §6 for the ordered programme. The
+question below is retained as the record of what was decided and why.
+
 The v-next layer — `pkg/domain`, `pkg/services`, `pkg/transport`,
 `internal/auth` — is complete, tested, and **not reachable by a caller**. Only
 `scripts/coverage_gate.go` imports it. Meanwhile the released surface uses the
@@ -30,6 +34,13 @@ written coherently, that is evidence to delete rather than expose. If it can,
 the migration cost is knowable and wiring it in becomes a normal engineering
 decision. This is the highest-value hour available, because it determines
 whether the test work in §3 is investment or waste.
+
+**Outcome.** The guide was written (`e0c0b24`) and it could be written
+coherently, which is why Option A was available as a normal engineering choice.
+Writing it also disproved the assumption that push consolidation could proceed in
+parallel: `Manager`, `Fanout`, and `Normalizer` are 1,117 lines that are both
+v-next-coupled and unreachable, so their fate depends entirely on the decision.
+That evidence is recorded in `../../../VNEXT.md` §5.
 
 ## 2. Active-path risks, no dependencies
 
@@ -69,21 +80,28 @@ be worse than failing.
 | `pkg/transport/mappers.go` | **Done** (`c6b5226`). All mappers covered, including nil-safety; package coverage 58.8% → 88.7% | — |
 | `otel`-tag test job | **Done** (`5a14c99`). Builds, vets, and tests with the tag on every push, not only on a release tag | — |
 | Bounded fuzz job | **Done** (`5a14c99`). 30s on `FuzzReadFrame`; verified locally at 734k executions, 18 newly interesting inputs, no crash | — |
-| Coverage gate scope | **Done.** Gate widened to seven packages: the released public managers `pkg/hstong` 90.7%, `stream` 85.6%, `trade` 86.3%, `algo` 87.5%, alongside `pkg/domain` 93.8%, `internal/auth` 94.2%, `internal/transport` 99.1%. `internal/push` 79.9% remains ungated | — |
+| Coverage gate scope | **Done.** Gate widened to eight packages: the released public surface `pkg/hstong` 90.7%, `stream` 85.9%, `trade` 86.3%, `algo` 87.5%, `pkg/types` 100.0%, alongside `pkg/domain` 93.8%, `internal/auth` 94.2%, `internal/transport` 99.1%. `internal/push` 80.3% remains ungated pending step 1 | — |
 
-## 4. Gated on §1
+## 4. The Option A programme
 
-Once the v-next decision is made:
+N1 chose Option A on 2026-09-25, so this section is no longer speculative. The
+ordered steps, with the evidence for each, are tracked in `../../../VNEXT.md` §6.
+In summary, in order:
 
-- R9 — `pkg/transport.Adapter` is unreachable and mis-wired: `inner` unused,
-  base URL hardcoded, and `WithDeadline` stores one shared cancel that can
-  cancel a previous caller. A trap for the next adopter.
-- R14 — `internal/auth` documents backoff, single-flight, and refresh that do
-  not exist; `defaultRetryDelay`, `defaultMaxRetryDelay`, and
-  `Authenticator.mu` are unused.
-- N2 — consolidate the three overlapping `internal/push` implementations
-  (`client.go` 612, `manager.go` 506, `fanout.go` 346 = 1,464 lines), which
-  disagree about reconnect bounds, backoff, and freshness.
+- Step 1 — decide the push implementation. Defaults to preserving released
+  `Client` behaviour, since it is the only one a caller can reach.
+- Step 2 — rewire `pkg/services` through `pkg/transport.Adapter`. The
+  highest-risk item and not mechanical: `pkg/services` holds a `*client.Client`
+  and calls `s.client.Do(...)`, while `Adapter` wraps `internal/transport`, so
+  the two sit at different layers and a narrow interface is needed.
+- R9 — fix the Adapter's unused `inner`, hardcoded base URL, and shared
+  `WithDeadline` cancel while it is in hand.
+- R14 — rewrite `internal/auth/doc.go` to match reality rather than adding a
+  second login implementation.
+- N2 — consolidate the push implementations (step 1), then re-gate
+  `internal/push`.
+- Then: `depguard` boundary rule, `pkg/services` tests, the migration guide,
+  and the v1.0 schedule.
 
 ## 5. Blocked on credentials or a decision
 
@@ -118,23 +136,24 @@ Once the v-next decision is made:
 
 **Completed on 2026-09-25:** §2 in one pass (`3926655`, `de933f5`, `a3e4655`,
 `a238771`) and the three independent rows of §3 (`c6b5226`, `5a14c99`). The
-forcing function in §1 is drafted at `../../../docs/VNEXT.md` (`e0c0b24`); the
-decision itself is still unmade.
+forcing function in §1 was drafted at `../../../docs/VNEXT.md` (`e0c0b24`), and
+**N1 was then decided: Option A**. §4 is no longer gated on anything but the
+programme's own order.
 
 What remains, in order:
 
-1. **Read `docs/VNEXT.md` and make the N1 call.** The draft reaches the evidence
-   and lands on Option A being the better product, while being a multi-release
-   programme. §4 waits on it.
-2. **§4** immediately after N1 resolves: R9's adapter rewiring or removal, R14's
-   documented-but-absent auth behaviour, and push consolidation (N2).
+1. **§4 step 1 — decide the push implementation.** It gates the rewire, because
+   it determines what `pkg/services` will talk to. The evidence is already
+   recorded in `../../../docs/VNEXT.md` §5, so this is a judgement call rather
+   than an investigation. Defaults to preserving released `Client` behaviour.
+2. **§4 steps 2-8**, in the order given in `../../../docs/VNEXT.md` §6.
 3. **§5** whenever credentials arrive. G6 should be scheduled early because its
-   findings could change both §1 and §4 — it is also the only way to finish R3.
+   findings could change §4 — it is also the only way to finish R3.
 
-The coverage gate was widened ahead of N1, on the four released managers only.
-Those packages are live public surface, so their tests survive either N1
-outcome; the deliberate omission is `internal/push`, which holds three
-implementations, two of which N1 may delete.
+The coverage gate was widened ahead of the decision, on released public surface
+only (`pkg/hstong*` and `pkg/types`). Those packages are live public surface, so
+their tests survive either N1 outcome; the deliberate omission is
+`internal/push`, which is now waiting on §4 step 1 rather than on the decision.
 
 ## 8. Documented acceptances — not to be fixed
 
