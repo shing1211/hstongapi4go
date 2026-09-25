@@ -34,13 +34,15 @@ whether the test work in §3 is investment or waste.
 ## 2. Active-path risks, no dependencies
 
 All four sit on the shipped request path and need no decision from anyone.
+**All four were actioned on 2026-09-25**; the register in `../../threat-model.md`
+is authoritative for current status.
 
-| Ref | Sev | Item | Fix |
-|-----|-----|------|-----|
-| **R2** | **High** | `internal/resilience.mutationSet` is a closed set of 12 paths maintained separately from `client`'s 51 route constants. A mutation route missing from it is **retried**, breaking ADR 0003 | Exhaustive allowlist test in `client/` (the only package that can import both), plus a 3x12 alias matrix and two-direction over-classification checks |
-| R7 | Medium | `internal/transport/transport.go:187` uses unbounded `io.ReadAll`; the cap exists only in the unused v-next adapter | Add a `maxBytes` option reusing the reviewed pattern at `pkg/transport/middleware.go:29-30,119`, replace `io.ReadAll`, test the over-limit path |
-| R3 | Medium | No `SetReadDeadline` anywhere in `internal/push/`; `client.go:393` handles `MsgHeartbeat` on the receive side only, so a half-open connection blocks a goroutine and a failed heartbeat write never reconnects | Read deadline plus write-side liveness on the released `push.Client` |
-| R11 | Medium | No secret scanning in CI | Small ADR (hard rule 8: any new dependency needs one; ADR 0006 is the precedent), then a pinned scanner with the bundled public platform keys allowlisted per ADR 0005 |
+| Ref | Sev | Item | Outcome |
+|-----|-----|------|---------|
+| **R2** | **High** | `internal/resilience.mutationSet` is a closed set of 12 paths maintained separately from `client`'s 51 route constants. A mutation route missing from it is **retried**, breaking ADR 0003 | **Fixed** (`3926655`). Exhaustive allowlist in `client/route_mutation_test.go`, a 3x12 alias matrix, and two-direction over-classification. Verified the guard fires by removing an entry and watching it fail |
+| R7 | Medium | `internal/transport/transport.go:187` used unbounded `io.ReadAll`; the cap existed only in the unused v-next adapter | **Fixed** (`de933f5`). `WithMaxResponseBytes`, default 8 MiB, reusing the reviewed `MaxBytesReader` pattern. Verified the test fails pre-fix. `gitnexus` rates it **critical / 33 processes** because every call flows through `Do`; verified with the all-51-route e2e suite |
+| R3 | Medium | No `SetReadDeadline` anywhere in `internal/push/`; a half-open connection blocks a goroutine | **Partially fixed** (`a3e4655`). `WithReadDeadline` arms a per-read deadline, **off by default**: the Gateway documents no heartbeat cadence on this stream, so a non-zero default risks reconnect churn. Closing it needs the observed inter-frame gap (G6). The released `Client` only *receives* heartbeats, so there is no write-side heartbeat liveness to repair here |
+| R11 | Medium | No secret scanning in CI | **Fixed** (`a238771`). ADR 0012, then a pinned `gitleaks` Action over full history, allowlisting three paths by justification and never a rule class. `go.mod` untouched |
 
 **Test-design note for R2.** `docs/SPEC.md` does not mark mutations, so
 expectations cannot be derived from it, and no naming rule catches every
@@ -49,15 +51,25 @@ walk `client.Routes()` and fail if any route is in neither the
 expected-mutation nor the known-safe list, so adding a route forces a
 conscious classification decision.
 
+**Incidental defect found while writing the `pkg/transport` mapper tests**
+(`c6b5226`). `MapTradeDeliveryToTradeEvent` passed raw protobuf strings into
+`domain.MustNew*`, which panic on unparseable input. An unset field is empty, so
+a zero-value delivery notification panicked, and there is no `recover()`
+anywhere in the push or stream path, so that would have killed a consumer
+goroutine and the process. Latent rather than live, because the mapper is in the
+unwired layer. A non-numeric value still panics by design: `domain` exposes no
+non-panicking constructor, and substituting a number for a malformed price would
+be worse than failing.
+
 ## 3. Test and CI debt
 
 | Item | State | Note |
 |------|-------|------|
 | `pkg/services` direct tests | **1,187 untested lines** (`market.go` 513, `trading.go` 674); only `account_test.go` exists | **Gated on §1** — wasted if the layer is deleted |
-| `pkg/transport/mappers.go` | 86 lines, no test file | Independent |
-| `otel`-tag test job | Absent from CI; only the release workflow builds it, only on tags | Independent |
-| Bounded fuzz job | Absent; `FuzzReadFrame` runs seeds only | Independent |
-| Coverage gate scope | Three packages. Released surface is ungated, and **five packages are below 85%**: `pkg/hstong` 84.7%, `algo` 81.2%, `trade` 81.3%, `internal/push` 79.9%, `stream` 76.3% | **Partly gated on §1** — `internal/push` holds three implementations, two of which §1 may remove |
+| `pkg/transport/mappers.go` | **Done** (`c6b5226`). All mappers covered, including nil-safety; package coverage 58.8% → 88.7% | — |
+| `otel`-tag test job | **Done** (`5a14c99`). Builds, vets, and tests with the tag on every push, not only on a release tag | — |
+| Bounded fuzz job | **Done** (`5a14c99`). 30s on `FuzzReadFrame`; verified locally at 734k executions, 18 newly interesting inputs, no crash | — |
+| Coverage gate scope | Still three packages. Released surface ungated, and **five packages below 85%**: `pkg/hstong` 84.7%, `algo` 81.2%, `trade` 81.3%, `internal/push` 79.9%, `stream` 76.3% | **Deferred, partly gated on §1** — `internal/push` holds three implementations, two of which §1 may remove. 2–4 days of test writing |
 
 ## 4. Gated on §1
 
@@ -104,15 +116,22 @@ Once the v-next decision is made:
 
 ## 7. Recommended order
 
-1. **§2 in one pass** — it clears the only High-severity open risk and three
-   more active-path items, none of which depend on a decision.
-2. **§1 forcing function** next, before any §3/§4 test writing, so that writing
-   is not speculative.
-3. **§3's independent rows** (mappers test, `otel` job, fuzz job) can proceed
-   alongside step 1.
-4. **§4** immediately after §1 resolves.
-5. **§5** whenever credentials arrive; G6 should be scheduled early because its
-   findings could change §1 and §4.
+**Completed on 2026-09-25:** §2 in one pass (`3926655`, `de933f5`, `a3e4655`,
+`a238771`) and the three independent rows of §3 (`c6b5226`, `5a14c99`). The
+forcing function in §1 is drafted at `../../../docs/VNEXT.md` (`e0c0b24`); the
+decision itself is still unmade.
+
+What remains, in order:
+
+1. **Read `docs/VNEXT.md` and make the N1 call.** The draft reaches the evidence
+   and lands on Option A being the better product, while being a multi-release
+   programme. Everything in §3's coverage row and all of §4 waits on it.
+2. **Widen the coverage gate** to the released surface, 2–4 days, after N1 so the
+   tests are not written against code that gets deleted.
+3. **§4** immediately after N1 resolves: R9's adapter rewiring or removal, R14's
+   documented-but-absent auth behaviour, and push consolidation (N2).
+4. **§5** whenever credentials arrive. G6 should be scheduled early because its
+   findings could change both §1 and §4 — it is also the only way to finish R3.
 
 ## 8. Documented acceptances — not to be fixed
 
