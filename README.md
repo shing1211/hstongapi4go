@@ -82,9 +82,9 @@ Before writing your first call, understand these SDK abstractions:
 | Integration tests against a real Gateway | Written and env-gated; live confirmation pending a user run |
 | OpenTelemetry traces and metrics | Implemented behind the `otel` build tag; stdlib-only without it |
 | Threat model and risk register | [docs/threat-model.md](./docs/threat-model.md); 7 adversarial defects found and fixed |
-| Enterprise CI (lint, security, coverage gate, SBOM, GoReleaser config) | 9 jobs green |
+| Enterprise CI (lint, security, coverage gate, SBOM, GoReleaser config) | 12 jobs green |
 | v-next layer (`pkg/domain`, `pkg/services`, `pkg/transport`, `internal/auth`) | Implemented and tested, **not yet reachable by a caller** — see [ARCHITECTURE.md](./ARCHITECTURE.md) |
-| Release (GitHub + Gitee) | v0.1.8 ✓ |
+| Release (GitHub + Gitee) | v0.1.9 ✓ |
 
 All 51 HTTP endpoints and 11 market push topics are implemented. Counts are
 canonical in [docs/SPEC.md](./docs/SPEC.md); do not hand-edit them elsewhere.

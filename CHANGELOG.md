@@ -5,6 +5,40 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.9] - 2026-09-25
+
+### Fixed
+
+- **The secret-scanning allowlist was incomplete.** 0.1.8 introduced the pinned
+  `gitleaks` job with an allowlist of three paths, but five legitimately-flagged
+  locations were not covered, so the job reported a leak and failed on every run.
+  The allowlist is now complete and the scan exits 0. Each entry is justified:
+  the public platform keys (ADR 0005), the vendored `proto/` tree, the published
+  AES test vector, and two test files holding deliberately-planted credential
+  strings. No rule class is disabled, so a new suppression stays a visible review
+  decision. Verified with planted AWS, GitHub, and RSA keys still failing the
+  scan, so the rules are proven to fire rather than merely silenced.
+
+### Added
+
+- **The coverage gate now covers the released surface.** It gated only
+  `pkg/domain`, `internal/auth`, and `internal/transport`, so the four public
+  managers a caller actually imports were ungated — and all four were below the
+  85% threshold: `pkg/hstong` 84.7%, `stream` 76.3%, `trade` 81.3%, `algo`
+  81.2%. They now sit at 90.7%, 85.9%, 86.3%, and 87.5%, and all seven packages
+  are gated.
+- **Tests aimed at branches that had never executed, not just uncovered lines.**
+  `WithKeepAliveRoute` had no test at all, and a wrong keep-alive endpoint turns
+  every poll into an error. The topic-to-message-type map in `stream` was half
+  covered, where a wrong entry silently hands every event to the caller under the
+  wrong type. Each request `validate()` in `trade` and `algo` had only its happy
+  path, so a dropped required-field or format guard was undetectable. Also added:
+  the drop-oldest backpressure and closed-subscription paths, and all three wire
+  shapes `HoldsListResponse` must decode.
+
+`internal/push` is deliberately still ungated: it holds three implementations,
+two of which the pending v-next decision may delete.
+
 ## [0.1.8] - 2026-09-25
 
 ### Security
@@ -487,7 +521,7 @@ canonical in [docs/SPEC.md](./docs/SPEC.md).
 - The plaintext trade password is held in memory only, encrypted before it
   leaves the process, and never logged or embedded in an error.
 
-[Unreleased]: https://github.com/shing1211/hstongapi4go/compare/v0.1.8...HEAD
+[Unreleased]: https://github.com/shing1211/hstongapi4go/compare/v0.1.9...HEAD
 [0.1.0]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.0
 [0.1.1]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.1
 [0.1.2]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.2
@@ -497,4 +531,4 @@ canonical in [docs/SPEC.md](./docs/SPEC.md).
 [0.1.6]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.6
 [0.1.7]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.7
 [0.1.8]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.8
-[0.1.6]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.6
+[0.1.9]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.9
