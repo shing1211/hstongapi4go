@@ -16,8 +16,12 @@
 //   - domain has zero imports from transport, internal, or client packages.
 //   - domain types receive injected dependencies (logger, clock, tracer) via
 //     constructor options, not via global state.
-//   - wire-to-domain conversion is performed by the transport layer; domain
-//     types do not hold string/json.Number wire representations.
+//   - wire-to-domain conversion lives in this package's mappers, which accept
+//     generated DTOs. ADR 0010 intended that conversion to happen in the
+//     transport layer; see the Deviations table in
+//     docs/runs/2026-09-23-hstong-enterprise-sdk/ARCHITECTURE.md. The domain
+//     value types themselves still do not hold string/json.Number wire
+//     representations.
 //   - decimal.Decimal is used for all financial arithmetic (ADR 0008); float64
 //     is never used for monetary values.
 //
