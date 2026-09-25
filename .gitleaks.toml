@@ -1,0 +1,34 @@
+# gitleaks configuration for hstongapi4go.
+#
+# See docs/adr/0012-ci-secret-scanning.md for the decision to run this scan.
+#
+# Every entry allowlists a *path*, never a rule class. Disabling a rule would
+# hide genuine findings everywhere; a narrow path with a stated reason keeps the
+# suppression reviewable in a normal pull request.
+
+title = "hstongapi4go secret scan"
+
+[extend]
+# Inherit the upstream default rule set so new detection rules arrive with a
+# pinned gitleaks upgrade rather than being hand-listed here.
+useDefault = true
+
+[[allowlists]]
+description = "HStong platform PUBLIC keys. Public reference data by design; the SDK holds no credentials and performs no signing (ADR 0005)."
+paths = [
+  '''pkg/types/platformkeys\.go''',
+]
+
+[[allowlists]]
+description = "Vendored protobuf sources imported byte-for-byte from the vendor SDKs (proto/PROVENANCE.md). CJK comments can trip entropy heuristics; this tree is not ours to edit."
+paths = [
+  '''^proto/''',
+]
+
+[[allowlists]]
+description = "Published AES-192-ECB test vector 123456 -> W1U8iZIppSE+mBMtzy9vZQ==. It is a documented protocol constant, not a credential."
+paths = [
+  '''internal/crypto/aes_test\.go''',
+  '''internal/auth/auth_test\.go''',
+  '''CHANGELOG\.md''',
+]

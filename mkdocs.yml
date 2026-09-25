@@ -99,6 +99,7 @@ nav:
       - "0009: OpenTelemetry": adr/0009-opentelemetry-observability.md
       - "0010: v-next layering": adr/0010-vnext-layered-architecture.md
       - "0011: v0.1.x compat": adr/0011-v01x-compatibility.md
+      - "0012: Secret scanning": adr/0012-ci-secret-scanning.md
 
 extra_css:
   - stylesheets/extra.css

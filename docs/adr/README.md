@@ -17,6 +17,7 @@ new ADR, not editing the old one.
 | [0009](./0009-opentelemetry-observability.md) | OpenTelemetry observability | Accepted | OTel `otel` build tag; no-op default; tracer/meter injectable via `Client` options; full span + metric coverage of auth, HTTP, push, orders. |
 | [0010](./0010-vnext-layered-architecture.md) | Additive v-next layered architecture | Accepted | New `pkg/domain`, `pkg/services`, `pkg/transport`, `internal/auth` layer; v0.1.x surface stays stable. |
 | [0011](./0011-v01x-compatibility.md) | v0.1.x compatibility guarantees | Accepted | No breaking type or wire changes to `pkg/hstong/*`, `pkg/types`, `client/`, `internal/*`; mock Gateway and e2e tests unchanged. |
+| [0012](./0012-ci-secret-scanning.md) | CI-only secret scanning | Accepted | `gitleaks` runs as a pinned CI-only Action over the full history, with a path allowlist for the public platform keys, vendored protos, and the published AES test vector; `go.mod` is untouched. |
 
 Template:
 
