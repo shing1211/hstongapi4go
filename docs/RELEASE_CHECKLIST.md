@@ -44,7 +44,7 @@ manager runs through this list before tagging and pushing.
 ## Tagging
 
 - [ ] **12. Tag format** — tags follow [SemVer](https://semver.org/):
-    `v{major}.{minor}.{patch}`. Example: `v0.1.6`.
+    `v{major}.{minor}.{patch}`. Example: `v0.1.7`.
 
 - [ ] **13. Tag push** — after tagging, push to both remotes:
 

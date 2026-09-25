@@ -5,6 +5,100 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.7] - 2026-09-25
+
+### Security
+
+Seven defects found by the E17 adversarial pass. Each was fixed with a
+regression test verified to fail against the pre-fix code.
+
+- **F1 — credential leak into errors and traces.** A non-2xx response body was
+  embedded in the error verbatim, so an echoing Gateway could push a password
+  into the error and from there into a span. Body snippets are now masked.
+- **F2 — ADR 0003 bypass through route aliases.** `IsMutation` did an exact
+  lookup, so `/trade/TradeEntrustRequest` classified as a retryable query. All
+  three alias forms of all twelve mutation paths are now classified as
+  mutations and tested.
+- **F3 — unbounded cursor walks.** `AccountService` pagination had no
+  stalled-cursor guard, page cap, or page-size clamp.
+- **F4 — reconnect storm.** `maxRetries == 0` meant infinite (measured 53
+  dials where 11 were expected), and the dialer received an empty address after
+  a read failure.
+- **F5 — unredacted account identifiers.** `accountid` and `fundAccount` were
+  not redacted, contradicting ADR 0009.
+- **F6 — raw errors in spans.** `EndSpan` recorded `err.Error()` verbatim.
+- **F7 — freshness never populated.** `FreshnessMonitor.Record` returned early
+  on `seq == 0` and `seqOf` always yields 0, so staleness detection could never
+  fire. Both freshness tests failed before the fix.
+
+Two further defects surfaced while repairing CI:
+
+- **`Quantity.ValidateLot` integer overflow.** A `uint64` lot above `MaxInt64`
+  wrapped into a negative modulus.
+- **A test that asserted nothing.** `client/hardening_test.go` contained an
+  empty branch.
+
+### Fixed
+
+**CI had been red on `main` since E15, and v0.1.6 shipped while red.** A single
+early failure had masked everything after it. All nine jobs are green.
+
+- A gofmt gate failing on three files skipped vet, tests, race, and the money
+  check on every run since E15.
+- 39 golangci-lint findings, now zero.
+- The security job installed gosec from `honnef.co/go/tools` — staticcheck's
+  module, which does not exist — so the step failed and `govulncheck` never ran.
+  Both scanners are now pinned.
+- `.goreleaser.yaml` did not parse, and separately set `main: .` on a library
+  root and forced the `otel` tag on every build. It now builds only the mock
+  Gateway, and unverifiable signing was removed rather than left to fail a
+  release.
+- 14 standard-library vulnerabilities, fixed by the `go1.26.6` toolchain.
+- buf normalises comments differently for CRLF and LF input, so `gen/` produced
+  on a Windows checkout never matched a Linux regeneration and `proto-verify`
+  could not pass. `.gitattributes` now forces LF checkouts, which also makes a
+  local `gofmt -l .` match CI.
+
+### Added
+
+- **`docs/threat-model.md`** — assets, trust boundaries, adversaries, seven
+  scenarios, and a 14-entry risk register separating fixed from accepted and
+  open.
+- **Adversarial test coverage** for OTel attribute leakage, token replay, clock
+  drift, and stale-data handling.
+- **`ARCHITECTURE.md`** — a graph-derived architecture map (6,382 nodes, 219
+  clusters, 518 execution flows) with 26 functional areas, five traced
+  execution flows, a Mermaid diagram, and layering deviations verified against
+  source rather than trusted from the graph.
+- **GitNexus agent wiring** in `AGENTS.md`, `CLAUDE.md`, and six repository-local
+  skills.
+
+### Changed
+
+- **Agent instructions.** The GitNexus `MUST`/`NEVER` rules were unsatisfiable:
+  the index is a local, git-ignored artifact, so a fresh clone has none, and a
+  stale MCP server fails every graph read while the CLI works. The rules now
+  apply whenever the graph can answer, with an explicit fallback that requires
+  saying graph analysis was unavailable rather than skipping silently.
+- **`Makefile`.** `goreleaser-check` no longer runs the `go install …@latest`
+  path that fails under Go 1.26; the Python default auto-detects `python3` then
+  `python`; `fmt-check` drops a CRLF workaround that `.gitattributes` made
+  obsolete; a stale header claiming proto, docs, and mock-Gateway targets were
+  unimplemented was corrected.
+- **Documentation accuracy.** All six READMEs claimed ADRs 0001-0007 and omitted
+  the v-next layer from their package layouts. `docs/DESIGN.md` was present but
+  absent from the MkDocs nav. The run index carried wrong close-out SHAs. The
+  v-next boundary document asserted four rules that are false in code; it is now
+  marked superseded and carries a verified deviations table.
+- New run `2026-09-25-hstong-agent-readiness` tracks the reconciliation.
+
+### Known limitations
+
+Unchanged, and recorded rather than fixed: the v-next layer is still not
+reachable by a caller, so its hardening protects nobody today; the Release
+workflow runs `goreleaser check` on a tag and never publishes artefacts; and no
+live Gateway integration run has ever executed.
+
 ## [0.1.6] - 2026-09-24
 
 ### Added
@@ -287,11 +381,13 @@ canonical in [docs/SPEC.md](./docs/SPEC.md).
 - The plaintext trade password is held in memory only, encrypted before it
   leaves the process, and never logged or embedded in an error.
 
-[Unreleased]: https://github.com/shing1211/hstongapi4go/compare/v0.1.6...HEAD
+[Unreleased]: https://github.com/shing1211/hstongapi4go/compare/v0.1.7...HEAD
 [0.1.0]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.0
 [0.1.1]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.1
 [0.1.2]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.2
 [0.1.3]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.3
 [0.1.4]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.4
 [0.1.5]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.5
+[0.1.6]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.6
+[0.1.7]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.7
 [0.1.6]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.6
