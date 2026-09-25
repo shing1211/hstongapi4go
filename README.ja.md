@@ -24,7 +24,7 @@
 [English](./README.md) · [简体中文](./README.zh-Hans.md) · [繁體中文](./README.zh-Hant.md) · [日本語](./README.ja.md) · [한국어](./README.ko.md) · [Español](./README.es.md)
 
 > 本書は英語版 [README](./README.md) のコミュニティ翻訳です。**英語版が正式です。**
-> 同期 / Last synced: 2026-09-24
+> 同期 / Last synced: 2026-09-25
 
 ## 目次
 
@@ -242,6 +242,9 @@ hstongapi4go/
 ├── client/            # コアクライアント：オプション、環境変数、ルート、コーデック、Close
 ├── pkg/hstong/        # 公開マネージャ：セッション + market/trade/future/algo/stream
 ├── pkg/types/         # 列挙、ステータスコード、プラットフォーム公開鍵
+├── pkg/domain/        # v-next: decimal value types, typed IDs, DTO mappers
+├── pkg/services/      # v-next: market/account/trading use cases
+├── pkg/transport/     # v-next: HTTP adapter (deadlines, caps, retry)
 ├── internal/          # 内部：transport、push、crypto、errs、resilience、logging、metrics
 ├── gen/               # 生成された protobuf コード（編集禁止）
 ├── proto/             # 同梱 .proto ソース + 来歴
@@ -258,8 +261,8 @@ hstongapi4go/
 
 - ドキュメントサイト：<https://shing1211.github.io/hstongapi4go/>
 - 正式な API 索引と件数：[docs/SPEC.md](./docs/SPEC.md)
-- アーキテクチャ：[docs/DESIGN.md](./docs/DESIGN.md)
-- 意思決定：[docs/adr/README.md](./docs/adr/README.md)（ADR 0001–0007）
+- アーキテクチャ：[ARCHITECTURE.md](./ARCHITECTURE.md) · [docs/DESIGN.md](./docs/DESIGN.md)
+- 意思決定：[docs/adr/README.md](./docs/adr/README.md)（ADR 0001–0011）
 - レガシープロトコル（文書化のみ、**未実装**）：[docs/LEGACY.md](./docs/LEGACY.md)
 - 免責事項：[DISCLAIMER.md](./DISCLAIMER.md)
 

@@ -23,7 +23,7 @@
 [English](./README.md) · [简体中文](./README.zh-Hans.md) · [繁體中文](./README.zh-Hant.md) · [日本語](./README.ja.md) · [한국어](./README.ko.md) · [Español](./README.es.md)
 
 > 本文件是英文 [README](./README.md) 的社区翻译。**英文版本为准。**
-> 同步于 / Last synced: 2026-09-24
+> 同步于 / Last synced: 2026-09-25
 
 ## 目录
 
@@ -236,6 +236,9 @@ hstongapi4go/
 ├── client/            # 核心客户端：选项、环境变量、路由、编解码器、Close
 ├── pkg/hstong/        # 公开管理器：会话 + market/trade/future/algo/stream
 ├── pkg/types/         # 枚举、状态码、平台公钥
+├── pkg/domain/        # v-next: decimal value types, typed IDs, DTO mappers
+├── pkg/services/      # v-next: market/account/trading use cases
+├── pkg/transport/     # v-next: HTTP adapter (deadlines, caps, retry)
 ├── internal/          # 私有：transport、push、crypto、errs、resilience、logging、metrics
 ├── gen/               # 生成的 protobuf 代码（请勿编辑）
 ├── proto/             # 内置 .proto 源 + 来源说明
@@ -252,8 +255,8 @@ hstongapi4go/
 
 - 文档站点：<https://shing1211.github.io/hstongapi4go/>
 - 规范 API 索引与计数：[docs/SPEC.md](./docs/SPEC.md)
-- 架构：[docs/DESIGN.md](./docs/DESIGN.md)
-- 决策：[docs/adr/README.md](./docs/adr/README.md)（ADR 0001–0007）
+- 架构：[ARCHITECTURE.md](./ARCHITECTURE.md) · [docs/DESIGN.md](./docs/DESIGN.md)
+- 决策：[docs/adr/README.md](./docs/adr/README.md)（ADR 0001–0011）
 - 旧版协议（已文档化，**未实现**）：[docs/LEGACY.md](./docs/LEGACY.md)
 - 免责声明：[DISCLAIMER.md](./DISCLAIMER.md)
 

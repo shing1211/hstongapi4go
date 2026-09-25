@@ -26,7 +26,7 @@
 [English](./README.md) · [简体中文](./README.zh-Hans.md) · [繁體中文](./README.zh-Hant.md) · [日本語](./README.ja.md) · [한국어](./README.ko.md) · [Español](./README.es.md)
 
 > Este documento es una traducción comunitaria del [README](./README.md) en inglés.
-> **La versión en inglés es la autoritativa.** Sincronizado / Last synced: 2026-09-24
+> **La versión en inglés es la autoritativa.** Sincronizado / Last synced: 2026-09-25
 
 ## Tabla de contenidos
 
@@ -246,6 +246,9 @@ hstongapi4go/
 ├── client/            # Cliente principal: opciones, entorno, rutas, códecs, Close
 ├── pkg/hstong/        # Gestores públicos: sesión + market/trade/future/algo/stream
 ├── pkg/types/         # Enumeraciones, códigos de estado, claves públicas de la plataforma
+├── pkg/domain/        # v-next: decimal value types, typed IDs, DTO mappers
+├── pkg/services/      # v-next: market/account/trading use cases
+├── pkg/transport/     # v-next: HTTP adapter (deadlines, caps, retry)
 ├── internal/          # Privado: transport, push, crypto, errs, resilience, logging, metrics
 ├── gen/               # Código protobuf generado (NO EDITAR)
 ├── proto/             # Fuentes .proto incluidas + procedencia
@@ -262,8 +265,8 @@ hstongapi4go/
 
 - Sitio de documentación: <https://shing1211.github.io/hstongapi4go/>
 - Índice canónico de la API y recuentos: [docs/SPEC.md](./docs/SPEC.md)
-- Arquitectura: [docs/DESIGN.md](./docs/DESIGN.md)
-- Decisiones: [docs/adr/README.md](./docs/adr/README.md) (ADR 0001–0007)
+- Arquitectura: [ARCHITECTURE.md](./ARCHITECTURE.md) · [docs/DESIGN.md](./docs/DESIGN.md)
+- Decisiones: [docs/adr/README.md](./docs/adr/README.md) (ADR 0001–0011)
 - Protocolo heredado (documentado, **no implementado**): [docs/LEGACY.md](./docs/LEGACY.md)
 - Aviso legal: [DISCLAIMER.md](./DISCLAIMER.md)
 

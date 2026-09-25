@@ -23,7 +23,7 @@
 [English](./README.md) · [简体中文](./README.zh-Hans.md) · [繁體中文](./README.zh-Hant.md) · [日本語](./README.ja.md) · [한국어](./README.ko.md) · [Español](./README.es.md)
 
 > 本文件是英文 [README](./README.md) 的社群翻譯。**英文版本為準。**
-> 同步於 / Last synced: 2026-09-24
+> 同步於 / Last synced: 2026-09-25
 
 ## 目錄
 
@@ -236,6 +236,9 @@ hstongapi4go/
 ├── client/            # 核心用戶端：選項、環境變數、路由、編解碼器、Close
 ├── pkg/hstong/        # 公開管理器：工作階段 + market/trade/future/algo/stream
 ├── pkg/types/         # 列舉、狀態碼、平台公鑰
+├── pkg/domain/        # v-next: decimal value types, typed IDs, DTO mappers
+├── pkg/services/      # v-next: market/account/trading use cases
+├── pkg/transport/     # v-next: HTTP adapter (deadlines, caps, retry)
 ├── internal/          # 私有：transport、push、crypto、errs、resilience、logging、metrics
 ├── gen/               # 產生的 protobuf 程式碼（請勿編輯）
 ├── proto/             # 內建 .proto 來源 + 來源說明
@@ -252,8 +255,8 @@ hstongapi4go/
 
 - 文件網站：<https://shing1211.github.io/hstongapi4go/>
 - 規範 API 索引與計數：[docs/SPEC.md](./docs/SPEC.md)
-- 架構：[docs/DESIGN.md](./docs/DESIGN.md)
-- 決策：[docs/adr/README.md](./docs/adr/README.md)（ADR 0001–0007）
+- 架構：[ARCHITECTURE.md](./ARCHITECTURE.md) · [docs/DESIGN.md](./docs/DESIGN.md)
+- 決策：[docs/adr/README.md](./docs/adr/README.md)（ADR 0001–0011）
 - 舊版協定（已文件化，**未實作**）：[docs/LEGACY.md](./docs/LEGACY.md)
 - 免責聲明：[DISCLAIMER.md](./DISCLAIMER.md)
 

@@ -24,7 +24,7 @@
 [English](./README.md) · [简体中文](./README.zh-Hans.md) · [繁體中文](./README.zh-Hant.md) · [日本語](./README.ja.md) · [한국어](./README.ko.md) · [Español](./README.es.md)
 
 > 이 문서는 영어 [README](./README.md)의 커뮤니티 번역입니다. **영어판이 정본입니다.**
-> 동기화 / Last synced: 2026-09-24
+> 동기화 / Last synced: 2026-09-25
 
 ## 목차
 
@@ -242,6 +242,9 @@ hstongapi4go/
 ├── client/            # 코어 클라이언트: 옵션, 환경 변수, 라우트, 코덱, Close
 ├── pkg/hstong/        # 공개 관리자: 세션 + market/trade/future/algo/stream
 ├── pkg/types/         # 열거형, 상태 코드, 플랫폼 공개 키
+├── pkg/domain/        # v-next: decimal value types, typed IDs, DTO mappers
+├── pkg/services/      # v-next: market/account/trading use cases
+├── pkg/transport/     # v-next: HTTP adapter (deadlines, caps, retry)
 ├── internal/          # 내부: transport, push, crypto, errs, resilience, logging, metrics
 ├── gen/               # 생성된 protobuf 코드(편집 금지)
 ├── proto/             # 동봉 .proto 소스 + 출처
@@ -258,8 +261,8 @@ hstongapi4go/
 
 - 문서 사이트: <https://shing1211.github.io/hstongapi4go/>
 - 정본 API 색인과 수치: [docs/SPEC.md](./docs/SPEC.md)
-- 아키텍처: [docs/DESIGN.md](./docs/DESIGN.md)
-- 결정: [docs/adr/README.md](./docs/adr/README.md)(ADR 0001–0007)
+- 아키텍처: [ARCHITECTURE.md](./ARCHITECTURE.md) · [docs/DESIGN.md](./docs/DESIGN.md)
+- 결정: [docs/adr/README.md](./docs/adr/README.md)(ADR 0001–0011)
 - 레거시 프로토콜(문서화만 됨, **미구현**): [docs/LEGACY.md](./docs/LEGACY.md)
 - 면책 조항: [DISCLAIMER.md](./DISCLAIMER.md)
 

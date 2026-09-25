@@ -26,7 +26,7 @@
 
 [English](./README.md) · [简体中文](./README.zh-Hans.md) · [繁體中文](./README.zh-Hant.md) · [日本語](./README.ja.md) · [한국어](./README.ko.md) · [Español](./README.es.md)
 
-> Canonical English source. Last synced: 2026-09-24
+> Canonical English source. Last synced: 2026-09-25
 
 ## Key Concepts
 
@@ -80,6 +80,10 @@ Before writing your first call, understand these SDK abstractions:
 | Documentation (READMEs, MkDocs site, ADRs, SPEC, LEGACY) | Implemented |
 | Offline tests + all-endpoint SDK-to-mock e2e | Implemented |
 | Integration tests against a real Gateway | Written and env-gated; live confirmation pending a user run |
+| OpenTelemetry traces and metrics | Implemented behind the `otel` build tag; stdlib-only without it |
+| Threat model and risk register | [docs/threat-model.md](./docs/threat-model.md); 7 adversarial defects found and fixed |
+| Enterprise CI (lint, security, coverage gate, SBOM, GoReleaser config) | 9 jobs green |
+| v-next layer (`pkg/domain`, `pkg/services`, `pkg/transport`, `internal/auth`) | Implemented and tested, **not yet reachable by a caller** — see [ARCHITECTURE.md](./ARCHITECTURE.md) |
 | Release (GitHub + Gitee) | v0.1.6 ✓ |
 
 All 51 HTTP endpoints and 11 market push topics are implemented. Counts are
@@ -262,6 +266,9 @@ hstongapi4go/
 ├── client/            # Core client: options, env, routes, codecs, Close
 ├── pkg/hstong/        # Public managers: session + market/trade/future/algo/stream
 ├── pkg/types/         # Enums, status codes, platform public keys
+├── pkg/domain/        # v-next: decimal value types, typed IDs, DTO mappers
+├── pkg/services/      # v-next: market/account/trading use cases
+├── pkg/transport/     # v-next: HTTP adapter (deadlines, caps, retry)
 ├── internal/          # Private: transport, push, crypto, errs, resilience, logging, metrics
 ├── gen/               # Generated protobuf code (DO NOT EDIT)
 ├── proto/             # Vendored .proto sources + provenance
@@ -278,8 +285,8 @@ hstongapi4go/
 
 - Documentation site: <https://shing1211.github.io/hstongapi4go/>
 - Canonical API index and counts: [docs/SPEC.md](./docs/SPEC.md)
-- Architecture: [docs/DESIGN.md](./docs/DESIGN.md)
-- Decisions: [docs/adr/README.md](./docs/adr/README.md) (ADRs 0001–0007)
+- Architecture: [ARCHITECTURE.md](./ARCHITECTURE.md) · [docs/DESIGN.md](./docs/DESIGN.md)
+- Decisions: [docs/adr/README.md](./docs/adr/README.md) (ADRs 0001–0011)
 - Legacy protocol (documented, **not implemented**): [docs/LEGACY.md](./docs/LEGACY.md)
 - Disclaimer: [DISCLAIMER.md](./DISCLAIMER.md)
 
