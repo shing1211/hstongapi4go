@@ -11,7 +11,7 @@
 
 ## 1. What this run completed
 
-Twenty of twenty-two tasks, then a CI repair that was not in the original plan.
+Twenty-two of twenty-two tasks, then a CI repair that was not in the original plan.
 
 **P00 Foundation & Domain.** ADRs 0008–0011 (decimal money, OpenTelemetry,
 additive v-next layering, v0.1.x compatibility). The four v-next packages
@@ -129,18 +129,19 @@ account and is the highest-value item that cannot be done offline.
 
 ### G8 — Documentation debt (Low)
 
-- `docs/DESIGN.md` is still absent from the mkdocs nav.
+> **Status 2026-09-25:** the `docs/DESIGN.md` nav gap is closed, and the two
+> items below remain open. Both are tracked in
+> `../2026-09-25-hstong-agent-readiness/`. A "mojibake" item previously listed
+> here was removed after an audit found zero U+FFFD and no Latin-1 mojibake
+> sequences in the named files; it was never a defect.
 - `mkdocs.yml` uses `enabled: !ENV [CI, false]` for the git-revision plugin, which
   does the opposite of what it looks like: `!ENV` substitutes the string `"true"`
   when `CI` is set, so the plugin stays enabled. The CI job now uses
   `fetch-depth: 0` and works, but the expression is misleading.
-- Several files carry mojibake from an earlier encoding pass, including the
-  `mkdocs.yml` footer and parts of `docs/LEGACY.md`.
 - `proto/PROVENANCE.md` asserts the vendored tree is byte-for-byte upstream, while
   `.gitattributes` now normalises line endings to LF. The committed bytes did not
   change, but the document's claim is no longer literally true and should be
   reworded.
-- The prior run's `next-phase.md` and `plan.md` contain the same mojibake.
 
 ### G9 — Local workflow friction (Low)
 
@@ -161,7 +162,7 @@ Seven candidates, ordered by the value they unlock rather than by size.
 | N4 | Close the open security items: route-set coverage test, response-size cap, secret scanning in CI | G7 | M | Low |
 | N5 | Test debt: `pkg/services` coverage, bounded fuzz job, an `otel`-tag CI job, widen the coverage gate | G5 | M | Low |
 | N6 | Run the live Gateway integration suite against a real account | G6 | S to run, M to fix what it finds | Needs credentials |
-| N7 | Documentation cleanup: DESIGN.md nav, the `!ENV` expression, mojibake, PROVENANCE wording | G8, G9 | S | None |
+| N7 | Documentation cleanup: DESIGN.md nav, the `!ENV` expression, PROVENANCE wording | G8, G9 | S | None |
 
 ## 5. Recommended breakdown
 

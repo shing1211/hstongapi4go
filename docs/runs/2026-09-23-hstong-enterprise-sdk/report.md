@@ -4,8 +4,9 @@
 - **Task:** E22
 - **Mode:** BUILD
 - **Status:** complete, 22/22
-- **Baseline:** `be22ebe` (v0.1.5) · **HEAD at close-out:** `19591bc` + this report
+- **Baseline:** `be22ebe` (v0.1.5) · **Close-out commits:** `19591bc` (CI-repair evidence), `bc4d1a4` (this report and `next-phase.md`)
 - **Deliverable release:** v0.1.6 (`c8b6084`)
+- **Post-close-out commits:** `d28310d` graph-derived `ARCHITECTURE.md`, `eb00cbd` GitNexus agent wiring, `b30b0bf` `ARCHITECTURE.md` regenerated from a refreshed index. These landed after close-out and are tracked in `../2026-09-25-hstong-agent-readiness/`.
 
 ## 1. Outcome
 
