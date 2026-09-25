@@ -77,6 +77,7 @@ nav:
   - Reference:
       - Glossary: glossary.md
       - Quick Reference: quick-reference.md
+      - Design rationale: DESIGN.md
       - API Reference: SPEC.md
       - Compatibility Matrix: COMPAT.md
   - Operations:
