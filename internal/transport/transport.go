@@ -27,6 +27,12 @@ const (
 	// option is supplied. It is used both as the *http.Client timeout and as
 	// the envelope's timeout_sec value.
 	DefaultTimeout = 10 * time.Second
+	// DefaultMaxResponseBytes is the largest response body Transport will read
+	// when no WithMaxResponseBytes option is supplied. Gateway responses are
+	// JSON documents over loopback; the largest documented endpoint (a day's
+	// ticker or time-share series) is orders of magnitude below this, so the cap
+	// bounds a malformed or hostile body without constraining real traffic.
+	DefaultMaxResponseBytes int64 = 8 << 20 // 8 MiB
 )
 
 // nullLiteral is the JSON null payload, which some endpoints return in place of
@@ -66,6 +72,9 @@ type Config struct {
 	// DefaultTimeout is used both as the client timeout and as the envelope
 	// timeout_sec, unless the caller supplied a client with an explicit timeout.
 	DefaultTimeout time.Duration
+	// MaxResponseBytes is the largest response body that will be read. A body
+	// above the cap is rejected with a typed error instead of being buffered.
+	MaxResponseBytes int64
 }
 
 // Option mutates a Config. Options are applied in order on top of the defaults
@@ -93,13 +102,23 @@ func WithDefaultTimeout(timeout time.Duration) Option {
 	return func(c *Config) { c.DefaultTimeout = timeout }
 }
 
+// WithMaxResponseBytes sets the largest response body that will be read. The
+// default is DefaultMaxResponseBytes. A non-positive value restores the default
+// rather than disabling the cap: an unbounded read is never selected by
+// accident, and a caller that genuinely needs a larger ceiling can set it
+// explicitly.
+func WithMaxResponseBytes(n int64) Option {
+	return func(c *Config) { c.MaxResponseBytes = n }
+}
+
 // Transport executes Gateway HTTP requests. It is immutable after New and safe
 // for concurrent use; it holds no per-request state. Each Do call issues
 // exactly one HTTP attempt and never retries (docs/adr/0003-no-auto-retry-orders.md).
 type Transport struct {
-	baseURL        string
-	client         *http.Client
-	defaultTimeout time.Duration
+	baseURL          string
+	client           *http.Client
+	defaultTimeout   time.Duration
+	maxResponseBytes int64
 }
 
 // New builds a Transport from opts, applying them in order on top of
@@ -107,8 +126,9 @@ type Transport struct {
 // The returned Transport is safe for concurrent use.
 func New(opts ...Option) *Transport {
 	cfg := Config{
-		BaseURL:        DefaultBaseURL,
-		DefaultTimeout: DefaultTimeout,
+		BaseURL:          DefaultBaseURL,
+		DefaultTimeout:   DefaultTimeout,
+		MaxResponseBytes: DefaultMaxResponseBytes,
 	}
 	for _, opt := range opts {
 		if opt != nil {
@@ -120,6 +140,9 @@ func New(opts ...Option) *Transport {
 	}
 	if cfg.DefaultTimeout <= 0 {
 		cfg.DefaultTimeout = DefaultTimeout
+	}
+	if cfg.MaxResponseBytes <= 0 {
+		cfg.MaxResponseBytes = DefaultMaxResponseBytes
 	}
 
 	client := cfg.HTTPClient
@@ -133,9 +156,10 @@ func New(opts ...Option) *Transport {
 	}
 
 	return &Transport{
-		baseURL:        strings.TrimRight(cfg.BaseURL, "/"),
-		client:         client,
-		defaultTimeout: cfg.DefaultTimeout,
+		baseURL:          strings.TrimRight(cfg.BaseURL, "/"),
+		client:           client,
+		defaultTimeout:   cfg.DefaultTimeout,
+		maxResponseBytes: cfg.MaxResponseBytes,
 	}
 }
 
@@ -184,8 +208,16 @@ func (t *Transport) Do(ctx context.Context, op, path string, params any, codec C
 	}
 	defer func() { _ = httpResp.Body.Close() }()
 
-	body, err := io.ReadAll(httpResp.Body)
+	// Bound the read so a malformed or hostile Gateway response cannot force an
+	// unbounded allocation. MaxBytesReader reports *http.MaxBytesError, which is
+	// translated below into a typed error rather than a generic read failure.
+	body, err := io.ReadAll(http.MaxBytesReader(nil, httpResp.Body, t.maxResponseBytes))
 	if err != nil {
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			return errs.New(types.StatusCode(""), op, fmt.Sprintf(
+				"gateway response exceeds the %d byte cap", t.maxResponseBytes))
+		}
 		return readError(op, err)
 	}
 
@@ -286,7 +318,7 @@ func classifyFailure(errText string) (types.StatusCode, string) {
 	if end >= 4 && end <= 5 {
 		code := types.StatusCode(trimmed[:end])
 		if errs.KnownCode(code) {
-			rest := strings.TrimSpace(strings.TrimLeft(trimmed[end:], " :-："))
+			rest := strings.TrimSpace(strings.TrimLeft(trimmed[end:], " :-ï¼š"))
 			if rest == "" {
 				rest = errs.MessageForCode(code)
 			}
