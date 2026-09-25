@@ -96,12 +96,21 @@ In summary, in order:
   subscribes over HTTP and re-subscribes over HTTP on reconnect, while `Manager`
   sent topic frames over the TCP push socket — an assumption no test had ever
   checked, because the live Gateway run has never executed.
-- Step 2 — rewire `pkg/services` through `pkg/transport.Adapter`. The
-  highest-risk item and not mechanical: `pkg/services` holds a `*client.Client`
-  and calls `s.client.Do(...)`, while `Adapter` wraps `internal/transport`, so
-  the two sit at different layers and a narrow interface is needed.
-- R9 — fix the Adapter's unused `inner`, hardcoded base URL, and shared
-  `WithDeadline` cancel while it is in hand.
+- Step 2 — **cancelled, and the Adapter removed instead.** Reading
+  `client.Client.Do` and `Adapter.Do` side by side showed the rewire would have
+  dropped rate limiting, circuit breaking, metrics, and tracing from every
+  v-next call: `Adapter` is a second, thinner pipeline, not a richer layer. It
+  had no production caller, discarded the transport it was constructed with, and
+  its `WithDeadline` cancelled other callers' in-flight contexts. Removed rather
+  than repaired, which resolved R9 and took `pkg/transport` from 88.7% to 100%.
+  Evidence in `../../../docs/VNEXT.md` §5.4.
+- Step 3 — add **opt-in** correlation-ID injection to `client`. The one
+  capability the Adapter had that the live path lacks; it is wire-visible, so it
+  must default off under ADR 0011.
+- Step 5 — decide whether `pkg/services` should depend on an interface it
+  declares itself with `client.Client` injected, rather than on the concrete
+  type. That is the real remaining layering question now that the second
+  pipeline is gone.
 - R14 — rewrite `internal/auth/doc.go` to match reality rather than adding a
   second login implementation.
 - Step 1c — re-gate `internal/push`, which is still 80.0% and whose gap is in
@@ -148,12 +157,14 @@ programme's own order.
 
 What remains, in order:
 
-1. **§4 step 2 — rewire `pkg/services` through `pkg/transport.Adapter`.** Now
-   unblocked, since step 1 established that the transport is `Client`. This is
-   the highest-risk item in the programme: the two sit at different layers, so
-   the interface shape has to be decided before any code moves.
-2. **§4 steps 3-8**, in the order given in `../../../docs/VNEXT.md` §6.
-3. **§5** whenever credentials arrive. G6 should be scheduled early because its
+1. **§4 step 3 — add opt-in correlation-ID injection to `client`.** Small, and
+   the one capability the retired Adapter had that the live path lacks.
+2. **§4 step 5 — decide the `pkg/services` request path.** Whether it should
+   depend on an interface it declares itself, with `client.Client` injected,
+   rather than on the concrete type. This is the remaining layering question
+   for Option A, and the `depguard` rule cannot be written until it is answered.
+3. **§4 steps 4, 6-9**, in the order given in `../../../docs/VNEXT.md` §6.
+4. **§5** whenever credentials arrive. G6 should be scheduled early because its
    findings could change §4 — it is also the only way to finish R3.
 
 The coverage gate was widened ahead of the decision, on released public surface

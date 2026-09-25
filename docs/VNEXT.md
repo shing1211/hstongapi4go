@@ -207,6 +207,50 @@ is **not** lost with it: `test/integration/integration_test.go:521` exercises
 path that ships. G6 therefore still validates the released protocol — arguably
 better than before, since it now validates only what callers reach.
 
+### 5.4 Step 2 was the wrong step: the rewire would have been a regression
+
+The plan called for rewiring `pkg/services` through `pkg/transport.Adapter`.
+Reading both implementations before moving any code showed that would have made
+things worse, not better.
+
+| | `client.Client.Do` | `Adapter.Do` |
+|---|---|---|
+| Rate limiter | yes (`WaitEndpoint`) | **no** |
+| Circuit breaker | yes, split query/mutation | **no** |
+| Retry, mutation-guarded | yes | yes, but duplicated logic |
+| Metrics | request, latency, error, order outcome | **no** |
+| Tracing span | yes | **no** |
+| Route validation | yes | **no** |
+| Correlation ID | **no** | yes |
+
+`Adapter` is not a richer layer sitting above `client.Client`. It is a **second,
+thinner HTTP pipeline**. Pointing `pkg/services` at it would have dropped rate
+limiting, circuit breaking, metrics, and tracing from every v-next call — the
+layer the adapter was built to protect.
+
+It was also broken in three ways that the existing tests did not catch:
+
+- `NewAdapter` stored the `*internal/transport.Transport` passed to it in
+  `inner`, and `executor()` then built a **new** Transport per request using a
+  hardcoded `inettransport.DefaultBaseURL`. The caller's base URL, HTTP client,
+  timeout, and logger were all silently discarded.
+- `WithDeadline` stored a single `context.CancelFunc` on the Adapter and
+  cancelled the previous one, so caller B's call cancelled caller A's in-flight
+  context. It was also called from nowhere.
+- The response-size cap it applied was already covered by
+  `internal/transport`'s `WithMaxResponseBytes` after R7, making it a third copy
+  of a mechanism that now has one home.
+
+`Adapter` was therefore **removed** rather than repaired, which resolved R9 and
+took `pkg/transport` from 88.7% to **100%** — the removed code was the uncovered
+part. `pkg/transport/doc.go` was also corrected: it documented a `RESTAdapter`
+and a `PushAdapter` that were never implemented.
+
+One capability is genuinely worth carrying forward: **correlation-ID injection**
+(`X-Correlation-ID`). The released path sets only `Content-Type` today. It is a
+feature rather than a repair, it is wire-visible, and ADR 0011 means it has to be
+opt-in — so it is tracked as its own step below rather than smuggled in here.
+
 ## 6. Programme
 
 Option A is a multi-release programme. Order matters: step 1 decides what
@@ -217,13 +261,14 @@ Option A is a multi-release programme. Order matters: step 1 decides what
 | 1 | ~~Decide the push implementation~~ | **Done.** `Client` kept, `Manager` and `Fanout` retired, `Normalize` kept, `FreshnessMonitor` lifted. Evidence in §5. |
 | 1b | ~~Execute the retirement~~ | **Done.** Deleted `manager.go`, `fanout.go`, their 5 test files, and `test/integration/push_integration_test.go`. `FreshnessMonitor` lifted to `freshness.go` with its tests. R4's rationale rewritten, since `DedupCache` no longer exists. |
 | 1c | Re-gate `internal/push` | **Still needed.** At 80.0% after the retirement — the deleted code was well covered by its own tests, so removing it did not raise the ratio. The gap is in `client.go`, not in what was removed. |
-| 2 | Rewire `pkg/services` through `pkg/transport.Adapter` | **Highest-risk step and not mechanical.** `pkg/services` holds a `*client.Client` and calls `s.client.Do(...)` (`account.go:116,145,192,239` plus market and trading), while `Adapter` wraps `internal/transport.Transport` (`middleware.go:22-47`). These sit at different layers, so this needs a narrow executor interface both satisfy, or `Adapter` accepting an interface. Decide the shape before coding. |
-| 3 | Fix R9 while the Adapter is in hand | `inner` is unused, `baseURL` is hardcoded, and `WithDeadline` (`middleware.go:136`) shares one cancel across callers. |
+| ~~2~~ | ~~Rewire `pkg/services` through `pkg/transport.Adapter`~~ | **Cancelled, and the Adapter removed instead.** Reading both `Do` implementations showed the rewire would have dropped rate limiting, circuit breaking, metrics, and tracing from every v-next call. `Adapter` had no production caller and three defects. Evidence in §5.4. R9 resolved. `pkg/transport` went 88.7% → 100%. |
+| 3 | Add opt-in correlation-ID injection to `client` | The one capability the Adapter had that the live path lacks. Must be opt-in and off by default: it is wire-visible, and ADR 0011 forbids changing what v0.1.x puts on the wire without opt-in. |
 | 4 | Resolve R14 | Recommend rewriting `doc.go` to describe only what exists rather than adding a second login implementation — the released `SessionManager.EnsureLoggedIn` already covers the released path, and a second one is new risk rather than a fix. |
-| 5 | Add a `depguard` boundary rule | Makes the intended layering machine-enforced in `.golangci.yml`, so drift is caught by CI rather than by review. |
-| 6 | Test `pkg/services` | `market.go` 579 and `trading.go` 780 lines sit at ~4% coverage. Written *after* the rewire, against the final interface. |
-| 7 | Re-gate `internal/push` | Currently 80.3% and ungated. Measure it against the kept implementation only. |
-| 8 | Publish the migration guide and schedule v1.0 | The guide in §2 is the draft; it becomes a supported document. Refresh the `ARCHITECTURE.md` deviations table at the same time. |
+| 5 | Decide the `pkg/services` request path | **Newly open, and it is the real remaining question for Option A.** `pkg/services` calls `client.Do` directly. That is *correct* — `client.Client` is the better pipeline — so the question is no longer "route it through the Adapter" but whether `pkg/services` should depend on a narrow interface it declares itself (dependency inversion, as ADR 0010 intends) with `client.Client` as the injected implementation, rather than on the concrete type. That keeps the layering testable without a second pipeline. |
+| 6 | Add a `depguard` boundary rule | Makes the intended layering machine-enforced in `.golangci.yml`, so drift is caught by CI rather than by review. |
+| 7 | Test `pkg/services` | `market.go` 579 and `trading.go` 780 lines sit at ~4% coverage. Written after the request-path decision, so they are not written twice. |
+| 8 | Re-gate `pkg/transport` | Already at 100%; add it to the gate alongside the others. |
+| 9 | Publish the migration guide and schedule v1.0 | The guide in §2 is the draft; it becomes a supported document. Refresh the `ARCHITECTURE.md` deviations table at the same time — a full graph regeneration is due, since the derived diagram still shows the removed push implementations. |
 
 ADR 0011 continues to hold for all of v0.1.x: none of these steps may change a
 released type or wire shape before v1.0.

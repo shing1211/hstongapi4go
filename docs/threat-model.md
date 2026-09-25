@@ -178,10 +178,11 @@ backed by a test that fails against the pre-fix code.
 
 ## Risk register
 
-14 entries: **5 fixed**, 1 partially fixed (R3, awaiting a live Gateway run), **3
-open** (R8, R9, R14), and 5 accepted with a stated reason. Rows carry the commit
-that changed their status, so a stale status is visible as a commit that exists
-but is not cited here.
+14 entries: **6 resolved** (5 fixed, 1 resolved by removing unreachable code),
+1 partially fixed (R3, awaiting a live Gateway run), **2 open** (R8, R14), and
+5 accepted with a stated reason. Rows carry the commit that changed their
+status, so a stale status is visible as a commit that exists but is not cited
+here.
 
 | # | Risk | Severity | Status | Rationale |
 |---|------|----------|--------|-----------|
@@ -193,7 +194,7 @@ but is not cited here.
 | R6 | Backward clock jump can revive a token | Low | **Accepted (forward-looking)** | Would need a monotonic deadline. Low impact: the Gateway independently rejects an expired token. |
 | R7 | No read cap in the active transport executor | Medium | **Fixed (`de933f5`)** | `internal/transport` read every response with an unbounded `io.ReadAll`, so a malformed or hostile Gateway body could force an arbitrarily large allocation; the cap existed only in the unwired v-next adapter. Now bounded by `WithMaxResponseBytes` (default 8 MiB), reusing the `MaxBytesReader` pattern already reviewed in `pkg/transport`. An over-limit body returns a typed error naming the cap. The test was verified to fail against the pre-fix code. `gitnexus` rates the symbol **critical** because every request flows through `Do`; it was validated with the all-51-route e2e suite rather than by inspection. |
 | R8 | HTTP 5xx not retryable | Low | **Open (active path)** | Would change documented retry semantics; the Gateway reports overload as `1011` inside a 200 envelope. |
-| R9 | `pkg/transport.Adapter` unreachable and mis-wired | Low | **Open (forward-looking)** | `inner` is unused, the base URL is hardcoded, and `WithDeadline` stores one shared cancel that can cancel a previous caller. A trap for the next adopter. |
+| R9 | `pkg/transport.Adapter` unreachable and mis-wired | Low | **Resolved by removal (2026-09-25)** | The Adapter had no production caller and three defects: `NewAdapter` stored the `*internal/transport.Transport` it was given in `inner` and then never used it, building a fresh Transport per request with a hardcoded base URL, so the caller's configuration was silently discarded; and `WithDeadline` stored one shared `context.CancelFunc` on the Adapter, so a second caller's call cancelled the first caller's in-flight context. Routing `pkg/services` through it would also have been a functional regression, because `Adapter.Do` provides no rate limiter, circuit breaker, metrics, or tracing spans while `client.Client` provides all four. It was removed rather than repaired, which also raised `pkg/transport` from 88.7% to 100% — the removed code was the uncovered part. The one capability worth carrying forward is correlation-ID injection, which the released path still lacks; that is a feature, not a repair, and is tracked in `VNEXT.md` §6. |
 | R10 | `passwordHash` and bare `account` not redacted | Low | **Accepted (active path)** | `IsSensitiveKey` matches whole names and `account` is a common word. Chosen so support correlation keeps working; revisit if the data policy changes. |
 | R11 | No secret scanning in CI | Medium | **Fixed (ADR 0012)** | A `secrets` job runs `gitleaks` as a pinned Action over the full history of the pushed ref (`fetch-depth: 0`). `.gitleaks.toml` allowlists five paths by justification — the public platform keys and the published AES-192 protocol key (ADR 0005), the vendored `proto/` tree, the AES test vector, and the redaction test fixtures — and never disables a rule class. `go.mod` is untouched, so consumers gain no dependency. **Verified locally** in a container against all 90 commits: 4 findings on the first run, all false positives, reduced to 0 after the allowlist was completed. The rules were separately proven to fire by planting fake credentials in a non-allowlisted file. |
 | R12 | `gosec`/`govulncheck` were pinned to `@latest` | Low | **Fixed (f8535b9)** | Both scanners are now pinned: `gosec@v2.22.10` and `govulncheck@v1.1.4` in `.github/workflows/ci.yml`, so a scanner result cannot change without a commit. Corrected 2026-09-25; the entry previously still read Open. |
