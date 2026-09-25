@@ -11,14 +11,19 @@
 #   git bash:  make help
 #   wsl:       make help
 #
-# Tooling that does not exist yet (proto codegen, docs site, mock gateway) is
-# represented by no-op targets that print a "not yet available (Pnn)" notice and
-# exit 0, so CI stays green until the owning phase lands. Targets also guard on
-# go.mod/directories so the empty skeleton builds and tests cleanly.
+# Every target below is live. Historical no-op stubs for proto codegen, the docs
+# site, and the mock Gateway were removed once those landed; a target that
+# cannot run says so in its own recipe rather than pretending to succeed.
+#
+# Targets also guard on go.mod so the file stays readable before the module
+# exists.
 
 SHELL := /bin/bash
 GO ?= go
-PYTHON ?= python3
+# Prefer python3, fall back to python: Git Bash and WSL images do not always
+# provide python3, while Windows Python installs usually only provide `python`.
+# An explicit `make PYTHON=...` still wins.
+PYTHON ?= $(shell command -v python3 2>/dev/null || command -v python 2>/dev/null || echo python3)
 LICENSE_HOLDER ?= shing1211
 LICENSE_YEAR ?= 2026
 ADDLICENSE_VERSION ?= latest
@@ -49,17 +54,13 @@ build: ## Compile all packages
 fmt: ## Format Go sources
 	@if [ -f go.mod ]; then gofmt -s -w .; else echo "no go.mod yet; skipping fmt"; fi
 
-# Reports formatting exactly as the Linux CI runner sees it. A Windows checkout
-# has CRLF working-tree files, and plain `gofmt -l .` flags every one of them, so
-# it cannot be used as a local signal; this target normalises line endings to LF
-# in a scratch copy and checks that. Generated code under gen/ is excluded, as in
-# .golangci.yml and in the CI gofmt step.
-fmt-check: ## Check gofmt formatting the way CI does (LF, gen/ excluded)
+# Reports formatting exactly as the Linux CI runner sees it. `.gitattributes`
+# forces LF checkouts on every platform, so a plain `gofmt -l` is authoritative
+# and no line-ending normalisation is needed first. Generated code under gen/ is
+# excluded, as in .golangci.yml and in the CI gofmt step.
+fmt-check: ## Check gofmt formatting the way CI does (gen/ excluded)
 	@if [ -f go.mod ]; then \
-		work=$$(mktemp -d); \
-		trap 'rm -rf "$$work"' EXIT; \
-		git ls-files -z '*.go' | tar --null -T - -cf - | tr -d '\r' | tar -x -C "$$work"; \
-		unformatted=$$(cd "$$work" && gofmt -l . | grep -v '^gen/' || true); \
+		unformatted=$$(gofmt -l . | grep -v '^gen/' || true); \
 		if [ -n "$$unformatted" ]; then \
 			echo "The following files are not gofmt-clean:"; echo "$$unformatted"; exit 1; \
 		fi; \
@@ -135,6 +136,7 @@ clean: ## Remove build artifacts
 LINTER := golangci-lint
 GOSEC := gosec
 GOVULN := govulncheck
+GORELEASER := goreleaser
 
 .PHONY: lint
 lint: ## Run golangci-lint
@@ -156,11 +158,17 @@ enterprise-check: ## Run full enterprise pre-flight (lint + security + coverage)
 	make coverage
 
 .PHONY: goreleaser-check
-goreleaser-check: ## Verify goreleaser configuration
-	@if [ -f .goreleaser.yaml ]; then \
-		go install github.com/goreleaser/goreleaser@latest; \
-		goreleaser check --config .goreleaser.yaml; \
-	else echo "goreleaser-check: .goreleaser.yaml missing; skipping"; fi
+goreleaser-check: ## Verify GoReleaser configuration
+	@if [ ! -f .goreleaser.yaml ]; then echo "goreleaser-check: .goreleaser.yaml missing; skipping"; exit 0; fi; \
+	if ! command -v $(GORELEASER) >/dev/null 2>&1; then \
+		echo "goreleaser-check: '$(GORELEASER)' is not on PATH."; \
+		echo "  Install the published binary (https://goreleaser.com/install), or rely on CI,"; \
+		echo "  whose 'goreleaser check' job uses goreleaser/goreleaser-action@v6."; \
+		echo "  'go install github.com/goreleaser/goreleaser@latest' is deliberately not used here:"; \
+		echo "  it resolves a v1 dependency set that fails to compile under Go 1.26."; \
+		exit 1; \
+	fi; \
+	$(GORELEASER) check --config .goreleaser.yaml
 
 .PHONY: sbom
 sbom: ## Generate SPDX SBOM for the module
