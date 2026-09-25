@@ -75,6 +75,19 @@ func MapOrderBookAskLevel(n *dto.OrderBook) domain.OrderBookLevel {
 	}
 }
 
+// decimalOrZero normalises a Gateway string field for the decimal-backed domain
+// constructors. Protobuf leaves an unset string field empty, and the domain
+// constructors panic on an unparseable value, so an empty field would otherwise
+// take down the caller's goroutine. Only the empty case is handled: a
+// non-numeric value is still a hard error, because silently substituting a
+// number for a malformed price or quantity would be worse than failing.
+func decimalOrZero(s string) string {
+	if s == "" {
+		return "0"
+	}
+	return s
+}
+
 func MapTradeDeliveryToTradeEvent(n *tradenotify.TradeStockDeliverNotify) domain.TradeEvent {
 	symbol := domain.NewSymbol(
 		marketFromCode(n.GetStockCode()),
@@ -85,9 +98,9 @@ func MapTradeDeliveryToTradeEvent(n *tradenotify.TradeStockDeliverNotify) domain
 		Symbol:      symbol,
 		OrderID:     domain.OrderID(n.GetClientId()),
 		EntrustID:   domain.EntrustID(n.GetEntrustNo()),
-		Price:       domain.MustNewPrice(n.GetBusinessPrice(), "0.001"),
-		Quantity:    domain.MustNewQuantity(n.GetBusinessAmount()),
-		Turnover:    domain.MustNewMoney(n.GetSumBusinessBalance(), "HKD", 3),
+		Price:       domain.MustNewPrice(decimalOrZero(n.GetBusinessPrice()), "0.001"),
+		Quantity:    domain.MustNewQuantity(decimalOrZero(n.GetBusinessAmount())),
+		Turnover:    domain.MustNewMoney(decimalOrZero(n.GetSumBusinessBalance()), "HKD", 3),
 		Side:        types.EntrustBS(n.GetEntrustBs()),
 		Timestamp:   n.GetBusinessDate() + " " + n.GetBusinessTime(),
 		CounterID:   n.GetMatchNo(),
