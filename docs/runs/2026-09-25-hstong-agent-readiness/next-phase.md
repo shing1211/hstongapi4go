@@ -38,9 +38,10 @@ whether the test work in §3 is investment or waste.
 **Outcome.** The guide was written (`e0c0b24`) and it could be written
 coherently, which is why Option A was available as a normal engineering choice.
 Writing it also disproved the assumption that push consolidation could proceed in
-parallel: `Manager`, `Fanout`, and `Normalizer` are 1,117 lines that are both
-v-next-coupled and unreachable, so their fate depends entirely on the decision.
-That evidence is recorded in `../../../VNEXT.md` §5.
+parallel: `Manager`, `Fanout`, and `Normalizer` were 1,117 lines that were both
+v-next-coupled and unreachable, so their fate depended entirely on the decision.
+That evidence is recorded in `../../../docs/VNEXT.md` §5, and the decision
+retired `Manager` and `Fanout` while keeping `Normalize` as the decoder.
 
 ## 2. Active-path risks, no dependencies
 
@@ -80,7 +81,7 @@ be worse than failing.
 | `pkg/transport/mappers.go` | **Done** (`c6b5226`). All mappers covered, including nil-safety; package coverage 58.8% → 88.7% | — |
 | `otel`-tag test job | **Done** (`5a14c99`). Builds, vets, and tests with the tag on every push, not only on a release tag | — |
 | Bounded fuzz job | **Done** (`5a14c99`). 30s on `FuzzReadFrame`; verified locally at 734k executions, 18 newly interesting inputs, no crash | — |
-| Coverage gate scope | **Done.** Gate widened to eight packages: the released public surface `pkg/hstong` 90.7%, `stream` 85.9%, `trade` 86.3%, `algo` 87.5%, `pkg/types` 100.0%, alongside `pkg/domain` 93.8%, `internal/auth` 94.2%, `internal/transport` 99.1%. `internal/push` 80.3% remains ungated pending step 1 | — |
+| Coverage gate scope | **Done.** Gate widened to eight packages: the released public surface `pkg/hstong` 90.7%, `stream` 85.9%, `trade` 86.3%, `algo` 87.5%, `pkg/types` 100.0%, alongside `pkg/domain` 93.8%, `internal/auth` 94.2%, `internal/transport` 99.1%. `internal/push` 80.0% remains ungated (step 1c) | — |
 
 ## 4. The Option A programme
 
@@ -88,8 +89,13 @@ N1 chose Option A on 2026-09-25, so this section is no longer speculative. The
 ordered steps, with the evidence for each, are tracked in `../../../VNEXT.md` §6.
 In summary, in order:
 
-- Step 1 — decide the push implementation. Defaults to preserving released
-  `Client` behaviour, since it is the only one a caller can reach.
+- Steps 1 and 1b — **done.** The push implementation is `Client`; `Manager` and
+  `Fanout` are retired, `Normalize` is kept as the decoder, and
+  `FreshnessMonitor` was lifted into its own file. The deciding evidence was
+  that the two implementations used *different protocols*: the released path
+  subscribes over HTTP and re-subscribes over HTTP on reconnect, while `Manager`
+  sent topic frames over the TCP push socket — an assumption no test had ever
+  checked, because the live Gateway run has never executed.
 - Step 2 — rewire `pkg/services` through `pkg/transport.Adapter`. The
   highest-risk item and not mechanical: `pkg/services` holds a `*client.Client`
   and calls `s.client.Do(...)`, while `Adapter` wraps `internal/transport`, so
@@ -98,8 +104,8 @@ In summary, in order:
   `WithDeadline` cancel while it is in hand.
 - R14 — rewrite `internal/auth/doc.go` to match reality rather than adding a
   second login implementation.
-- N2 — consolidate the push implementations (step 1), then re-gate
-  `internal/push`.
+- Step 1c — re-gate `internal/push`, which is still 80.0% and whose gap is in
+  `client.go` rather than in the retired code.
 - Then: `depguard` boundary rule, `pkg/services` tests, the migration guide,
   and the v1.0 schedule.
 
@@ -142,18 +148,18 @@ programme's own order.
 
 What remains, in order:
 
-1. **§4 step 1 — decide the push implementation.** It gates the rewire, because
-   it determines what `pkg/services` will talk to. The evidence is already
-   recorded in `../../../docs/VNEXT.md` §5, so this is a judgement call rather
-   than an investigation. Defaults to preserving released `Client` behaviour.
-2. **§4 steps 2-8**, in the order given in `../../../docs/VNEXT.md` §6.
+1. **§4 step 2 — rewire `pkg/services` through `pkg/transport.Adapter`.** Now
+   unblocked, since step 1 established that the transport is `Client`. This is
+   the highest-risk item in the programme: the two sit at different layers, so
+   the interface shape has to be decided before any code moves.
+2. **§4 steps 3-8**, in the order given in `../../../docs/VNEXT.md` §6.
 3. **§5** whenever credentials arrive. G6 should be scheduled early because its
    findings could change §4 — it is also the only way to finish R3.
 
 The coverage gate was widened ahead of the decision, on released public surface
 only (`pkg/hstong*` and `pkg/types`). Those packages are live public surface, so
 their tests survive either N1 outcome; the deliberate omission is
-`internal/push`, which is now waiting on §4 step 1 rather than on the decision.
+`internal/push`, now waiting on step 1c.
 
 ## 8. Documented acceptances — not to be fixed
 

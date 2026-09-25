@@ -60,7 +60,7 @@ SDK layers and only one is reachable by a caller today.
 | Layer | Packages | Status |
 |-------|----------|--------|
 | **Released (v0.1.x)** | `client`, `internal/transport`, `internal/push.Client`, `internal/resilience`, `internal/errs`, `internal/crypto`, `internal/session`, `internal/logging`, `pkg/hstong/*`, `pkg/types` | **Active.** This is what `pkg/hstong` and `client` callers use. |
-| **v-next** | `pkg/domain`, `pkg/services`, `pkg/transport.Adapter`, `internal/auth`, `internal/push.Manager`, `internal/push.Fanout`, `internal/otel` | **Not wired in.** No production package imports these yet; only `scripts/coverage_gate.go` does, for the coverage gate. |
+| **v-next** | `pkg/domain`, `pkg/services`, `pkg/transport.Adapter`, `internal/auth`, `internal/otel` | **Not wired in.** No production package imports these yet; only `scripts/coverage_gate.go` does, for the coverage gate. `internal/push.Manager` and `.Fanout` were retired on 2026-09-25; see `VNEXT.md` §5. |
 
 A **Mitigated** row therefore means one of two things, and the distinction is
 called out where it matters:
@@ -146,9 +146,9 @@ The single most consequential failure mode: a retry that resubmits a mutation.
 | Threat | Status |
 |--------|--------|
 | Missing a quiet topic | **Mitigated (E17).** `FreshnessMonitor.Record` now updates `LastSeen` even with no sequence number, so the dispatch path actually populates freshness. Previously it returned early on `seq == 0` and staleness never worked at all. |
-| Duplicate event delivery | **Not mitigated.** `seqOf` returns a constant `0` because the Gateway envelope carries no per-event sequence, so the dedup guard never engages. Pinned by `TestFanout_DedupInertWithoutSequence`. |
+| Duplicate event delivery | **Not mitigated, and not implementable on this protocol.** The Gateway push envelope carries no per-event sequence, so no client can distinguish a retransmission from a new event. The SDK therefore implements no sequence-based dedup at all. Pinned by `TestFreshnessMonitor_RecordWithoutSequence` and the `FreshnessMonitor.Record` contract: `LastSeq` stays 0 because nothing ever supplies one. |
 | Sequence gap detection | **Not possible today.** Gap detection needs a wire sequence the protocol does not provide. `LastSeq` only advances when a non-zero sequence is supplied. |
-| Staleness notification | **Partial.** `Check` is a pull API; the fanout does not push a stale or gap event to subscribers. |
+| Staleness notification | **Partial.** `FreshnessMonitor.Check` is a pull API; nothing pushes a stale or gap event to a subscriber. The monitor is retained as a standalone component after the `Fanout` retirement, so a caller must poll it. |
 | Freshness clock | **Residual risk.** `FreshnessMonitor` calls `time.Now` directly, so it cannot be driven by a test clock and inherits any host clock jump. |
 
 ### 7. Partial outage
@@ -174,7 +174,7 @@ backed by a test that fails against the pre-fix code.
 | E17-F4 | `maxRetries == 0` meant *infinite* (measured at 53 dials where 11 were expected), and the dialer received an empty address after a read failure | Forward-looking | `TestManager_ReconnectRetriesAreBounded`, `TestManager_ReconnectNeverDialsEmptyAddress` |
 | E17-F5 | `accountid` and `fundaccount` were not redacted, contradicting ADR 0009 | Active | `TestIsSensitiveKey` |
 | E17-F6 | `EndSpan` and the client span factory recorded raw `err.Error()` into spans | Active (with the `otel` tag) | `TestEndSpanRedactsKeyShapedSecrets`, `TestTransportErrorIsSafeForSpans` |
-| E17-F7 | `FreshnessMonitor.Record` returned early on `seq == 0`, so staleness detection never populated in the dispatch path | Forward-looking | `TestFreshnessMonitor_RecordWithoutSequence`, `TestFanout_DispatchPopulatesFreshness` |
+| E17-F7 | `FreshnessMonitor.Record` returned early on `seq == 0`, so staleness detection never populated in the dispatch path | Forward-looking | `TestFreshnessMonitor_RecordWithoutSequence`, `TestFreshnessMonitor_ZeroSequenceDoesNotAdvanceLastSeq` |
 
 ## Risk register
 
@@ -188,7 +188,7 @@ but is not cited here.
 | R1 | No client-side replay defence (token or password ciphertext) | Medium | **Accepted** | The wire protocol defines neither a nonce nor an idempotency key. Adding one would require a protocol change and break compatibility (ADR 0003). |
 | R2 | Route alias classification is a closed set | **High** | **Fixed (`3926655`)** | A mutation route missing from `mutationSet` was retried, which would break the ADR 0003 single-attempt guarantee. The defence is exhaustion rather than inference, because `docs/SPEC.md` does not mark mutations and no naming rule catches every future one: `client/route_mutation_test.go` walks `client.Routes()` and fails if any route is in neither the expected-mutation nor the known-safe list, so adding a route forces a deliberate classification decision. Covers the 3x12 Gateway alias matrix and over-classification in both directions. Verified the guard fires by removing an entry and watching the suite fail. |
 | R3 | Half-open push connection blocks indefinitely | Medium | **Partially fixed (client.go)** | `WithReadDeadline` now arms a per-read deadline in the released `push.Client` read loop, bounding the gap between frames so a silent peer is detected. It is **off by default**: the local Gateway documents no heartbeat cadence on this stream (`docs/LEGACY.md` records that the Gateway path replaced heartbeat keep-alive with `SessionManager.StartKeepAlive` polling), so any non-zero default would risk tearing down a healthy connection in a quiet market. Fully closing this needs the observed inter-frame gap from a live Gateway run. |
-| R4 | Dedup and gap detection inert | Medium | **Accepted (forward-looking)** | `push.Fanout` supplies no per-event sequence. Correct gap detection is impossible without one; pinned by `TestFanout_DedupInertWithoutSequence`. |
+| R4 | Dedup and gap detection inert | Medium | **Accepted** | The Gateway push envelope carries no per-event sequence number, so correct gap detection is impossible on this protocol. The SDK implements no sequence-based dedup: the `DedupCache` that briefly existed was removed with `push.Fanout` on 2026-09-25 as documented dead code, rather than kept as an inert-but-tested guard. Pinned by `TestFreshnessMonitor_RecordWithoutSequence` — `LastSeq` remains 0 because nothing supplies a sequence. |
 | R5 | Free-prose secrets are not redacted | Low | **Accepted (active path)** | Redaction is key-driven. Callers must keep secrets out of message text. |
 | R6 | Backward clock jump can revive a token | Low | **Accepted (forward-looking)** | Would need a monotonic deadline. Low impact: the Gateway independently rejects an expired token. |
 | R7 | No read cap in the active transport executor | Medium | **Fixed (`de933f5`)** | `internal/transport` read every response with an unbounded `io.ReadAll`, so a malformed or hostile Gateway body could force an arbitrarily large allocation; the cap existed only in the unwired v-next adapter. Now bounded by `WithMaxResponseBytes` (default 8 MiB), reusing the `MaxBytesReader` pattern already reviewed in `pkg/transport`. An over-limit body returns a typed error naming the cap. The test was verified to fail against the pre-fix code. `gitnexus` rates the symbol **critical** because every request flows through `Do`; it was validated with the all-51-route e2e suite rather than by inspection. |

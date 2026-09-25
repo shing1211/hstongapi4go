@@ -110,7 +110,7 @@ flowchart TB
     subgraph WIRE["Wire"]
         TRN["internal/transport<br/>HTTP executor · codec"]
         PSH["internal/push<br/>Client · frame · verify"]
-        FAN["internal/push<br/>Manager · Fanout · normalizers"]
+        FAN["internal/push<br/>normalizer · decode · freshness"]
         DOM["pkg/domain + pkg/types<br/>DTOs and value types"]
         GEN["gen/ generated<br/>protobuf types"]
     end
@@ -162,9 +162,11 @@ flowchart TB
 ```
 
 Dashed edges are conditional: the `otel` packages compile only under the `otel`
-build tag, and `internal/push.Manager`, `.Fanout`, and the normalizers have no
-production caller. The `pkg/domain → gen` edge is a real dependency that
-contradicts the declared boundary — see [§6](#6-layering-deviations).
+build tag, and the v-next push implementations have no production caller.
+`internal/push.Manager` and `.Fanout` were removed on 2026-09-25, so the `FAN`
+node in the diagram above no longer corresponds to source. The
+`pkg/domain → gen` edge is a real dependency that contradicts the declared
+boundary — see [§6](#6-layering-deviations).
 
 ## 4. Key execution flows
 
@@ -252,21 +254,26 @@ Step 3 of the first trace is a **graph artifact**: `Now` is defined on both the
 real clock and a test fake, and the analyzer attributed it to the test file. See
 [§8](#8-known-limits-of-this-document).
 
-### 4.5 Push ingest and reconnect — `push.Manager.readLoop`
+### 4.5 Push ingest and reconnect — `push.Client.readLoop`
+
+> **Stale entry, retained for history.** This trace was extracted from the
+> knowledge graph when `push.Manager` still existed. `Manager` and `Fanout` were
+> retired on 2026-09-25 (`docs/VNEXT.md` §5), so the symbols below no longer
+> exist. The live path is `push.Client`, whose trace is `readLoop → decodeNotification
+> → dispatch`. This section is regenerated at the v1.0 milestone.
 
 ```
-1. readLoop            internal/push/manager.go
-2.   reconnectLoop     internal/push/manager.go
-3.     resubscribeAll  internal/push/manager.go
-4.     sendTopicRequest    internal/push/manager.go
-5.       buildTopicRequest internal/push/manager.go
+1. readLoop            internal/push/manager.go   [REMOVED]
+2.   reconnectLoop     internal/push/manager.go   [REMOVED]
+3.     resubscribeAll  internal/push/manager.go   [REMOVED]
+4.     sendTopicRequest    internal/push/manager.go   [REMOVED]
+5.       buildTopicRequest internal/push/manager.go   [REMOVED]
 ```
 
 The read loop consumes 151-byte frames, skips heartbeats, decodes `PBNotify`
 payloads, and on a read error closes the connection and walks the reconnect
-ladder, then reissues every stored subscription. This is the v-next `Manager`;
-the released stream API uses `internal/push.Client`, which has a separate
-lifecycle.
+ladder. This was the v-next `Manager`; the released stream API uses
+`internal/push.Client`, which has a separate lifecycle and is the survivor.
 
 ## 5. The v-next layer is present but unreachable
 
@@ -279,13 +286,16 @@ confirmed in source — not inferred.
 | `pkg/services` | **Nothing.** Zero production importers |
 | `pkg/transport` | Only `pkg/services/account.go`, itself unreachable |
 | `internal/auth` | **Nothing** — only `scripts/coverage_gate.go` |
-| `internal/push.Manager`, `.Fanout`, normalizers | **Nothing.** `pkg/hstong/stream` imports the package but uses only `push.Client` |
+| `internal/push.Manager`, `.Fanout` | **Removed 2026-09-25.** Retired as part of the Option A decision (`docs/VNEXT.md` §5); `Client` and the shared framing, decoding, verification, and freshness helpers remain. |
 
 Consequences worth stating plainly:
 
-1. Three of the four `internal/push` implementations are not on the live path.
-   `Client` (released), `Manager`, and `Fanout` each own a connection lifecycle
-   and they disagree about reconnect bounds and backpressure.
+1. `internal/push` now has a single connection lifecycle. The v-next
+   `Manager` and `Fanout` were removed because they implemented a *different
+   protocol* — TCP topic subscription — rather than a second version of the
+   released one, and no test had ever checked that assumption against a live
+   Gateway. The two behavioural differences the graph previously recorded here
+   no longer exist because there is nothing left to disagree with.
 2. The v-next auth hardening protects no caller today.
 3. `pkg/services` calls `client` directly instead of going through
    `pkg/transport.Adapter`, so the adapter is bypassed even from the layer that

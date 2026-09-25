@@ -121,39 +121,91 @@ decision is strictly better than the status quo.
 
 ## 5. Push implementation status
 
-`internal/push` holds three push implementations, and until this table existed
+**Decided 2026-09-25: `Client` is the single push transport. `Manager` and
+`Fanout` are retired. `Normalize` is kept as the decoder, and
+`FreshnessMonitor` is lifted out of `Fanout` as a standalone component.**
+
+`internal/push` held three push implementations, and until this table existed
 the choice between them had to be inferred from which file a symbol happened to
-live in. Reachability was measured two ways: a `gitnexus` upstream walk, and an
-exhaustive text search for every exported constructor and type across the
-repository. Both agree.
+live in. Reachability was measured two ways — a `gitnexus` upstream walk and an
+exhaustive text search for every exported constructor and type — and both agree.
 
 | Implementation | File | Lines | Imports `pkg/domain` | Reachable from a caller | Status |
 |---|---|---|---|---|---|
-| `Client` | `client.go` | 708 | no | **yes** — owned by `pkg/hstong/stream` (`stream.go:118`) | **Released.** The only implementation a caller reaches today. |
-| `Manager` | `manager.go` | 594 | yes | **no** | Forward-looking, v-next. `gitnexus` reports 1 upstream edge, its own `NewManager`; 0 affected processes. |
-| `Fanout` | `fanout.go` | 388 | yes | **no** | Forward-looking, v-next. No reference outside its own definition and its internal tests. |
-| `Normalizer` | `normalizer.go` | 135 | yes | no (library) | Forward-looking, v-next. Shared decode helper for the two above. |
+| `Client` | `client.go` | 708 | no | **yes** — owned by `pkg/hstong/stream` (`stream.go:118`) | **Kept.** The push transport. |
+| `Normalize` | `normalizer.go` | 135 | yes | no (library) | **Kept.** The `PBNotify` → `domain.PushEvent` decoder. |
+| `FreshnessMonitor` | `fanout.go` | ~50 | yes | no (library) | **Kept, lifted** into its own file. |
+| `Manager` | `manager.go` | 594 | yes | **no** | **Retire.** `gitnexus`: 0 affected processes; only its own `NewManager`. |
+| `Fanout` | `fanout.go` | 388 | yes | **no** | **Retire.** All upstream refs are inside `fanout.go` itself. |
 
-`frame.go` (236) and `verify.go` (139) are not alternatives to the above: they
-are the wire framing and signature verification used by all of them, and they
-import no v-next package.
+`frame.go` (236) and `verify.go` (139) are not alternatives: they are the wire
+framing and signature verification all implementations share, and they import no
+v-next package.
 
-**This changes the sequencing.** `Manager`, `Fanout`, and `Normalizer` are
-1,117 lines that are simultaneously v-next-coupled *and* unreachable from
-production. Their fate therefore depends on N1 — under Option B they would have
-been deleted along with `pkg/domain`, and they survive only because Option A was
-chosen. The consequence for planning is that push consolidation cannot be done
-as independent groundwork: item 3 in the obstacle list above reads as though it
-could be, and it cannot. It is the first step *inside* the programme, not a
-parallel task.
+### 5.1 The finding that decided it
 
-Two behavioural differences still need resolving, whichever is kept.
-Reconnect and backoff are handled by `Client` (31 references to the knobs) and
-`Manager` (12), but `Fanout` has neither — so `Fanout` currently offers no
-reconnect bound at all. Separately, `Fanout` is the only implementation that
-populates a `FreshnessMonitor` (15 references, against 0 in the other two), so
-adopting it would *add* staleness detection rather than merely preserve it.
-`Client` is the released behaviour, so consolidation defaults to preserving it.
+`Manager` is not a second implementation of the same protocol. It implements a
+**different one**, and the difference is load-bearing:
+
+| | Released path | `Manager` |
+|---|---|---|
+| Subscribe | **HTTP** `POST RouteHqSubscribe` on :11111 (`market/subscribe.go:62`) | **TCP** topic-request frame on :11112 (`manager.go:382`) |
+| Receive | TCP :11112 | TCP :11112 |
+| Re-subscribe on reconnect | **HTTP**, per subscription (`stream.go:419`) | TCP, `resubscribeAll()` |
+| Keep-alive | Receives heartbeats only; sends none | Sends heartbeats (`heartbeatLoop`) |
+
+ADR 0001 defines the target as HTTP on :11111 for requests and TCP on :11112
+for push. `Client` plus `market.Manager` is the only pair that matches it.
+`Manager` assumes the Gateway accepts topic subscriptions on the push socket —
+an assumption **no test has ever checked**, because `test/integration` has never
+been executed against a live Gateway (G6).
+
+Adopting `Manager` would therefore have made an unverified protocol guess the
+foundation of the layered API, and would have discarded the re-subscribe
+behaviour the released path demonstrably relies on.
+
+### 5.2 Why the rest can go
+
+`Fanout`'s capabilities split three ways, and only one is worth keeping:
+
+- **Multi-subscriber multiplexing and drop-oldest backpressure** already exist
+  in `pkg/hstong/stream` (`Subscription`, `sendUpdate`). Keeping `Fanout` would
+  be a second implementation of them.
+- **`DedupCache` is inert.** The Gateway sends no per-event sequence, so
+  `CheckAndInsert` cannot distinguish a duplicate (R4). It is documented dead
+  code, pinned by `TestFanout_DedupInertWithoutSequence`.
+- **`FreshnessMonitor` is genuinely new** and is time-based, so it works even
+  though `seq` is always 0 — the E17-F7 fix exists precisely for that case. It
+  has no dependency on the rest of `Fanout`, so it lifts out cleanly.
+
+`Manager` also carries its own `decodePushEvent` and per-event decoders
+(`manager.go:427-581`), duplicating `Normalize`. `Normalize` wins that
+comparison: it is the one with a 439-line test file.
+
+**One correction to the evidence above.** Deleting `manager.go` did not compile:
+`normalizer.go` *calls* the five per-event decoders (`decodeBasicQotEvent`,
+`decodeTickerEvent`, `decodeOrderBookEvent`, `decodeBrokerEvent`,
+`decodeTradeEvent`) and `entrustBSFromInt32`, and all six lived in `manager.go`.
+The reachability check answered "who calls `Normalize`" and found only its own
+test, which reads as unused — but the dependency runs the other way. Those six
+pure functions are now in `decode.go` beside the normalizer that needs them,
+which is where they belonged. The lesson generalises: a symbol with no callers
+can still be load-bearing, so a delete needs both directions checked.
+
+`internal/push` after the retirement: `client.go` (708), `frame.go` (236),
+`verify.go` (139), `normalizer.go` (135), `decode.go` (119), `freshness.go` (90).
+Package coverage is 80.0%, essentially unchanged — the retired code was well
+covered by the 5 test files that went with it, so the remaining gap is in
+`client.go` and is unrelated to this decision.
+
+### 5.3 Consequence for the test evidence
+
+`test/integration/push_integration_test.go` is three `TestPushManager_*` cases
+and nothing else, so retiring `Manager` retires that file. TCP protocol coverage
+is **not** lost with it: `test/integration/integration_test.go:521` exercises
+`stream.Client` `Connect` and `Subscribe` against the live Gateway, which is the
+path that ships. G6 therefore still validates the released protocol — arguably
+better than before, since it now validates only what callers reach.
 
 ## 6. Programme
 
@@ -162,7 +214,9 @@ Option A is a multi-release programme. Order matters: step 1 decides what
 
 | # | Step | Notes |
 |---|---|---|
-| 1 | Decide the push implementation | §5. Defaults to preserving released `Client` behaviour. |
+| 1 | ~~Decide the push implementation~~ | **Done.** `Client` kept, `Manager` and `Fanout` retired, `Normalize` kept, `FreshnessMonitor` lifted. Evidence in §5. |
+| 1b | ~~Execute the retirement~~ | **Done.** Deleted `manager.go`, `fanout.go`, their 5 test files, and `test/integration/push_integration_test.go`. `FreshnessMonitor` lifted to `freshness.go` with its tests. R4's rationale rewritten, since `DedupCache` no longer exists. |
+| 1c | Re-gate `internal/push` | **Still needed.** At 80.0% after the retirement — the deleted code was well covered by its own tests, so removing it did not raise the ratio. The gap is in `client.go`, not in what was removed. |
 | 2 | Rewire `pkg/services` through `pkg/transport.Adapter` | **Highest-risk step and not mechanical.** `pkg/services` holds a `*client.Client` and calls `s.client.Do(...)` (`account.go:116,145,192,239` plus market and trading), while `Adapter` wraps `internal/transport.Transport` (`middleware.go:22-47`). These sit at different layers, so this needs a narrow executor interface both satisfy, or `Adapter` accepting an interface. Decide the shape before coding. |
 | 3 | Fix R9 while the Adapter is in hand | `inner` is unused, `baseURL` is hardcoded, and `WithDeadline` (`middleware.go:136`) shares one cancel across callers. |
 | 4 | Resolve R14 | Recommend rewriting `doc.go` to describe only what exists rather than adding a second login implementation — the released `SessionManager.EnsureLoggedIn` already covers the released path, and a second one is new risk rather than a fix. |
