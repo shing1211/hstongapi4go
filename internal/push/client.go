@@ -64,6 +64,20 @@ type Options struct {
 	// DefaultMaxReconnect and is never allowed below MinReconnect.
 	MaxReconnect time.Duration
 
+	// ReadDeadline bounds how long a single frame read may block. It defaults
+	// to 0, which disables the deadline and preserves the previous behaviour of
+	// waiting indefinitely for the next frame.
+	//
+	// It is off by default deliberately: the local Gateway does not document a
+	// heartbeat cadence on this stream (docs/LEGACY.md records that the Gateway
+	// path replaced heartbeat keep-alive with SessionManager.StartKeepAlive
+	// polling a cheap HTTP endpoint), so any non-zero default risks tearing down
+	// a healthy connection during a quiet market. Set it only once the Gateway's
+	// maximum inter-frame gap has been observed; a value comfortably above that
+	// gap detects a dead peer without adding reconnect churn. See R3 in
+	// docs/threat-model.md.
+	ReadDeadline time.Duration
+
 	// VerifyPublicKey, when non-empty, enables verification of each push
 	// frame's SHA1WithRSA bodySHA1 signature against the raw body. It accepts
 	// a PEM PUBLIC KEY block, a base64 SPKI string, or raw SPKI DER (see
@@ -120,6 +134,24 @@ func WithReconnect(min, max time.Duration) Option {
 		if max > 0 {
 			o.MaxReconnect = max
 		}
+	}
+}
+
+// WithReadDeadline bounds how long a single frame read may block, so a silently
+// dead peer is detected instead of parking the read goroutine until the OS gives
+// up. A non-positive value disables the deadline.
+//
+// The default is disabled because the local Gateway does not document a
+// heartbeat cadence on this stream, so a non-zero default could tear down a
+// healthy connection during a quiet market. See Options.ReadDeadline and R3 in
+// docs/threat-model.md.
+func WithReadDeadline(d time.Duration) Option {
+	return func(o *Options) {
+		if d > 0 {
+			o.ReadDeadline = d
+			return
+		}
+		o.ReadDeadline = 0
 	}
 }
 
@@ -390,8 +422,18 @@ func (c *Client) exitCause(ctx context.Context) error {
 }
 
 // readLoop reads and dispatches frames from conn until an error occurs.
+//
+// When Options.ReadDeadline is set, the deadline is armed before every read, so
+// it measures the gap between frames rather than the connection's total
+// lifetime. Expiry surfaces as a timeout from ReadFrame and is handled by Run
+// like any other read failure, which reconnects.
 func (c *Client) readLoop(conn net.Conn) error {
 	for {
+		if c.opts.ReadDeadline > 0 {
+			if err := conn.SetReadDeadline(time.Now().Add(c.opts.ReadDeadline)); err != nil {
+				return err
+			}
+		}
 		h, body, err := ReadFrame(conn)
 		if err != nil {
 			return err
