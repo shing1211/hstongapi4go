@@ -32,3 +32,15 @@ paths = [
   '''internal/auth/auth_test\.go''',
   '''CHANGELOG\.md''',
 ]
+
+[[allowlists]]
+description = "tradePasswordKeyBase64 is the AES-192 key published in HStong's own TradeLogin protocol documentation: public reference data, not a secret (ADR 0005). Already suppressed for gosec with #nosec G101 on the same line; gitleaks has no equivalent per-line suppression, so it is allowlisted by path here."
+paths = [
+  '''internal/crypto/aes\.go''',
+]
+
+[[allowlists]]
+description = "Redaction test fixtures. The values here (hunter2, tok_secret_123, ZW5jcnlwdGVk) are deliberately fake and exist only to prove the redacting handler masks them; the test fails if any of them reaches log output."
+paths = [
+  '''internal/logging/logging_test\.go''',
+]
