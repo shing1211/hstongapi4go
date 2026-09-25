@@ -4,11 +4,24 @@ E19 — Coverage >=85% gate evidence
 Command: make coverage   (go run scripts/coverage_gate.go)
 Gate:    85.0% per package (pkg/domain, internal/auth, internal/transport)
 
-Result (2026-09-24):
+Result (2026-09-24, original measurement):
 
   PASS: github.com/shing1211/hstongapi4go/pkg/domain        94.3%
   PASS: github.com/shing1211/hstongapi4go/internal/auth     92.9%
   PASS: github.com/shing1211/hstongapi4go/internal/transport 99.0%
+
+Re-baselined 2026-09-25 (run 2026-09-25-hstong-agent-readiness, task E2),
+after E17's seven fixes and the CI repair changed the code under test:
+
+  PASS: github.com/shing1211/hstongapi4go/pkg/domain        93.8%
+  PASS: github.com/shing1211/hstongapi4go/internal/auth     94.2%
+  PASS: github.com/shing1211/hstongapi4go/internal/transport 99.0%
+
+  All packages meet the 85% coverage gate
+
+pkg/domain moved 94.3% -> 93.8% because the `Quantity.ValidateLot` overflow
+fix added a branch; internal/auth rose 92.9% -> 94.2% on the E17 session
+hardening tests. The gate holds without moving the 85% threshold.
 
   All packages meet the 85% coverage gate
 

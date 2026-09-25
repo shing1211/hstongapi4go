@@ -9,12 +9,12 @@
 
 | Phase | Tasks | Done |
 |-------|-------|------|
-| A Agent readiness | 2 | 0 |
-| B Run artifacts | 3 | 0 |
-| C Public docs | 2 | 0 |
-| D Tooling | 5 | 0 |
-| E Release v0.1.7 | 4 | 0 |
-| **Total** | **16** | **0** |
+| A Agent readiness | 2 | 2 |
+| B Run artifacts | 3 | 3 |
+| C Public docs | 2 | 2 |
+| D Tooling | 5 | 5 |
+| E Release v0.1.7 | 4 | 3 |
+| **Total** | **16** | **15** |
 
 ## Tasks
 
@@ -42,3 +42,5 @@
 | When | Note |
 |------|------|
 | 2026-09-25 | Run created. Audit of git history, markdown, implementation, and tests found F1-F10 (see `plan.md` §2). Decisions: docs-only GitNexus change, root `ARCHITECTURE.md` canonical, prose-only boundary fix, release last, phantom findings deleted. Test debt (G5) and the v-next layer decision (N1) recorded as out of scope. |
+| 2026-09-25 | **A-D done** (`7cad13c`, `755bce1`, `38cb076`, `06b9927`, `a95f271`, `2982931`). Verified: gofmt clean outside `gen/`, `go build` and `go vet` pass with and without `-tags otel`, `go test ./... -count=1` green across 23 packages, `go test -race` not run locally (no C toolchain; CI is authoritative), money-check clean, `check_links` 92 files / 0 unresolved, `check_i18n` 6 languages, `mkdocs build --strict` exit 0 with no unlisted pages. `gitnexus detect-changes` reported 15 files, 46 symbols, **0 affected processes, risk low** before committing. |
+| 2026-09-25 | **E1-E2 done.** `CHANGELOG.md` gains `[0.1.7]` covering all 25 unreleased commits, with the seven E17 security fixes and the CI repair foregrounded. Coverage re-baselined: `pkg/domain` 93.8%, `internal/auth` 94.2%, `internal/transport` 99.0%, gate holds at 85% without moving the threshold. |
