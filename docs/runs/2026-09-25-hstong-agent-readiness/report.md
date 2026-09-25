@@ -5,6 +5,10 @@
 - **Status:** complete, 16/16
 - **Baseline:** `b30b0bf`
 - **Deliverable release:** v0.1.7 (`f9cfb43`, tag object `1002bc4`)
+- **Post-close-out:** the §2 active-path pass (R2, R7, R3, R11) and the independent
+  §3 CI and mapper work landed after close-out and shipped as **v0.1.8**. Outcomes
+  are recorded in `next-phase.md` §2–§3; the `report.md` accounting above is scoped
+  to the 16 tasks of this run.
 - **Scope:** documentation, build tooling, and the release. **No runtime behaviour changed**, except one corrected package comment in `pkg/domain/doc.go`.
 
 ## 1. Outcome

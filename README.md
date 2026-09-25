@@ -84,7 +84,7 @@ Before writing your first call, understand these SDK abstractions:
 | Threat model and risk register | [docs/threat-model.md](./docs/threat-model.md); 7 adversarial defects found and fixed |
 | Enterprise CI (lint, security, coverage gate, SBOM, GoReleaser config) | 9 jobs green |
 | v-next layer (`pkg/domain`, `pkg/services`, `pkg/transport`, `internal/auth`) | Implemented and tested, **not yet reachable by a caller** — see [ARCHITECTURE.md](./ARCHITECTURE.md) |
-| Release (GitHub + Gitee) | v0.1.7 ✓ |
+| Release (GitHub + Gitee) | v0.1.8 ✓ |
 
 All 51 HTTP endpoints and 11 market push topics are implemented. Counts are
 canonical in [docs/SPEC.md](./docs/SPEC.md); do not hand-edit them elsewhere.

@@ -5,6 +5,112 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.8] - 2026-09-25
+
+### Security
+
+- **Bounded Gateway response read.** `internal/transport` buffered every
+  response with an unbounded `io.ReadAll`, so a malformed or hostile Gateway body
+  could force an arbitrarily large allocation. Reads are now capped at 8 MiB by
+  default, configurable with `WithMaxResponseBytes`; a non-positive value restores
+  the default rather than disabling the cap, so an accidental zero cannot
+  reinstate unbounded reads. An over-limit body returns a typed error naming the
+  cap. The cap reuses the `MaxBytesReader` pattern already reviewed in
+  `pkg/transport`, so there is one mechanism rather than two.
+- **Secret scanning in CI** ([ADR 0012](./docs/adr/0012-ci-secret-scanning.md)).
+  `gosec` analyses source for insecure patterns and `govulncheck` queries the
+  vulnerability database, but neither looked for credentials, so a leaked token
+  could enter through a pull request and reach every clone. A pinned `gitleaks`
+  Action now scans the full history of the pushed ref. `.gitleaks.toml` allowlists
+  three paths by justification — the public platform keys (ADR 0005), the vendored
+  `proto/` tree, and the published AES test vector — and never disables a rule
+  class, so a new suppression is a visible review decision. `go.mod` is untouched,
+  so consumers gain no dependency.
+- **Opt-in push read deadline.** A silently dead peer left the stream read
+  goroutine parked until the OS gave up. `push.WithReadDeadline` now arms a
+  deadline before every read, bounding the inter-frame gap rather than total
+  connection lifetime. It is **off by default**: the local Gateway documents no
+  heartbeat cadence on this stream, so a non-zero default would risk tearing down
+  a healthy connection in a quiet market.
+
+### Fixed
+
+- **A latent process-killing panic in a wire mapper.** `MapTradeDeliveryToTradeEvent`
+  passed raw protobuf string fields into the domain constructors, which panic on
+  an unparseable value. An unset field is empty, so a zero-value or partially
+  populated delivery notification panicked — and there is no `recover()` anywhere
+  in the push or stream dispatch path, so that would have taken down a consumer
+  goroutine and the process. Empty fields now map to zero. A non-numeric value
+  still panics by design: the domain exposes no non-panicking constructor, and
+  silently substituting a number for a malformed price would be worse than
+  failing. Latent rather than live, because the mapper sits in the not-yet-wired
+  v-next layer.
+- **The mutation classification could drift silently.** `internal/resilience`
+  maintained a closed set of 12 mutation paths separately from `client`'s 51 route
+  constants, and a mutation route missing from that set would be classified as a
+  retryable query — breaking the ADR 0003 guarantee that order mutations issue
+  exactly one attempt. Nothing tied the two lists together. `docs/SPEC.md` does not
+  mark which endpoints mutate and no naming rule catches every future mutation, so
+  the guard is exhaustion rather than inference: every registered route must be in
+  either the expected-mutation or the known-safe list, making route addition a
+  deliberate classification decision.
+
+### Added
+
+- **`otel` build-tag CI job.** The OpenTelemetry instrumentation is behind a build
+  tag, so the default build never compiled or exercised it. It was built and
+  tested only on a release tag, so a break could reach `main` unnoticed and
+  surface at release time. CI now builds, vets, and tests with the tag on every
+  push and pull request.
+- **Bounded fuzz job.** A normal `go test` runs only the twelve inline seed cases.
+  CI now runs `FuzzReadFrame` for 30 seconds; verified locally at 734k executions
+  with 18 newly interesting inputs and no crash.
+- **Tests for the wire mappers** and the mutation classifier, taking
+  `pkg/transport` from 58.8% to 88.7% and `internal/transport` to 99.1%.
+- **[ADR 0012](./docs/adr/0012-ci-secret-scanning.md)** and **`docs/VNEXT.md`**, a
+  decision draft on whether to wire the v-next layer in or delete it, written as the
+  forcing function for that decision.
+- **Agent instructions that can be followed.** The GitNexus rules in `AGENTS.md`
+  and `CLAUDE.md` required graph analysis unconditionally, but the index is a
+  local, git-ignored artifact, so a fresh clone has none, and a stale MCP server
+  fails every graph read while the CLI works. The rules now apply whenever the
+  graph can answer, with an explicit fallback requiring an agent to state that
+  graph analysis was unavailable rather than skip it silently.
+
+### Fixed (documentation)
+
+- The v-next boundary document asserted four rules that are false in code —
+  `pkg/domain` importing generated protobuf, `pkg/services` importing `client`,
+  an unconsumed `Adapter`, and "enforced by golangci-lint" when no boundary rule
+  exists. It is now marked superseded and carries a source-verified deviations
+  table.
+- All six READMEs claimed ADRs 0001-0007 and omitted the v-next layer from their
+  package layouts. `docs/DESIGN.md` was present but absent from the MkDocs nav.
+- Run artifacts carried wrong close-out SHAs and a "twenty of twenty-two" count.
+- A documented "mojibake" defect that did not exist: zero replacement characters
+  and no Latin-1 mojibake in any of the files it named.
+- `Makefile` still ran the `go install …@latest` path that fails to compile under
+  Go 1.26, described three live targets as unimplemented stubs, defaulted
+  `PYTHON` to a `python3` that many hosts lack, and carried a CRLF workaround
+  that `.gitattributes` had made obsolete.
+- `proto/PROVENANCE.md` claimed a byte-for-byte tree that `.gitattributes`
+  line-ending normalisation makes untrue.
+- Threat-model R12 was still marked open although the scanners were pinned.
+
+### Known limitations
+
+- The push read deadline is off by default, so R3 is only partially closed;
+  finishing it needs the Gateway's observed inter-frame gap from a live run.
+- The coverage gate still covers three packages. Five released-surface packages
+  remain below 85% (`pkg/hstong` 84.7%, `algo` 81.2%, `trade` 81.3%,
+  `internal/push` 79.9%, `stream` 76.3%), and widening it is deferred until the
+  v-next decision so tests are not written against code that may be deleted.
+- The Release workflow runs `goreleaser check` on a tag, not `goreleaser release`,
+  so tags ship without artefacts. Publishing needs the Gitee-token and
+  cosign-OIDC questions settled.
+- The v-next layer is still unreachable by a caller, so its hardening protects
+  nobody today. `docs/VNEXT.md` lays out the decision.
+
 ## [0.1.7] - 2026-09-25
 
 ### Security
@@ -381,7 +487,7 @@ canonical in [docs/SPEC.md](./docs/SPEC.md).
 - The plaintext trade password is held in memory only, encrypted before it
   leaves the process, and never logged or embedded in an error.
 
-[Unreleased]: https://github.com/shing1211/hstongapi4go/compare/v0.1.7...HEAD
+[Unreleased]: https://github.com/shing1211/hstongapi4go/compare/v0.1.8...HEAD
 [0.1.0]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.0
 [0.1.1]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.1
 [0.1.2]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.2
@@ -390,4 +496,5 @@ canonical in [docs/SPEC.md](./docs/SPEC.md).
 [0.1.5]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.5
 [0.1.6]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.6
 [0.1.7]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.7
+[0.1.8]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.8
 [0.1.6]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.6
