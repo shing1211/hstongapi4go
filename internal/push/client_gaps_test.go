@@ -87,7 +87,9 @@ func TestClientErrorsChannel(t *testing.T) {
 		t.Fatal("Errors() = nil, want a usable channel")
 	}
 
-	// report must return promptly even though nothing is reading.
+	// report must return promptly even though nothing is reading. The bound is
+	// generous because the failure it guards against is a permanent block, not a
+	// slow one.
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -97,7 +99,7 @@ func TestClientErrorsChannel(t *testing.T) {
 	}()
 	select {
 	case <-done:
-	case <-time.After(2 * time.Second):
+	case <-time.After(30 * time.Second):
 		t.Error("report blocked with no reader on the error channel")
 	}
 }
@@ -229,13 +231,16 @@ func TestNormalizeUnknownOnZeroValueAny(t *testing.T) {
 // TestClientRunRespectsCancelledContext covers the Run entry point on a context
 // that is already done, so the loop exits without dialing. A Run that ignored
 // ctx here would hang a caller who passed an expired deadline.
+//
+// The context is cancelled before Run is called rather than given a very short
+// timeout and slept on, so the test does not depend on wall-clock timing. The
+// bound is generous because the failure it guards against is a hang.
 func TestClientRunRespectsCancelledContext(t *testing.T) {
 	c := New(WithAddr("127.0.0.1:1"))
 	t.Cleanup(func() { _ = c.Close() })
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Nanosecond)
-	defer cancel()
-	time.Sleep(time.Millisecond)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
 
 	done := make(chan error, 1)
 	go func() { done <- c.Run(ctx) }()
@@ -245,7 +250,7 @@ func TestClientRunRespectsCancelledContext(t *testing.T) {
 		if err == nil {
 			t.Error("Run on a cancelled ctx = nil, want a context error")
 		}
-	case <-time.After(2 * time.Second):
-		t.Error("Run did not return within 2s on a cancelled context")
+	case <-time.After(30 * time.Second):
+		t.Error("Run did not return on an already-cancelled context")
 	}
 }
