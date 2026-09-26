@@ -7,6 +7,63 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.13] - 2026-09-26
+
+Nothing in this release changes the behaviour of the v0.1.x public surface, so
+ADR 0011 continues to hold. The one real defect fixed here is confined to
+`pkg/services`, which no caller can reach yet (see `docs/VNEXT.md`); the rest
+hardens the guard that should have caught it.
+
+### Fixed
+
+- **Market prices were being silently rounded to three decimals.** The v-next
+  market service read price fields as `float64` and passed them through
+  `fmt.Sprintf("%.3f", …)`, which hardcoded an assumption that every price has
+  exactly three decimal places. A tick of `0.0005` became `0.001` — a wrong
+  price, reported as though it were exact. 23 conversion sites were affected,
+  including two rate fields that lost precision at four decimals instead. All now
+  use a precision-preserving conversion, and the wire field is `json.Number`
+  rather than `float64`, which keeps the Gateway's digits verbatim and rejects a
+  non-numeric value that `string` would have accepted silently.
+
+- **The money guard could be evaded by renaming a field.** `check_money.py`
+  judged a field's **Go name** only. A money value on the wire could therefore
+  hide behind an innocuous Go name, and one did: the order-book price tick was
+  declared `TickSize float64 \`json:"spreadLevel"\``, and this repository's own
+  evidence records that the field was *named* `TickSize` rather than
+  `SpreadLevel` specifically so the guard would stay green
+  (`docs/runs/2026-09-21-hstong-full-surface/evidence/P03-T12-T13.txt`). The guard
+  now also judges the **json tag**, which is what the value actually is on the
+  wire. It is covered by 19 unit tests, including a negative case so the rule
+  cannot drift into blanket-firing.
+
+### Added
+
+- **The Python guards are now tested, and tested in CI.** `make scripts-test` runs
+  the `scripts/` unit tests (stdlib `unittest`, no new dependency) and is wired
+  into `make check` and the `build` job. A test nothing executes is not a test.
+  The job also pins `actions/setup-python` to 3.11, because `money-check` had
+  only ever worked by luck of whichever Python the runner image happened to ship.
+
+### Changed
+
+- **ADR 0008 amended with exactly one declared exception.** ADR 0008 forbids
+  `float64` money fields anywhere in the SDK, while ADR 0011 forbids changing an
+  exported type signature in the v0.1.x surface — and the order-book tick is an
+  exported field. Rather than suppress the newly-hardened guard, the exception is
+  recorded as a **dated, field-scoped waiver** matching on path, field name, wire
+  key, and type, so a *different* `float64` in the same package is still caught.
+  It expires at v1.0.0, when ADR 0011's guarantee ends and the field can be
+  changed outright.
+
+## [0.1.12] - 2026-09-26
+
+**The first release to publish artefacts.** v0.1.7 through v0.1.11 were tagged and
+green but shipped nothing, because the Release workflow only ran `goreleaser
+check`, which validates configuration without building or uploading. Five green
+tags were not evidence the release path worked. v0.1.12 adds the two external
+binaries the pipeline needs and turns publishing on for real.
+
 ### Added
 
 - **Signed releases.** The checksum file is signed with cosign keyless over the
@@ -15,6 +72,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   archives: one signature covers every artefact, and it keeps verification to a
   single bundle. `cosign` is installed by `sigstore/cosign-installer`; no signing
   key exists to leak, and `id-token: write` was already granted.
+
+- **`workflow_dispatch` on the Release workflow**, so an already-pushed tag can be
+  published without moving it.
 
 ### Fixed
 
@@ -674,7 +734,7 @@ canonical in [docs/SPEC.md](./docs/SPEC.md).
 - The plaintext trade password is held in memory only, encrypted before it
   leaves the process, and never logged or embedded in an error.
 
-[Unreleased]: https://github.com/shing1211/hstongapi4go/compare/v0.1.11...HEAD
+[Unreleased]: https://github.com/shing1211/hstongapi4go/compare/v0.1.13...HEAD
 [0.1.0]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.0
 [0.1.1]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.1
 [0.1.2]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.2
@@ -687,3 +747,5 @@ canonical in [docs/SPEC.md](./docs/SPEC.md).
 [0.1.9]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.9
 [0.1.10]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.10
 [0.1.11]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.11
+[0.1.12]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.12
+[0.1.13]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.13
