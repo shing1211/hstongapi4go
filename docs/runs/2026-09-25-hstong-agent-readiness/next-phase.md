@@ -136,16 +136,29 @@ In summary, in order:
   has never executed. The only item that can *retire* an assumption rather than
   tighten a guarantee: ADR 0007's "market `int64` arrives as a JSON number" is
   inferred solely from the vendored Java and Python SDKs. Needs a test account.
-- **G4 — release publishing.** **Partly done 2026-09-26.** `release.yml` now
-  runs `goreleaser release` on a tag instead of `check`, so archives, checksums
-  and the SBOM are published to GitHub releases; `workflow_dispatch` was added so
-  an existing tag can be published without moving the tag. Two parts remain:
-  **cosign signing**, agreed as keyless OIDC but deliberately sequenced *after*
-  publishing — a signing stanza with a wrong flag fails the whole release, and
-  GoReleaser cannot be run on the dev host, so it cannot be tested before it is
-  needed; and the **Gitee mirror**, which needs an API token this repository does
-  not hold. `id-token: write` is already granted, so signing needs no permission
-  change.
+- **G4 — release publishing.** **Done for GitHub on 2026-09-26** (v0.1.12); the
+  **Gitee mirror remains**. v0.1.12 is the first release with artifacts: six
+  archives, six SPDX SBOMs, a signed checksums file, and a `.sigstore.json`
+  bundle, all verified with `cosign verify-blob` against the tag ref plus
+  `sha256sum --check`, with the wrong-identity case confirmed to fail.
+  Getting there took two attempts, and both failures were worth recording:
+  - **v0.1.7 through v0.1.10 shipped no artifacts at all.** The workflow only
+    ran `goreleaser check`, which validates configuration without running the
+    pipeline, so four green tags were not evidence the release path worked.
+  - **v0.1.11 ran `goreleaser release` for the first time and failed** on
+    `exec: "syft": executable file not found`. The `sboms` block needs the
+    external `syft` binary, which GoReleaser does not bundle and the workflow
+    never installed — the same blind spot as above, one level deeper. Fixed by
+    installing `syft` (version pinned) alongside `cosign`.
+  - A `.goreleaser.yaml` fix **cannot** be recovered by re-dispatching the failed
+    tag, because the `tag` input also selects the commit the config is read
+    from. v0.1.11 therefore needed a new tag, not a retry. The checklist now
+    says so.
+  - The **Gitee mirror** needs a `GITEE_TOKEN` API secret that this repository
+    does not hold. Being able to `git push` the `gitee` remote is *not*
+    sufficient evidence: the mirror creates a release and uploads assets over
+    the Gitee REST API. `id-token: write` was already granted, so no permission
+    change was needed for signing.
 - **Confirm the CI run is green.** **Done 2026-09-26** for v0.1.7 through
   v0.1.10. The `gh` token is still invalid, but the repository is public, so the
   unauthenticated GitHub API answers without one.
@@ -153,19 +166,19 @@ In summary, in order:
 ## 6. Housekeeping
 
 - Rotate the MiniMax API key held in plaintext at
-  `~/.config/opencode/opencode.json` if it has been synced anywhere. Not a git
-  repository today, and that directory's own `.gitignore` does not exclude the
-  file.
-- Restart the four stale `gitnexus mcp` processes (they predate the current CLI
-  and fail graph reads with a storage-version mismatch). The CLI fallback works,
-  so nothing is blocked meanwhile.
+  `~/.config/opencode/opencode.json` if it has been synced anywhere. The key is
+  still present; that directory's own `.gitignore` now excludes the file, and it
+  is not a git repository.
 - Native-speaker pass on the three English package-tree comments in the five
   translations.
-- Fix the misleading `enabled: !ENV [CI, false]` in `mkdocs.yml`: `!ENV`
-  substitutes the string `"true"` when `CI` is set, so the plugin stays
-  enabled, which is the opposite of how the line reads.
-- Reword `proto/PROVENANCE.md`'s byte-for-byte-upstream claim; `.gitattributes`
-  now normalises line endings to LF. Committed bytes did not change.
+- ~~Restart the four stale `gitnexus mcp` processes.~~ **Done** — they were
+  restarted and the MCP tools answer again.
+- ~~Fix the misleading `enabled: !ENV [CI, false]` in `mkdocs.yml`.~~ **Done** —
+  a comment at that line now explains the substitution resolves to `true`, so the
+  plugin is enabled on the runner and disabled locally.
+- ~~Reword `proto/PROVENANCE.md`'s byte-for-byte-upstream claim.~~ **Done** — its
+  "Line endings" section already states that git normalises CRLF to LF and that
+  the tree is not literally byte-identical.
 
 ## 7. Recommended order
 
