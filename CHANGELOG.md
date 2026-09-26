@@ -7,6 +7,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.14] - 2026-09-26
+
+**Tests only. No production code changed**, so ADR 0011 is untouched and no caller
+sees any difference. This release removes the two thinnest margins above the 85%
+coverage gate, one of which had already cost a failed release earlier in this
+project's history.
+
+### Added
+
+- **`pkg/hstong/stream`: 85.6% → 100.0%** and **`pkg/hstong/trade`: 86.3% →
+  100.0%.** Both were within 1.3pp of the gate. All 8 and 22 previously
+  sub-100% functions respectively are now fully covered, measured stable across
+  three cold clean-checkout runs. Neither package uses `time.Sleep`: the stream
+  tests drive a `net.Pipe` through a substituted dialer, and the trade tests use
+  `httptest` with a zero-backoff retry policy, so coverage cannot drift with
+  machine load the way `internal/push` once did.
+
+- **The failure surface of `pkg/hstong/trade` was entirely untested.** The package
+  covered 20 endpoints and not one test made a Gateway call fail, so every happy
+  path was exercised while the whole error-propagation surface was dark. The two
+  coverage clusters looked like unrelated bugs — four mutation methods at exactly
+  83.3% and six list queries at exactly 80.0% — but were a single repeated
+  branch: the `return …, err` after a failed `Manager.call`.
+
+- **ADR 0003 is now proven at the HTTP boundary, not only in the route
+  allowlist.** A trade mutation under `MaxAttempts: 5`, with the Gateway
+  rejecting every request using a code the SDK reports as *retryable*, still
+  issues exactly **one** HTTP request. A control case shows the same policy
+  issuing **five** requests against a read-only query, which is what makes the
+  single-attempt result a property of the mutation classification rather than of
+  an inert policy.
+
+- **A regression guard for verbatim money on the wire.** One test deliberately
+  reproduces the historical `%.3f` rounding bug — a `0.0005` price leaving as
+  `0.001` — and fails if it is ever reintroduced. `pkg/hstong/trade` carries no
+  `float64`, `ParseFloat`, or `FormatFloat` in production code; this keeps it
+  that way.
+
+### Known issues found, not fixed
+
+Recorded rather than silently patched, because both are public-API decisions:
+
+- `ErrReconnected`'s documentation states the reconnect cause is available via
+  `errors.Unwrap`, but the error is built with `%w: %v`, so the cause is
+  text-only and a caller cannot branch on *why* a connection dropped.
+- A resubscribe error formats `types.TopicID` (an integer type) with `%s`, so the
+  topic renders as `TopicID(0)` — the least useful part of that message.
+
 ## [0.1.13] - 2026-09-26
 
 Nothing in this release changes the behaviour of the v0.1.x public surface, so
@@ -734,7 +782,7 @@ canonical in [docs/SPEC.md](./docs/SPEC.md).
 - The plaintext trade password is held in memory only, encrypted before it
   leaves the process, and never logged or embedded in an error.
 
-[Unreleased]: https://github.com/shing1211/hstongapi4go/compare/v0.1.13...HEAD
+[Unreleased]: https://github.com/shing1211/hstongapi4go/compare/v0.1.14...HEAD
 [0.1.0]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.0
 [0.1.1]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.1
 [0.1.2]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.2
@@ -749,3 +797,4 @@ canonical in [docs/SPEC.md](./docs/SPEC.md).
 [0.1.11]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.11
 [0.1.12]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.12
 [0.1.13]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.13
+[0.1.14]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.14
