@@ -99,9 +99,12 @@ still unwired.
   the caller under the wrong type), each request `validate()` had only its happy
   path, and `entrustBSFromInt32` — which decides whether a fill is labelled buy
   or sell — had one of its five cases covered.
-- **`go test -race` is still verified by CI rather than locally.** The release
-  host has no C toolchain, so the race gate is satisfied by the CI `build` job
-  rather than by a local run.
+- **`go test -race` runs and passes locally.** The release host does have a C
+  toolchain — MinGW gcc with `CGO_ENABLED=1` — so
+  `go test -race -count=1 ./...` was run for this release with no data races.
+  Corrected 2026-09-26: the release notes for this version originally claimed the
+  race gate was CI-only, which was wrong and had been carried unchallenged since
+  v0.1.0.
 
 ## [0.1.9] - 2026-09-25
 

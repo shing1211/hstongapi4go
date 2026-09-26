@@ -120,9 +120,19 @@ go test -race -count=1 ./...
 
 - Unit tests are offline and credential-free; they must not require network access.
 - Generated code under `gen/` is excluded from the `gofmt` and linter checks.
-- `go test -race` needs a C toolchain. Where the host has none — notably Windows
-  without the MSVC build tools — it cannot run locally and the race gate is
-  satisfied by the CI `build` job instead. Report which of the two you relied on.
+- `go test -race` needs a C toolchain, which this repository's dev host has:
+  MinGW gcc at `C:\Users\Tchan\mingw64\bin\gcc.exe` with `CGO_ENABLED=1`, so
+  `go test -race -count=1 ./...` runs locally and passes. Run it rather than
+  deferring to CI. On a host with no C toolchain the race gate is satisfied by
+  the CI `build` job instead; say which of the two you relied on.
+- **`make proto-verify` fails on a stale Windows checkout of `proto/`.** The
+  `eol=lf` attribute is only applied when a file is checked out, so files
+  written before `.gitattributes` existed can still be CRLF in the working tree
+  even though git stores them as LF. buf normalises comments differently per
+  line ending — LF input emits `// text`, CRLF emits `//text` — so a CRLF
+  checkout makes `gen/` look stale and makes local `proto-verify` disagree with
+  CI. If it fails, delete and re-checkout `proto/` before concluding anything
+  about drift. Never "fix" `gen/` by hand; `gen/` is generated.
 - On Windows, if `go build ./...` fails with a file-lock error on `a.out.exe`, set
   `GOTMPDIR` to a writable, non-scanned directory and retry. This is a host
   antivirus/indexing issue, not a code problem.
