@@ -20,10 +20,15 @@
 # publishes on a version tag (.github/workflows/release.yml). See
 # docs/RELEASE_CHECKLIST.md.
 #
+# Two external binaries are required at release time and GoReleaser bundles
+# neither: `syft` for the `sboms` block below, and `cosign` for the `signs` block.
+# Both are installed by .github/workflows/release.yml. `goreleaser check` does NOT
+# catch a missing one, because it validates configuration without running the
+# pipeline; that is exactly how the first v0.1.11 attempt failed, on a missing
+# syft, after four earlier tags had shipped with no artifacts at all.
+#
 # Signing is cosign keyless over OIDC. `permissions: id-token: write` is already
-# granted in release.yml, so no permission change is needed, and the cosign
-# binary is installed by `sigstore/cosign-installer` in the same workflow:
-# GoReleaser shells out to `cosign` and does not provide it.
+# granted in release.yml, so no permission change is needed.
 #
 # Only the checksum file is signed, not each of the six archives. That is the
 # documented GoReleaser practice: one signature over the checksums, which in

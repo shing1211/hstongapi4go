@@ -60,7 +60,7 @@
 | 문서(README, MkDocs 사이트, ADR, SPEC, LEGACY) | 구현됨 |
 | 오프라인 테스트 + 전 엔드포인트 SDK 대 모의 e2e | 구현됨 |
 | 실제 Gateway 대상 통합 테스트 | 작성됨·환경 변수로 게이트됨. 실사용 확인은 사용자 실행 대기 |
-| 릴리스(GitHub + Gitee) | v0.1.11 ✓ |
+| 릴리스(GitHub + Gitee) | v0.1.12 ✓ |
 
 51개 HTTP 엔드포인트와 11개 시세 푸시 토픽이 모두 구현되었습니다. 수치는
 [docs/SPEC.md](./docs/SPEC.md)가 정본입니다. 다른 곳에서 수동으로 편집하지 마세요.

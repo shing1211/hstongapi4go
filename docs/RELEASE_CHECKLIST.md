@@ -35,7 +35,13 @@ manager runs through this list before tagging and pushing.
     quantity fields in any `pkg/` or `client/` file.
 
 - [ ] **9. goreleaser check** — `goreleaser check --config .goreleaser.yaml`
-    passes.
+    passes. **Understand its limit:** it validates configuration and nothing
+    else. It does not build, and it does not check that the external binaries
+    the pipeline shells out to are installed. A missing `syft` or `cosign`
+    passes this step and fails only at release time, which is how the first
+    v0.1.11 attempt died after four green tags. Both are installed by
+    `release.yml`; if you add a pipe that needs another tool, install it there
+    too.
 
 - [ ] **10. OTel build** — `go build -tags otel ./...` and
     `go test -tags otel -count=1 ./...` pass.
@@ -127,15 +133,21 @@ If a release is broken and cannot wait for a hotfix:
 ### Recovering a release that failed before publishing
 
 Signing runs *before* publish, so a `cosign` failure means the run produced no
-artifacts at all rather than a broken release. That is recoverable, because the
-workflow can be re-run against an existing tag without moving it:
+artifacts at all rather than a broken release. Recovering that is **not** as
+simple as fixing the cause and re-running, because the `tag` input also selects
+the *checked-out commit*, and `.goreleaser.yaml` is read from that commit:
 
-1. Fix the cause. If signing itself is at fault, delete the `signs` block from
-   `.goreleaser.yaml` and commit — an incorrect signing stanza takes down the
-   whole release, so publishing unsigned is strictly better than publishing
-   nothing.
-2. Re-dispatch the Release workflow with the `tag` input set to the affected
-   tag. This is the one release operation that needs a personal GitHub token,
-   because a manual dispatch is not covered by the automatic `GITHUB_TOKEN`.
-3. Re-run step 15 to confirm what actually shipped.
+- A workflow-file fix (a missing tool install, a wrong `uses:`) can be
+  re-dispatched against the old tag, because the workflow is taken from the
+  branch you dispatch on while the config comes from the tag.
+- A `.goreleaser.yaml` fix **cannot**. The tag predates the fix, so a re-dispatch
+  reads the same broken config and fails identically. This is what happened to
+  v0.1.11: the first failure was a missing `syft`, which lives in the workflow,
+  but the config comment and pipe also changed, so the only correct route was a
+  new tag.
+
+So: if the cause is in the config, cut a new patch tag rather than re-dispatching.
+Re-dispatching from the Actions UI uses the automatic `GITHUB_TOKEN`; doing it
+through the API additionally needs a personal token. Either way, re-run the
+signature verification in step 15 afterwards to confirm what actually shipped.
 

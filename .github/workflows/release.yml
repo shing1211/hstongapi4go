@@ -39,6 +39,19 @@ jobs:
           check-latest: true
           cache: true
 
+      # GoReleaser shells out to `syft` for the SPDX SBOMs and does not bundle it.
+      # This was the sole cause of the failed v0.1.11 release: the `sboms` block
+      # had been in .goreleaser.yaml since it was written, and `goreleaser check`
+      # validates configuration without running the pipeline, so the missing
+      # binary only surfaced on the first real `goreleaser release`.
+      #
+      # The syft version is pinned rather than floated, so an SBOM format change
+      # upstream cannot alter a published release without a deliberate bump.
+      - name: Install syft
+        uses: anchore/sbom-action/download-syft@v0.24.2
+        with:
+          syft-version: v1.52.0
+
       # GoReleaser shells out to `cosign` for the keyless signature and does not
       # install it. `id-token: write` in the job permissions above is what lets
       # cosign obtain a Fulcio certificate without any stored key.

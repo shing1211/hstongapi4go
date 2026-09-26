@@ -7,25 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.1.11] - 2026-09-26
-
-This is the first release that publishes artefacts. v0.1.7 through v0.1.10 were
-tagged and green, but the Release workflow only ran `goreleaser check`, which
-validates configuration without building or uploading anything, so those four
-tags have no archives, checksums, or SBOMs. They remain valid as source tags;
-this release is the first with a GitHub release attached.
-
-It also changes no behaviour of the v0.1.x public surface, so ADR 0011 continues
-to hold.
-
 ### Added
 
-- **Signed releases.** The checksum file is now signed with cosign keyless over
-  the GitHub Actions OIDC identity, so consumers can verify provenance without
+- **Signed releases.** The checksum file is signed with cosign keyless over the
+  GitHub Actions OIDC identity, so consumers can verify provenance without
   trusting the release page. Only the checksums are signed, not each of the six
   archives: one signature covers every artefact, and it keeps verification to a
   single bundle. `cosign` is installed by `sigstore/cosign-installer`; no signing
   key exists to leak, and `id-token: write` was already granted.
+
+### Fixed
+
+- **SBOM generation could never have worked.** The `sboms` block requires the
+  external `syft` binary, which GoReleaser does not bundle and the Release
+  workflow did not install. This was invisible for the four releases that shipped
+  as bare tags, because the workflow only ran `goreleaser check` — which
+  validates configuration without running the pipeline — and the first real
+  `goreleaser release` failed on it immediately. `syft` is now installed by
+  `anchore/sbom-action/download-syft` with the version pinned, so an upstream
+  SBOM format change cannot alter a published release without a deliberate bump.
+
+## [0.1.11] - 2026-09-26
+
+**This tag published no artifacts.** Its CI was green, but the Release workflow
+failed on its first real `goreleaser release` run: the `sboms` block needs the
+external `syft` binary, which the workflow did not install. The tag remains valid
+as a source tag, and the code in it is sound, but there is no GitHub release, no
+archives, and no checksums attached to it. Artifacts first ship in 0.1.12.
+
+This is the same class of gap that made v0.1.7 through v0.1.10 artifact-free: the
+workflow ran `goreleaser check`, which validates configuration and never runs the
+pipeline, so nothing about the release path was actually exercised until a tag
+demanded it. Five green tags were not evidence the release worked.
+
+It also changes no behaviour of the v0.1.x public surface, so ADR 0011 continues
+to hold.
 
 ### Fixed
 
