@@ -27,7 +27,7 @@ const (
 	NotifyMsgType_TrsStockDeliverMsgType          NotifyMsgType = 0
 	NotifyMsgType_TradeStockDeliverMsgType        NotifyMsgType = 1
 	NotifyMsgType_FuturesTradeStockDeliverMsgType NotifyMsgType = 2
-	//行情占用2000开头
+	// 行情占用2000开头
 	NotifyMsgType_OrderBookNotifyMsgType   NotifyMsgType = 20001
 	NotifyMsgType_BrokerQueueNotifyMsgType NotifyMsgType = 20002
 	NotifyMsgType_BasicQotNotifyMsgType    NotifyMsgType = 20003
