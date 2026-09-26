@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **The coverage gate was failing on `internal/push`, and the recorded figure for
+  that package was wrong.** `internal/push` was documented at 86.1%, but that
+  number was measured in a dirty working tree. On a clean checkout — what CI sees
+  — the package measured **83.3%, below the 85% gate**. The cause was that the
+  reconnect paths in `Run` were only exercised when a dial attempt happened to
+  fit inside a test deadline, so the same commit reported anywhere from 83.3% to
+  86.5% and the gate was a coin flip. `internal/push/client_paths_test.go` now
+  covers those paths deterministically, using substituted dialers, explicit
+  handshakes, and pre-cancelled contexts instead of timing: option normalization,
+  the three `Connect` interleavings, the `Run` dial-failure path, drop-oldest on
+  both the handler queue and the error channel, and the `writeFull` short-write
+  paths. The package is now at 93.9% with roughly a 9pp margin, verified stable
+  across repeated cold runs. No behaviour change.
+
 ## [0.1.10] - 2026-09-26
 
 Nothing in this release changes the behaviour of the v0.1.x public surface, so

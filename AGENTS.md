@@ -120,6 +120,19 @@ go test -race -count=1 ./...
 
 - Unit tests are offline and credential-free; they must not require network access.
 - Generated code under `gen/` is excluded from the `gofmt` and linter checks.
+- **Measure coverage from a clean checkout, never from a working tree.** A dirty
+  tree carries untracked and ignored files, and a package whose tests reach the
+  filesystem or depend on timing can measure several points higher there than CI
+  ever will. `internal/push` was recorded at 86.1% from a dirty tree and measured
+  83.3% — under the gate — on a clean checkout, so CI failed while every local
+  run passed. When a coverage number looks surprising, reproduce it in a fresh
+  clone before believing it: `git clone` to a temp directory and run the gate
+  there, or run it in a Linux container against a fresh clone.
+- **A coverage figure that moves between runs of the same commit is a defect in
+  the tests, not noise.** The reconnect paths in `internal/push.Run` were only
+  reached when a dial attempt happened to fit inside a test deadline, swinging the
+  package between 83.3% and 86.5%. Cover those paths with a substituted dialer, an
+  explicit handshake, or a pre-cancelled context, never with a sleep.
 - `go test -race` needs a C toolchain, which this repository's dev host has:
   MinGW gcc at `C:\Users\Tchan\mingw64\bin\gcc.exe` with `CGO_ENABLED=1`, so
   `go test -race -count=1 ./...` runs locally and passes. Run it rather than

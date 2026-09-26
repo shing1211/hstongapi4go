@@ -81,7 +81,8 @@ be worse than failing.
 | `pkg/transport/mappers.go` | **Done** (`c6b5226`). All mappers covered, including nil-safety; package coverage 58.8% → 88.7% | — |
 | `otel`-tag test job | **Done** (`5a14c99`). Builds, vets, and tests with the tag on every push, not only on a release tag | — |
 | Bounded fuzz job | **Done** (`5a14c99`). 30s on `FuzzReadFrame`; verified locally at 734k executions, 18 newly interesting inputs, no crash | — |
-| Coverage gate scope | **Done.** Gate covers ten packages: the released public surface `pkg/hstong` 90.7%, `stream` 85.9%, `trade` 86.3%, `algo` 87.5%, `pkg/types` 100.0%, `pkg/transport` 100.0%, alongside `pkg/domain` 93.8%, `internal/auth` 94.2%, `internal/transport` 97.6%, `internal/push` 86.1%. Every package in the release path is now gated | — |
+| Coverage gate scope | **Done.** Gate covers ten packages: the released public surface `pkg/hstong` 90.7%, `stream` 85.6%, `trade` 86.3%, `algo` 87.5%, `pkg/types` 100.0%, `pkg/transport` 100.0%, alongside `pkg/domain` 93.8%, `internal/auth` 94.2%, `internal/transport` 97.6%, `internal/push` 93.9%. Every package in the release path is now gated. Figures are from a clean Linux checkout; see the correction below | — |
+| `internal/push` coverage correction | **Done.** The 86.1% previously recorded here was measured in a dirty working tree and was never reproducible. On a clean checkout the package sat at **83.3%, below the 85% gate**, which is why CI failed on it. The gap was `Run`'s reconnect paths, which the suite only reached when a dial attempt happened to fit inside a test deadline, so the total swung 83.3–86.5% between runs of the same commit. `internal/push/client_paths_test.go` now covers those paths deterministically — option normalization, the three `Connect` interleavings, the `Run` dial-failure path, drop-oldest on both queues, and the `writeFull` short-write paths — taking the package to 93.9% with a ~9pp margin. Lesson recorded: measure coverage from a clean checkout, never a working tree | — |
 
 ## 4. The Option A programme
 
@@ -122,8 +123,10 @@ In summary, in order:
   single-flight and refresh primitives exist with no non-test caller, so they
   are un-composed rather than undeclared. `doc.go` now says so explicitly.
 - Step 8 and step 1c — **done.** `pkg/transport` is at 100% and `internal/push`
-  at 86.1%; both are gated. The gate now covers ten packages, and every package
-  in the release path is covered.
+  at 93.9%; both are gated. The gate now covers ten packages, and every package
+  in the release path is covered. `internal/push` needed a second pass: the
+  original 86.1% was a dirty-tree measurement, and the real figure was 83.3%,
+  under the gate. See the correction in §3.
 - Then: `depguard` boundary rule, `pkg/services` tests, the migration guide,
   and the v1.0 schedule.
 
