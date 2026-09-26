@@ -133,11 +133,19 @@ In summary, in order:
   has never executed. The only item that can *retire* an assumption rather than
   tighten a guarantee: ADR 0007's "market `int64` arrives as a JSON number" is
   inferred solely from the vendored Java and Python SDKs. Needs a test account.
-- **G4 — release publishing.** `release.yml` runs `goreleaser check` on a tag
-  and never publishes, so v0.1.7 has a tag and no artefacts. Needs: does the
-  Gitee token exist, and is cosign keyless OIDC acceptable?
-- **Confirm the v0.1.7 CI run is green.** Unverified at tag time because the
-  `gh` token was invalid on the release host.
+- **G4 — release publishing.** **Partly done 2026-09-26.** `release.yml` now
+  runs `goreleaser release` on a tag instead of `check`, so archives, checksums
+  and the SBOM are published to GitHub releases; `workflow_dispatch` was added so
+  an existing tag can be published without moving the tag. Two parts remain:
+  **cosign signing**, agreed as keyless OIDC but deliberately sequenced *after*
+  publishing — a signing stanza with a wrong flag fails the whole release, and
+  GoReleaser cannot be run on the dev host, so it cannot be tested before it is
+  needed; and the **Gitee mirror**, which needs an API token this repository does
+  not hold. `id-token: write` is already granted, so signing needs no permission
+  change.
+- **Confirm the CI run is green.** **Done 2026-09-26** for v0.1.7 through
+  v0.1.10. The `gh` token is still invalid, but the repository is public, so the
+  unauthenticated GitHub API answers without one.
 
 ## 6. Housekeeping
 

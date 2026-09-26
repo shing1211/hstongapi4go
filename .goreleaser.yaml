@@ -16,14 +16,21 @@
 # Publish a real release:
 #   GITHUB_TOKEN=... goreleaser release --config .goreleaser.yaml
 #
-# CI runs `goreleaser check` on every push (.github/workflows/ci.yml) and again
-# on a version tag (.github/workflows/release.yml). Publishing is a manual
-# `goreleaser release`; see docs/RELEASE_CHECKLIST.md.
+# CI runs `goreleaser check` on every push (.github/workflows/ci.yml) and
+# publishes on a version tag (.github/workflows/release.yml). See
+# docs/RELEASE_CHECKLIST.md.
 #
-# Signing and attestation are intentionally not configured here. Cosign and SLSA
-# provenance both need key or OIDC credentials that this repository does not
-# manage, and an unverifiable signing stanza would fail the release rather than
-# protect it. Add them once the credentials exist.
+# Signing is still not configured here, deliberately and in stages. Cosign
+# keyless over OIDC has been agreed, but a signing stanza that references a
+# wrong flag fails the whole release rather than degrading it, and GoReleaser
+# cannot be run on the dev host, so the stanza cannot be tested before it is
+# needed. Publishing is enabled first and signing is added on a subsequent tag,
+# where a failure is recoverable. `permissions: id-token: write` is already
+# granted in release.yml, so no permission change is needed when it lands.
+#
+# The Gitee mirror is also not configured. It needs a Gitee API token, which
+# this repository does not hold; adding an empty-token stanza would fail the
+# release. Confirm the token exists before adding it.
 
 version: 2
 

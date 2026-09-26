@@ -4,6 +4,15 @@ on:
   push:
     tags:
       - 'v*'
+  # Lets an already-pushed tag be published, or re-published, without moving the
+  # tag. A tag push is the normal path; this exists so fixing a release does not
+  # require rewriting a published ref.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to publish, e.g. v0.1.10'
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -18,7 +27,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
         with:
+          # Full history: GoReleaser derives the version and changelog from tags,
+          # and the checksum/signing steps need the tag to be present locally.
           fetch-depth: 0
+          ref: ${{ inputs.tag || github.ref }}
 
       - name: Set up Go
         uses: actions/setup-go@v7
@@ -30,15 +42,19 @@ jobs:
       # GoReleaser comes from its published binary via the official action.
       # `go install github.com/goreleaser/goreleaser@latest` pulled
       # golang.org/x/tools@v0.21.0, which does not compile under Go 1.26.
-      - name: Run GoReleaser (check mode)
+      #
+      # `check` only validated the config, which is why v0.1.7 through v0.1.10
+      # shipped with a tag and no artefacts. This now publishes.
+      - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser
           version: '~> v2'
-          args: check --config .goreleaser.yaml
+          args: release --clean --config .goreleaser.yaml
         env:
-          # GITHUB_TOKEN and GORELAUNCHER_TOKEN must be set in repo secrets.
-          # Gitea uses GORELAUNCHER_TOKEN (Gitea API token with repo scope).
+          # GITHUB_TOKEN is provided automatically by Actions. GORELAUNCHER_TOKEN
+          # is only needed once a Gitee mirror stanza exists; it is intentionally
+          # unset today because an empty-token stanza fails the release.
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GORELAUNCHER_TOKEN: ${{ secrets.GORELAUNCHER_TOKEN }}
 
