@@ -154,11 +154,18 @@ In summary, in order:
     tag, because the `tag` input also selects the commit the config is read
     from. v0.1.11 therefore needed a new tag, not a retry. The checklist now
     says so.
-  - The **Gitee mirror** needs a `GITEE_TOKEN` API secret that this repository
-    does not hold. Being able to `git push` the `gitee` remote is *not*
-    sufficient evidence: the mirror creates a release and uploads assets over
-    the Gitee REST API. `id-token: write` was already granted, so no permission
-    change was needed for signing.
+  - The **Gitee release mirror** is not merely awaiting a token. GoReleaser
+    publishes releases to GitHub, GitLab, and Gitea only — it accepts exactly one
+    of those three in `release`, and a `gitee:` key fails validation with
+    `field gitee not found in type config.Release` (verified on goreleaser
+    v2.18.2). Gitee is a separate host, not a Gitea deployment GoReleaser can be
+    aimed at, so mirroring artifacts means calling the Gitee REST API from a
+    hand-written workflow step. That is a supply-chain and failure-mode decision
+    deserving its own ADR, and it still needs a `GITEE_TOKEN` API secret, which
+    does not exist — `gh secret list` reports no Actions secrets at all. Being
+    able to `git push` the `gitee` remote proves nothing here: those credentials
+    authenticate the git protocol, not the API. **Source is mirrored to Gitee
+    with every tag; only the release artifacts are GitHub-only.**
 - **Confirm the CI run is green.** **Done 2026-09-26** for v0.1.7 through
   v0.1.10. The `gh` token is still invalid, but the repository is public, so the
   unauthenticated GitHub API answers without one.

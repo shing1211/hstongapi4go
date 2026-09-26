@@ -90,12 +90,15 @@ manager runs through this list before tagging and pushing.
     must fail. Only the checksums are signed, so one successful
     `verify-blob` covers every archive.
 
-- [ ] **16. Gitea release** — verify the Gitee release at
-    <https://gitee.com/shing1211/hstongapi4go/releases>. **Not expected yet:** the
-    Gitee mirror is not configured, because it needs a `GITEE_TOKEN` API secret
-    and the mirror cannot be added until one exists. Git push to the `gitee`
-    remote working is *not* evidence the mirror works, since the mirror creates
-    the release over the Gitee REST API rather than over git.
+- [ ] **16. Gitee release** — **not expected, and not a `gitee:` stanza.**
+    GoReleaser publishes releases to GitHub, GitLab, and Gitea only, and accepts
+    exactly one of those three in `release`; a `gitee:` key is rejected with
+    `field gitee not found in type config.Release`. Gitee is a separate host, not
+    a Gitea deployment GoReleaser can be pointed at. Source and every tag are
+    already mirrored to Gitee by `git push`, so the only Gitee gap is the release
+    artifacts, and closing it would mean calling the Gitee REST API from a
+    workflow step — an ADR-level decision, not a config tweak. Do not add a
+    `gitee:` block expecting it to work.
 
 ## Post-release
 

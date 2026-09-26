@@ -54,11 +54,23 @@
 # re-dispatch needs a GitHub token, unlike the tag push which uses the automatic
 # GITHUB_TOKEN. See docs/RELEASE_CHECKLIST.md.
 #
-# The Gitee mirror is not configured. It needs a Gitee API token, which this
-# repository does not hold; adding an empty-token stanza would fail the release.
-# Git push credentials for the gitee remote are not sufficient, because the
-# mirror creates a release and uploads assets over the Gitee REST API. Confirm a
-# GITEE_TOKEN repository secret exists before adding the stanza.
+# The Gitee release mirror is NOT configured, and adding a `gitee:` block is not
+# the way to do it. GoReleaser publishes releases only to GitHub, GitLab, and
+# Gitea — it sets `release` to exactly one of those three, and a `gitee:` key is
+# rejected outright:
+#
+#   field gitee not found in type config.Release
+#
+# That was verified against goreleaser v2.18.2, not inferred. Gitee is a distinct
+# host, not a Gitea deployment GoReleaser can be pointed at.
+#
+# The git repository itself is already mirrored to Gitee and every tag is pushed
+# there, so source is available on both hosts; only the release artifacts are
+# GitHub-only. Mirroring those would mean calling the Gitee REST API from a
+# separate workflow step, which is a supply-chain and failure-mode decision that
+# needs its own ADR, plus a GITEE_TOKEN API secret this repository does not hold.
+# Git push credentials for the gitee remote are not a substitute: those
+# authenticate the git protocol, not the REST API.
 
 version: 2
 
