@@ -34,7 +34,7 @@ PROTOC_GEN_GO_VERSION ?= v1.36.6
 .DEFAULT_GOAL := help
 
 .PHONY: help tools build fmt fmt-check vet test test-race test-integration coverage check \
-        money-check proto proto-verify docs-check license license-check \
+        money-check scripts-test proto proto-verify docs-check license license-check \
         mock-gateway clean lint gosec govulncheck enterprise-check goreleaser-check sbom
 
 help: ## List targets
@@ -84,10 +84,18 @@ test-integration: ## Run env-gated integration tests (HSTONG_INTEGRATION=1 requi
 coverage: ## Run tests with coverage gate (>=85% on pkg/domain, internal/auth, internal/transport, internal/push, pkg/hstong{,/stream,/trade,/algo}, pkg/types, pkg/transport)
 	$(GO) run scripts/coverage_gate.go
 
-check: fmt vet money-check test ## Format, vet, check money types, and test
+check: fmt vet money-check scripts-test test ## Format, vet, check money types, test scripts/ and test
 
 money-check: ## Fail if pkg/ exposes float money/quantity fields (docs/DESIGN.md §7)
 	$(PYTHON) scripts/check_money.py
+
+# The Python guards under scripts/ are covered by stdlib unittest, discovered by
+# the test_*.py naming convention: no third-party runner, since AGENTS.md rule 8
+# admits no new dependency without an ADR. Discovery is rooted at scripts/ so the
+# tests exercise check_money.py against throwaway temp trees and never plant a
+# float money field in the repository. Run from the repo root.
+scripts-test: ## Run the scripts/ Python unit tests (stdlib unittest)
+	$(PYTHON) -m unittest discover -s scripts -p "test_*.py" -v
 
 proto: ## Regenerate proto/ into gen/ (protobuf codegen)
 	@if [ -f buf.gen.yaml ]; then \

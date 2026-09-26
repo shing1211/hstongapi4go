@@ -40,6 +40,16 @@ jobs:
           check-latest: true
           cache: true
 
+      # The money guard and the scripts/ unit tests are Python, and both run
+      # through make targets that resolve $(PYTHON) to python3. The runner image
+      # ships a Python, but pinning the minor version here means a test result
+      # cannot change underneath a commit because the image did — the same
+      # reasoning that pins gosec and govulncheck. Same pin as the docs job.
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
       - name: Build
         run: go build ./...
 
@@ -65,6 +75,11 @@ jobs:
 
       - name: Money type check (no float money fields)
         run: make money-check
+
+      # A test nothing executes is not a test. stdlib unittest only — no pytest
+      # (AGENTS.md rule 8 admits no new dependency without an ADR).
+      - name: scripts/ unit tests (check_money)
+        run: make scripts-test
 
   proto:
     name: proto-verify
