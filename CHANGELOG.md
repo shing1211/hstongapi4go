@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.10] - 2026-09-26
+
+Nothing in this release changes the behaviour of the v0.1.x public surface, so
+ADR 0011 continues to hold. Almost all of it is internal consolidation of code
+that no caller could reach. The two user-visible changes are the opt-in
+correlation-ID option and a constructor signature in `pkg/services`, which is
+still unwired.
+
+### Removed
+
+- **Two of the three push implementations.** `internal/push` contained `Client`
+  (released, used by `pkg/hstong/stream`), `Manager`, and `Fanout`. `Manager`
+  and `Fanout` had no production caller, and they were not two versions of one
+  protocol but **different protocols**: the released path subscribes over HTTP
+  and re-subscribes over HTTP on reconnect, while `Manager` sent topic frames
+  over the TCP push socket — an assumption no test had ever checked, because the
+  live Gateway run has never executed. Adopting it would have made an unverified
+  protocol guess the foundation of the layered API. `Manager`, `Fanout`, and the
+  `Normalizer` that served them are gone, along with `DedupCache`, which was
+  inert because the Gateway sends no per-event sequence.
+- **`pkg/transport.Adapter`.** Unreachable, and *less* capable than the released
+  `client.Client`: no rate limiter, no circuit breaker, no metrics, no tracing
+  spans. Routing `pkg/services` through it would have been a regression. It was
+  also broken in three untested ways — it discarded the transport it was
+  constructed with and built a fresh one per request against a hardcoded base
+  URL, and its `WithDeadline` cancelled a *previous* caller's in-flight context.
+  Removing it took `pkg/transport` from 88.7% to 100%: the deleted code was the
+  uncovered part.
+- **`pkg/transport/doc.go` corrected.** It documented a `RESTAdapter` and a
+  `PushAdapter` that were never implemented.
+
 ### Added
 
 - **Opt-in correlation IDs on the request path.** `client.WithCorrelationIDHeader`
@@ -19,6 +50,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   requests or forge a plausible one. The header *name* is configurable rather
   than fixed, and a whitespace-only name is treated as off rather than producing
   a request `net/http` rejects.
+- **Machine-checked package layering.** `internal/layering` parses the
+  repository's own imports and asserts six boundary rules. This replaces a
+  `depguard` configuration, because depguard in golangci-lint v2.9 silently
+  ignores path globs in its `files` field: the rules were accepted, reported
+  "0 issues" on a clean graph, and reported "0 issues" with a deliberately
+  planted violating import present. A rule that enforces nothing while looking
+  like enforcement is worse than no rule. The replacement also asserts that no
+  rule matches zero packages.
+
+### Changed
+
+- **`pkg/services` depends on an interface it declares itself.** The three
+  constructors and their `With*Client` options now take an `Executor` rather
+  than `*client.Client`, with the released client as the injected implementation
+  (ADR 0010 rule 6). This is a signature change, but only in the unwired layer,
+  and it is what lets that layer be tested against a fake instead of a Gateway.
+  It deliberately still names `client.Route` and `client.Codec`: inverting the
+  dependency removes the dependency on the concrete type, not on the client's
+  shared route vocabulary, and private copies of those types would duplicate the
+  canonical route table in `docs/SPEC.md`.
+- **The N1 v-next decision is recorded.** Option A, commit to the layered API, is
+  now the recorded decision rather than an open question, with the ordered
+  programme and the evidence for each step in `docs/VNEXT.md`. The deciding
+  finding was that push consolidation could not be treated as pre-decision
+  groundwork, which the evidence for that decision disproved.
+
+### Fixed
+
+- **The risk register was understating what had been fixed.** R2 (route-mutation
+  classification) and R7 (unbounded response read) were still recorded as open
+  after being fixed, and the partial-outage table still claimed the active
+  executor used an uncapped `io.ReadAll`. Each row now cites the commit that
+  changed its status. R9 is resolved by the Adapter removal. R14 was re-scoped:
+  its rationale named symbols that no longer exist and described
+  `internal/auth/doc.go` as claiming unimplemented behaviour when the doc was in
+  fact accurate — the real gap is that the single-flight and refresh primitives
+  exist with no non-test caller, and the doc now says so.
+
+### Internal
+
+- **Coverage gate widened from three packages to ten**, now covering the entire
+  release path: `pkg/domain`, `internal/auth`, `internal/transport`,
+  `internal/push`, `pkg/hstong{,/stream,/trade,/algo}`, `pkg/types`, and
+  `pkg/transport`. Getting there meant testing branches that had never executed
+  rather than just uncovered lines — `WithKeepAliveRoute` had no test at all, the
+  topic-to-message-type map was half covered (a wrong entry hands every event to
+  the caller under the wrong type), each request `validate()` had only its happy
+  path, and `entrustBSFromInt32` — which decides whether a fill is labelled buy
+  or sell — had one of its five cases covered.
+- **`go test -race` is still verified by CI rather than locally.** The release
+  host has no C toolchain, so the race gate is satisfied by the CI `build` job
+  rather than by a local run.
 
 ## [0.1.9] - 2026-09-25
 
@@ -536,7 +619,7 @@ canonical in [docs/SPEC.md](./docs/SPEC.md).
 - The plaintext trade password is held in memory only, encrypted before it
   leaves the process, and never logged or embedded in an error.
 
-[Unreleased]: https://github.com/shing1211/hstongapi4go/compare/v0.1.9...HEAD
+[Unreleased]: https://github.com/shing1211/hstongapi4go/compare/v0.1.10...HEAD
 [0.1.0]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.0
 [0.1.1]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.1
 [0.1.2]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.2
@@ -547,3 +630,4 @@ canonical in [docs/SPEC.md](./docs/SPEC.md).
 [0.1.7]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.7
 [0.1.8]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.8
 [0.1.9]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.9
+[0.1.10]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.10
