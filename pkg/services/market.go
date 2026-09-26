@@ -5,7 +5,9 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"strconv"
 
 	"github.com/shing1211/hstongapi4go/client"
 	"github.com/shing1211/hstongapi4go/gen/hq/dto"
@@ -119,7 +121,13 @@ type orderBookWireResponse struct {
 	Security         *dto.Security    `json:"security"`
 	OrderBookAskList []*dto.OrderBook `json:"orderBookAskList"`
 	OrderBookBidList []*dto.OrderBook `json:"orderBookBidList"`
-	TickSize         float64          `json:"spreadLevel"`
+	// TickSize is json.Number, not float64 and not plain string. The Gateway
+	// sends the HQ market numerics as unquoted JSON numbers, which encoding/json
+	// refuses to decode into a string field ("cannot unmarshal number into Go
+	// value of type string") and only preserves verbatim for json.Number; it also
+	// accepts the quoted form. Either way the digits the Gateway sent reach
+	// domain.MustNewPrice unchanged, so a tick of 0.0005 stays 0.0005.
+	TickSize json.Number `json:"spreadLevel"`
 }
 
 func (s *MarketService) OrderBook(ctx context.Context, req OrderBookRequest) (OrderBookResponse, error) {
@@ -138,7 +146,7 @@ func (s *MarketService) OrderBook(ctx context.Context, req OrderBookRequest) (Or
 		Security: &Security{DataType: types.DataType(wireResp.Security.DataType), Code: wireResp.Security.Code},
 		Ask:      convertOrderBookLevels(wireResp.OrderBookAskList),
 		Bid:      convertOrderBookLevels(wireResp.OrderBookBidList),
-		TickSize: domain.MustNewPrice(fmt.Sprintf("%.3f", wireResp.TickSize), "0.001"),
+		TickSize: domain.MustNewPrice(decimalOrZero(string(wireResp.TickSize)), "0.001"),
 	}, nil
 }
 
@@ -431,22 +439,57 @@ func (s *MarketService) Unsubscribe(ctx context.Context, topicID types.TopicID, 
 	}, s.client.JSON(), nil)
 }
 
+// floatToString renders a generated DTO float as the shortest decimal string that
+// parses back to the same float64, so the value reaches the domain decimal
+// constructors without being rounded on the way.
+//
+// It replaces the fmt.Sprintf("%.Nf", x) conversions this file used to make. Those
+// hardcoded a scale the Gateway never promised: %.3f turned a 0.0005 tick into
+// 0.001, a wrong price, and %.4f truncated the rates the same way. 'f' with
+// precision -1 also keeps the exponent out ("0.0000001", never "1e-07"), which
+// matters because a bare "1e-07" panics in domain.MustNewPrice.
+//
+// This is deliberately a package-local copy of the twin in pkg/transport
+// (mappers.go, floatToString). Exporting that one, or introducing a third package
+// to hold the shared copy, would each be a public API addition and so a new
+// architecture decision under AGENTS.md rule 8; three lines of stdlib duplicated
+// across two internal call sites is the cheaper trade. The two must stay in step:
+// if either changes, change both.
+func floatToString(f float64) string {
+	return strconv.FormatFloat(f, 'f', -1, 64)
+}
+
+// decimalOrZero normalises a Gateway string field for the decimal-backed domain
+// constructors, which panic on an unparseable value and would otherwise take down
+// the caller's goroutine when the Gateway omits the field. A JSON null or an absent
+// key leaves the string empty, which is the only case handled here: a malformed
+// price still fails at decode rather than being silently replaced by a number.
+//
+// The twin is pkg/transport (mappers.go, decimalOrZero); see floatToString above
+// for why it is copied rather than shared.
+func decimalOrZero(s string) string {
+	if s == "" {
+		return "0"
+	}
+	return s
+}
+
 func convertToQuote(q *dto.BasicQot) *domain.Quote {
 	if q == nil {
 		return nil
 	}
 	return &domain.Quote{
 		IsSuspended:    q.IsSuspended,
-		OpenPrice:      domain.MustNewPrice(fmt.Sprintf("%.3f", q.OpenPrice), "0.001"),
-		HighPrice:      domain.MustNewPrice(fmt.Sprintf("%.3f", q.HighPrice), "0.001"),
-		LowPrice:       domain.MustNewPrice(fmt.Sprintf("%.3f", q.LowPrice), "0.001"),
-		LastPrice:      domain.MustNewPrice(fmt.Sprintf("%.3f", q.LastPrice), "0.001"),
-		LastClosePrice: domain.MustNewPrice(fmt.Sprintf("%.3f", q.LastClosePrice), "0.001"),
-		PriceSpread:    domain.MustNewPrice(fmt.Sprintf("%.3f", q.PriceSpread), "0.001"),
+		OpenPrice:      domain.MustNewPrice(floatToString(q.OpenPrice), "0.001"),
+		HighPrice:      domain.MustNewPrice(floatToString(q.HighPrice), "0.001"),
+		LowPrice:       domain.MustNewPrice(floatToString(q.LowPrice), "0.001"),
+		LastPrice:      domain.MustNewPrice(floatToString(q.LastPrice), "0.001"),
+		LastClosePrice: domain.MustNewPrice(floatToString(q.LastClosePrice), "0.001"),
+		PriceSpread:    domain.MustNewPrice(floatToString(q.PriceSpread), "0.001"),
 		Volume:         domain.MustNewQuantity(fmt.Sprintf("%d", q.Volume)),
-		Turnover:       domain.MustNewMoney(fmt.Sprintf("%.3f", q.Turnover), "HKD", 3),
-		TurnoverRate:   domain.MustNewRate(fmt.Sprintf("%.4f", q.TurnoverRate)),
-		Amplitude:      domain.MustNewRate(fmt.Sprintf("%.4f", q.Amplitude)),
+		Turnover:       domain.MustNewMoney(floatToString(q.Turnover), "HKD", 3),
+		TurnoverRate:   domain.MustNewRate(floatToString(q.TurnoverRate)),
+		Amplitude:      domain.MustNewRate(floatToString(q.Amplitude)),
 		SecStatus:      q.SecStatus,
 		ListTime:       q.ListTime,
 		LotSize:        q.LotSize,
@@ -463,7 +506,7 @@ func convertOrderBookLevels(levels []*dto.OrderBook) []domain.OrderBookLevel {
 	for i, l := range levels {
 		out[i] = domain.OrderBookLevel{
 			Level:    l.Level,
-			Price:    domain.MustNewPrice(fmt.Sprintf("%.3f", l.Price), "0.001"),
+			Price:    domain.MustNewPrice(floatToString(l.Price), "0.001"),
 			Quantity: domain.MustNewQuantity(fmt.Sprintf("%d", l.Volume)),
 		}
 	}
@@ -476,13 +519,13 @@ func convertToKLine(k *dto.KLine) *domain.KLine {
 	}
 	return &domain.KLine{
 		Date:           k.Date,
-		HighPrice:      domain.MustNewPrice(fmt.Sprintf("%.3f", k.HighPrice), "0.001"),
-		OpenPrice:      domain.MustNewPrice(fmt.Sprintf("%.3f", k.OpenPrice), "0.001"),
-		LowPrice:       domain.MustNewPrice(fmt.Sprintf("%.3f", k.LowPrice), "0.001"),
-		ClosePrice:     domain.MustNewPrice(fmt.Sprintf("%.3f", k.ClosePrice), "0.001"),
-		LastClosePrice: domain.MustNewPrice(fmt.Sprintf("%.3f", k.LastClosePrice), "0.001"),
+		HighPrice:      domain.MustNewPrice(floatToString(k.HighPrice), "0.001"),
+		OpenPrice:      domain.MustNewPrice(floatToString(k.OpenPrice), "0.001"),
+		LowPrice:       domain.MustNewPrice(floatToString(k.LowPrice), "0.001"),
+		ClosePrice:     domain.MustNewPrice(floatToString(k.ClosePrice), "0.001"),
+		LastClosePrice: domain.MustNewPrice(floatToString(k.LastClosePrice), "0.001"),
 		Volume:         domain.MustNewQuantity(fmt.Sprintf("%d", k.Volume)),
-		Turnover:       domain.MustNewMoney(fmt.Sprintf("%.3f", k.Turnover), "HKD", 3),
+		Turnover:       domain.MustNewMoney(floatToString(k.Turnover), "HKD", 3),
 		Timestamp:      k.Timestamp,
 		Time:           k.Time,
 	}
@@ -494,11 +537,11 @@ func convertToTimeSharePoint(ts *dto.TimeShare) *domain.TimeSharePoint {
 	}
 	return &domain.TimeSharePoint{
 		Time:           ts.Time,
-		Price:          domain.MustNewPrice(fmt.Sprintf("%.3f", ts.Price), "0.001"),
-		LastClosePrice: domain.MustNewPrice(fmt.Sprintf("%.3f", ts.LastClosePrice), "0.001"),
-		AvgPrice:       domain.MustNewPrice(fmt.Sprintf("%.3f", ts.AvgPrice), "0.001"),
+		Price:          domain.MustNewPrice(floatToString(ts.Price), "0.001"),
+		LastClosePrice: domain.MustNewPrice(floatToString(ts.LastClosePrice), "0.001"),
+		AvgPrice:       domain.MustNewPrice(floatToString(ts.AvgPrice), "0.001"),
 		Volume:         domain.MustNewQuantity(fmt.Sprintf("%d", ts.Volume)),
-		Turnover:       domain.MustNewMoney(fmt.Sprintf("%.3f", ts.Turnover), "HKD", 3),
+		Turnover:       domain.MustNewMoney(floatToString(ts.Turnover), "HKD", 3),
 	}
 }
 
@@ -509,9 +552,9 @@ func convertToTickerTick(t *dto.Ticker) *domain.TickerTick {
 	return &domain.TickerTick{
 		Time:      t.Time,
 		Side:      t.Side,
-		Price:     domain.MustNewPrice(fmt.Sprintf("%.3f", t.Price), "0.001"),
+		Price:     domain.MustNewPrice(floatToString(t.Price), "0.001"),
 		Volume:    domain.MustNewQuantity(fmt.Sprintf("%d", t.Volume)),
-		Turnover:  domain.MustNewMoney(fmt.Sprintf("%.3f", t.Turnover), "HKD", 3),
+		Turnover:  domain.MustNewMoney(floatToString(t.Turnover), "HKD", 3),
 		Type:      t.Type,
 		Timestamp: t.Timestamp,
 		MktTmType: t.MktTmType,
