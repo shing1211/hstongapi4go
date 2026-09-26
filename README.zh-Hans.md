@@ -59,7 +59,7 @@
 | 文档（README、MkDocs 站点、ADR、SPEC、LEGACY） | 已实现 |
 | 离线测试 + 全端点 SDK 对 mock 的端到端测试 | 已实现 |
 | 针对真实 Gateway 的集成测试 | 已编写并按环境变量门控；待用户实际运行确认 |
-| 发布（GitHub + Gitee） | v0.1.10 ✓ |
+| 发布（GitHub + Gitee） | v0.1.11 ✓ |
 
 全部 51 个 HTTP 端点和 11 个行情推送主题均已实现。计数以
 [docs/SPEC.md](./docs/SPEC.md) 为准；请勿在其他地方手动修改。

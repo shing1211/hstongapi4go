@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.11] - 2026-09-26
+
+This is the first release that publishes artefacts. v0.1.7 through v0.1.10 were
+tagged and green, but the Release workflow only ran `goreleaser check`, which
+validates configuration without building or uploading anything, so those four
+tags have no archives, checksums, or SBOMs. They remain valid as source tags;
+this release is the first with a GitHub release attached.
+
+It also changes no behaviour of the v0.1.x public surface, so ADR 0011 continues
+to hold.
+
+### Added
+
+- **Signed releases.** The checksum file is now signed with cosign keyless over
+  the GitHub Actions OIDC identity, so consumers can verify provenance without
+  trusting the release page. Only the checksums are signed, not each of the six
+  archives: one signature covers every artefact, and it keeps verification to a
+  single bundle. `cosign` is installed by `sigstore/cosign-installer`; no signing
+  key exists to leak, and `id-token: write` was already granted.
+
 ### Fixed
 
 - **The coverage gate was failing on `internal/push`, and the recorded figure for
@@ -638,7 +658,7 @@ canonical in [docs/SPEC.md](./docs/SPEC.md).
 - The plaintext trade password is held in memory only, encrypted before it
   leaves the process, and never logged or embedded in an error.
 
-[Unreleased]: https://github.com/shing1211/hstongapi4go/compare/v0.1.10...HEAD
+[Unreleased]: https://github.com/shing1211/hstongapi4go/compare/v0.1.11...HEAD
 [0.1.0]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.0
 [0.1.1]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.1
 [0.1.2]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.2
@@ -650,3 +670,4 @@ canonical in [docs/SPEC.md](./docs/SPEC.md).
 [0.1.8]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.8
 [0.1.9]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.9
 [0.1.10]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.10
+[0.1.11]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.11

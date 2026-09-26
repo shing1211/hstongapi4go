@@ -39,6 +39,12 @@ jobs:
           check-latest: true
           cache: true
 
+      # GoReleaser shells out to `cosign` for the keyless signature and does not
+      # install it. `id-token: write` in the job permissions above is what lets
+      # cosign obtain a Fulcio certificate without any stored key.
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
       # GoReleaser comes from its published binary via the official action.
       # `go install github.com/goreleaser/goreleaser@latest` pulled
       # golang.org/x/tools@v0.21.0, which does not compile under Go 1.26.
@@ -52,10 +58,13 @@ jobs:
           version: '~> v2'
           args: release --clean --config .goreleaser.yaml
         env:
-          # GITHUB_TOKEN is provided automatically by Actions. GORELAUNCHER_TOKEN
-          # is only needed once a Gitee mirror stanza exists; it is intentionally
-          # unset today because an empty-token stanza fails the release.
+          # GITHUB_TOKEN is provided automatically by Actions and is what
+          # publishes the release. Cosign needs no token: it authenticates to
+          # Fulcio with the job's OIDC identity.
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # GITEE_TOKEN would be needed only once a Gitee mirror stanza exists.
+          # It is intentionally absent from both this file and .goreleaser.yaml,
+          # because an empty-token stanza fails the whole release.
           GORELAUNCHER_TOKEN: ${{ secrets.GORELAUNCHER_TOKEN }}
 
   build-otel:

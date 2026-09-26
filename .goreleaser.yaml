@@ -20,17 +20,40 @@
 # publishes on a version tag (.github/workflows/release.yml). See
 # docs/RELEASE_CHECKLIST.md.
 #
-# Signing is still not configured here, deliberately and in stages. Cosign
-# keyless over OIDC has been agreed, but a signing stanza that references a
-# wrong flag fails the whole release rather than degrading it, and GoReleaser
-# cannot be run on the dev host, so the stanza cannot be tested before it is
-# needed. Publishing is enabled first and signing is added on a subsequent tag,
-# where a failure is recoverable. `permissions: id-token: write` is already
-# granted in release.yml, so no permission change is needed when it lands.
+# Signing is cosign keyless over OIDC. `permissions: id-token: write` is already
+# granted in release.yml, so no permission change is needed, and the cosign
+# binary is installed by `sigstore/cosign-installer` in the same workflow:
+# GoReleaser shells out to `cosign` and does not provide it.
 #
-# The Gitee mirror is also not configured. It needs a Gitee API token, which
-# this repository does not hold; adding an empty-token stanza would fail the
-# release. Confirm the token exists before adding it.
+# Only the checksum file is signed, not each of the six archives. That is the
+# documented GoReleaser practice: one signature over the checksums, which in
+# turn covers every artefact, and it keeps the release surface to a single
+# bundle to verify.
+#
+# cosign v3 replaced the old certificate-plus-signature pair with `--bundle`,
+# which writes one `.sigstore.json` holding both. The pre-v3 form
+# (`certificate:` plus `--output-certificate`/`--output-signature`) is wrong
+# against a v3 cosign, so do not reintroduce it.
+#
+# Verify a downloaded release with:
+#   cosign verify-blob \
+#     --certificate-identity 'https://github.com/shing1211/hstongapi4go/.github/workflows/release.yml@refs/tags/<TAG>' \
+#     --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
+#     --bundle hstongapi4go_<VERSION>_checksums.txt.sigstore.json \
+#     hstongapi4go_<VERSION>_checksums.txt
+#   sha256sum --check --ignore-missing hstongapi4go_<VERSION>_checksums.txt
+#
+# Signing runs before publish, so a signing failure means no artefacts are
+# published at all. Recovery is to delete the `signs` block below, commit, and
+# re-dispatch the Release workflow with `tag` set to the affected tag; that
+# re-dispatch needs a GitHub token, unlike the tag push which uses the automatic
+# GITHUB_TOKEN. See docs/RELEASE_CHECKLIST.md.
+#
+# The Gitee mirror is not configured. It needs a Gitee API token, which this
+# repository does not hold; adding an empty-token stanza would fail the release.
+# Git push credentials for the gitee remote are not sufficient, because the
+# mirror creates a release and uploads assets over the Gitee REST API. Confirm a
+# GITEE_TOKEN repository secret exists before adding the stanza.
 
 version: 2
 
@@ -69,6 +92,24 @@ checksum:
 sboms:
   - id: sbom
     artifacts: archive
+
+# Keyless cosign over the Actions OIDC identity. `signature` must name the file
+# cosign actually writes: GoReleaser warns when the named file is absent, and
+# treats it as an error in v3, so `${artifact}.sigstore.json` has to match
+# `--bundle` exactly.
+signs:
+  - id: checksum
+    cmd: cosign
+    signature: "${artifact}.sigstore.json"
+    args:
+      - sign-blob
+      - "--bundle=${signature}"
+      - "${artifact}"
+      - "--yes"
+    artifacts: checksum
+    # Surface cosign's output by default rather than only under --verbose, so a
+    # failed release says why instead of failing silently on a missing bundle.
+    output: true
 
 release:
   github:
