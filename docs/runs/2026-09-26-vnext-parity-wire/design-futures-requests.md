@@ -548,10 +548,29 @@ func (s *FuturesService) QueryMaxBuySellAmount(ctx context.Context, accountID do
 func (s *FuturesService) QueryFundInfo(ctx context.Context, accountID domain.AccountID) (*domain.FuturesAccount, error)
 func (s *FuturesService) QueryHoldsList(ctx context.Context, accountID domain.AccountID) ([]*domain.FuturesPosition, error)
 func (s *FuturesService) QueryRealEntrustList(ctx context.Context, accountID domain.AccountID) ([]*domain.FuturesOrder, error)
-func (s *FuturesService) QueryRealEntrustPage(ctx context.Context, accountID domain.AccountID, page PageRequest) (*domain.FuturesOrderPage, error)
+func (s *FuturesService) QueryHistoryEntrustPage(ctx context.Context, accountID domain.AccountID, page PageRequest) (*domain.FuturesOrderPage, error)
 func (s *FuturesService) QueryRealDeliverList(ctx context.Context, accountID domain.AccountID) ([]*domain.FuturesFill, error)
-func (s *FuturesService) QueryRealDeliverPage(ctx context.Context, accountID domain.AccountID, page PageRequest) (*domain.FuturesFillPage, error)
+func (s *FuturesService) QueryHistoryDeliverPage(ctx context.Context, accountID domain.AccountID, page PageRequest) (*domain.FuturesFillPage, error)
+```
 
+> **Second correction, from implementing C4: the two page methods were named
+> `QueryReal…Page` here while calling the *history* routes, and they are renamed.**
+> Point 3 of this very section says the page-returning methods are the history ones,
+> because only a history reply populates `curPageNo`/`curPageSize`/`totalPageNo`/
+> `lastPage` — a real-list reply carries all four as zero, so a page built from one
+> would be four zero fields presented as fact. The released `pkg/hstong/future` pairs
+> them the same way (`opQueryHistoryEntrust` → `RouteTradeFuturesQueryHistoryEntrustList`).
+> So the signature block contradicted the section's own reasoning. Renamed at C4
+> rather than deferred, because `pkg/services` is not yet reachable by a caller and a
+> method named "Real" that reads the history route is a trap to freeze into a public
+> API at v1.0. A test pins the route, so an editor who "corrects" the route to match
+> the old name fails rather than silently shipping a page of zeros.
+>
+> **Arithmetic note, because the run tracker and an earlier brief got this wrong:**
+> these 8 read methods wire **8 distinct routes**, not 6 or 7. The page methods use
+> the two *history* routes, which are different routes from the two *real* ones, so
+> nothing shares a route. C4 therefore moved the gap 22 → 14 (37/51), leaving 3
+> futures mutations, 7 algo, and the 4 session/subscribe endpoints.
 // Mutations
 func (s *FuturesService) Entrust(ctx context.Context, accountID domain.AccountID, order FuturesOrderRequest) (*domain.OrderResult, error)
 func (s *FuturesService) CancelEntrust(ctx context.Context, accountID domain.AccountID, entrustID domain.EntrustID, symbol domain.Symbol) error

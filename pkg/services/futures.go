@@ -4,6 +4,12 @@
 package services
 
 import (
+	"context"
+	"strings"
+	"time"
+
+	"github.com/shing1211/hstongapi4go/client"
+	"github.com/shing1211/hstongapi4go/internal/errs"
 	"github.com/shing1211/hstongapi4go/pkg/domain"
 	"github.com/shing1211/hstongapi4go/pkg/types"
 )
@@ -75,9 +81,14 @@ const (
 // It holds no per-request state, is safe for concurrent use once constructed,
 // and takes its request path from an Executor the caller supplies — the same
 // inversion MarketService, AccountService and TradingService use
-// (docs/adr/0010-vnext-layered-architecture.md). The endpoint methods arrive in
-// the follow-on work; this type currently carries the wire and mapper scaffold,
-// so nothing routes through it yet.
+// (docs/adr/0010-vnext-layered-architecture.md). Eight of the eleven endpoints
+// are implemented here; the three mutations arrive with the mutation work, so
+// nothing in this package can place, cancel or reprice an order yet.
+//
+// Every method takes a domain.AccountID first, validates it, and never places it
+// in a request body — see the account rule on this type. The three mutations
+// that would carry it are the reason it is first and unconditional: a caller
+// that named no account is refused before the Gateway sees anything.
 //
 // Four facts about the futures protocol are structural and are stated here
 // because each is a mistake a reader would otherwise make, and none of them can
@@ -359,9 +370,12 @@ type futuresModifyEntrustWireRequest struct {
 // therefore have no wire struct here. Both vendors pass an empty map; the
 // released layer passes struct{}{}, which marshals to the same {} byte for
 // byte. The one thing the endpoint methods must get right is that it is
-// struct{}{} and not nil: marshalling nil would send "params":null, which is a
-// different body. An empty named struct is not declared for them on purpose —
-// it would encode nothing and give a field somewhere to be added by accident.
+// struct{}{} and not nil: internal/transport drops a nil params from the
+// envelope entirely (request.Params carries omitempty), so the key would be
+// absent rather than an empty object — a different body, and one the four
+// reads' assertions below would not notice. An empty named struct is not
+// declared for them on purpose — it would encode nothing and give a field
+// somewhere to be added by accident.
 
 // futuresProductInfoWireResponse is the data object of
 // /trade/FuturesQueryProductInfo. The rows it holds are domain payloads
@@ -513,4 +527,404 @@ func futuresFillPageFromDTO(v *futuresOrderListWireResponse) *domain.FuturesFill
 		TotalPageNo: v.TotalPageNo,
 		LastPage:    v.LastPage == 1,
 	}
+}
+
+// futuresMaxPageSizeExclusive is the exclusive upper bound the Gateway documents
+// for a futures history page: an accepted page size is strictly below 100.
+//
+// It deliberately repeats the value pkg/services' cash MaxPageSize encodes rather
+// than reusing that constant. The two agree today by documentation and by the
+// released pkg/hstong/future maxPageSizeExclusive, but they are different limits
+// on different axes — the cash one caps a cursor page size that clampPageSize
+// silently narrows to, while this one is a hard rejection on a page-numbered body
+// — so sharing one identifier would let a change to either silently move the
+// other.
+const futuresMaxPageSizeExclusive = 100
+
+// futuresDateLayout is the Go reference-time layout for the yyyyMMdd date the
+// futures history body takes. The response's own expiry field uses yyyy/MM/dd,
+// which is a different direction and must not be sent back.
+const futuresDateLayout = "20060102"
+
+// futuresValidateStockCode reports whether code is a usable futures contract code:
+// non-empty once trimmed, and carrying no internal whitespace.
+//
+// The check is deliberately permissive about characters, because no futures code
+// pattern is documented in this repository: the HK and US code formats differ and
+// neither is recorded, so a pattern would reject legitimate contracts. The
+// released pkg/hstong/future predicate is reproduced exactly, including its one
+// quirk: a code with *leading or trailing* whitespace passes, because only
+// interior whitespace is tested, and the caller's spelling is what goes on the
+// wire. That is parity rather than an oversight, and the failure direction is the
+// loud one — a padded code is refused by the Gateway with a message and no side
+// effect, and this is a read.
+func futuresValidateStockCode(op, code string) error {
+	trimmed := strings.TrimSpace(code)
+	if trimmed == "" {
+		return errs.New(types.StatusInvalidParam, op, "stockCode must not be empty")
+	}
+	if strings.ContainsAny(trimmed, " \t\n\r") {
+		return errs.New(types.StatusInvalidParam, op, "stockCode must not contain whitespace")
+	}
+	return nil
+}
+
+// futuresDateShaped reports whether date is eight decimal digits and nothing else.
+//
+// It is separate from the calendar check so a caller that passed "2026-09-26" is
+// told the format is wrong rather than that the date does not exist, which is the
+// distinction the released layer draws and the one that tells a caller which of
+// its two mistakes to fix. The check is a digit scan and never a parse, so it
+// cannot be defeated by a value a float would have mangled.
+func futuresDateShaped(date string) bool {
+	if len(date) != 8 {
+		return false
+	}
+	for i := 0; i < len(date); i++ {
+		if date[i] < '0' || date[i] > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// futuresValidateDate reports whether date is a real yyyyMMdd calendar date. An
+// eight-digit string that is not a date on the calendar ("20260230") is rejected
+// as a calendar failure rather than accepted because time.Parse is the only
+// authority on what exists.
+func futuresValidateDate(op, field, date string) error {
+	if !futuresDateShaped(date) {
+		return errs.New(types.StatusInvalidParam, op, field+" must be yyyyMMdd")
+	}
+	if _, err := time.Parse(futuresDateLayout, date); err != nil {
+		return errs.New(types.StatusInvalidParam, op, field+" must be a valid calendar date")
+	}
+	return nil
+}
+
+// futuresValidatePage turns a caller's page into the wire body, rejecting the two
+// inputs the Gateway documents it will not accept before a request is sent.
+//
+// The bound is a rejection rather than a clamp, and the difference matters: a
+// clamp would send a page the caller did not ask for and report no error, so a
+// caller paging through a large history would silently fetch 99 rows per call
+// while believing it fetched 500. Both history methods therefore issue zero HTTP
+// requests for a page they will not send, which is the "no pre-flight request"
+// property ADR 0003 relies on for the mutations and the same discipline applied
+// to a read.
+//
+// The dates are optional, matching the released layer and design-futures-requests
+// §4.1: an empty bound is a legitimate unbounded query, and a *supplied* bound is
+// format-checked. The vendor SDKs reject a blank range client-side, but refusing
+// one here would break a caller migrating from the released surface for no gain —
+// the Gateway refuses an unbounded range with a clear message and no side effect.
+func futuresValidatePage(op string, page PageRequest) (futuresPageQueryWireRequest, error) {
+	if page.PageSize >= futuresMaxPageSizeExclusive {
+		return futuresPageQueryWireRequest{},
+			errs.New(types.StatusInvalidParam, op, "pageSize must be below 100")
+	}
+	if page.StartDate != "" {
+		if err := futuresValidateDate(op, "startDate", page.StartDate); err != nil {
+			return futuresPageQueryWireRequest{}, err
+		}
+	}
+	if page.EndDate != "" {
+		if err := futuresValidateDate(op, "endDate", page.EndDate); err != nil {
+			return futuresPageQueryWireRequest{}, err
+		}
+	}
+	return futuresPageQueryParams(page), nil
+}
+
+// ---------------------------------------------------------------------------
+// The eight futures reads
+// ---------------------------------------------------------------------------
+
+// QueryProductInfo returns the product series for the requested contract codes.
+//
+// codes must hold at least one entry and every entry must be a usable contract
+// code — non-empty and free of internal whitespace — or the call is refused with
+// a types.StatusInvalidParam *errs.Error carrying opFuturesQueryProductInfo and
+// zero HTTP requests. The check is deliberately permissive about characters: no
+// futures code pattern is documented in this repository, so "HSI2609.HK" and
+// "01810.HK" both pass and neither is checked against an invented grammar.
+//
+// The result is the non-nil empty slice when the Gateway matched nothing, so a
+// caller ranging over it behaves the same as for a populated reply. A code the
+// Gateway does not recognise is simply absent from the result rather than an
+// error: the reply is a filter, not a contract, and a caller passing a batch of
+// codes wants the subset that resolved.
+//
+// No market is sent and none is needed — a futures contract code is unique across
+// the Hong Kong and US books — and accountID names the session rather than the
+// request. DecInPrice on each result is the price decimal power and is the
+// futures tick source; see domain.FuturesProduct.
+func (s *FuturesService) QueryProductInfo(ctx context.Context, accountID domain.AccountID, codes []string) ([]*domain.FuturesProduct, error) {
+	if accountID.IsZero() {
+		return nil, errs.New(types.StatusInvalidParam, opFuturesQueryProductInfo, "accountID must not be empty")
+	}
+	if len(codes) == 0 {
+		return nil, errs.New(types.StatusInvalidParam, opFuturesQueryProductInfo,
+			"stockCode must contain at least one contract code")
+	}
+	for _, code := range codes {
+		if err := futuresValidateStockCode(opFuturesQueryProductInfo, code); err != nil {
+			return nil, err
+		}
+	}
+
+	var out futuresProductInfoWireResponse
+	if err := s.client.Do(ctx, opFuturesQueryProductInfo, client.RouteTradeFuturesQueryProductInfo,
+		futuresProductInfoWireRequest{StockCodes: codes}, s.client.JSON(), &out); err != nil {
+		return nil, err
+	}
+
+	products := make([]*domain.FuturesProduct, len(out.ProductInfoVos))
+	for i := range out.ProductInfoVos {
+		products[i] = domain.FuturesProductFromDTO(&out.ProductInfoVos[i])
+	}
+	return products, nil
+}
+
+// QueryMaxBuySellAmount returns the buying and selling power for one futures
+// contract.
+//
+// symbol supplies only Code: futures requests carry no market, so symbol.Market is
+// neither sent nor used to select a book, and a caller that sets it gains nothing
+// and loses the ability to tell that it is not being honoured. A code that is
+// empty or carries internal whitespace is refused with a types.StatusInvalidParam
+// *errs.Error carrying opFuturesQueryMaxBuySellAmount and zero HTTP requests.
+//
+// The two counts are the only int64 numerics in any futures reply, and they are
+// contract counts rather than money. domain.FuturesCapacityFromDTO converts them
+// with strconv.FormatInt, so a count above 2^53 survives exactly where a float64
+// would round one silently, and a null count — the Gateway's way of saying "you
+// can buy nothing" — becomes an explicit zero rather than an absent value.
+//
+// The reply names no contract, so nothing here can recover which symbol was asked
+// about; a caller correlating several contracts keeps its own key. InitialMargin
+// is money in the reply's own currency and crosses verbatim.
+func (s *FuturesService) QueryMaxBuySellAmount(ctx context.Context, accountID domain.AccountID, symbol domain.Symbol) (*domain.FuturesCapacity, error) {
+	if accountID.IsZero() {
+		return nil, errs.New(types.StatusInvalidParam, opFuturesQueryMaxBuySellAmount, "accountID must not be empty")
+	}
+	if err := futuresValidateStockCode(opFuturesQueryMaxBuySellAmount, symbol.Code); err != nil {
+		return nil, err
+	}
+
+	var out domain.FuturesMaxBuySellAmountWire
+	if err := s.client.Do(ctx, opFuturesQueryMaxBuySellAmount, client.RouteTradeFuturesQueryMaxBuySellAmount,
+		futuresMaxBuySellAmountWireRequest{StockCode: symbol.Code}, s.client.JSON(), &out); err != nil {
+		return nil, err
+	}
+	return domain.FuturesCapacityFromDTO(&out), nil
+}
+
+// QueryFundInfo returns the futures account's funds snapshot: net asset value,
+// cash, buying power, margins and the risk state.
+//
+// It takes no request body, so it sends the empty params object struct{}{} —
+// never nil, which internal/transport would drop from the envelope entirely
+// rather than send as an empty object. A zero accountID is refused before
+// anything is sent, with a types.StatusInvalidParam *errs.Error carrying
+// opFuturesQueryFundInfo.
+//
+// Every monetary field crosses the wire as a quoted string and is read verbatim:
+// nothing on this path is a float. An absent field maps to an explicit zero rather
+// than panicking, because a partial reply is a read and a read must not crash the
+// caller's process — the cash mappers hand "" to a MustNew… constructor and would
+// panic, and that is the layer's known F2 defect, not the behaviour to copy.
+//
+// Read Money.Currency() before summing across accounts: an amount whose field
+// name states a currency carries it, and every other amount is attributed the base
+// currency because the Gateway sends no futures base-currency field.
+func (s *FuturesService) QueryFundInfo(ctx context.Context, accountID domain.AccountID) (*domain.FuturesAccount, error) {
+	if accountID.IsZero() {
+		return nil, errs.New(types.StatusInvalidParam, opFuturesQueryFundInfo, "accountID must not be empty")
+	}
+
+	var out futuresFundInfoWireResponse
+	if err := s.client.Do(ctx, opFuturesQueryFundInfo, client.RouteTradeFuturesQueryFundInfo,
+		struct{}{}, s.client.JSON(), &out); err != nil {
+		return nil, err
+	}
+	return domain.FuturesAccountFromDTO(&out.FundInfo), nil
+}
+
+// QueryHoldsList returns the account's futures positions together with the funds
+// snapshot the Gateway sends alongside them.
+//
+// The result is a *domain.FuturesHoldResult struct rather than a position slice
+// on purpose: the reply is one atomic read carrying both halves, neither derived
+// from the other, and returning the positions alone would silently discard a funds
+// snapshot the caller asked for. Account is therefore never nil for a successful
+// call, and Positions is the non-nil empty slice when nothing is held.
+//
+// It takes no request body and sends struct{}{}. A zero accountID is refused
+// before anything is sent, with a types.StatusInvalidParam *errs.Error carrying
+// opFuturesQueryHoldsList. Every price, quantity and amount on a position crosses
+// as a quoted string and is read verbatim; an absent field becomes an explicit zero
+// rather than a panic, as QueryFundInfo states. DataType on each position is the
+// futures-only field that says which book the contract belongs to, and is the
+// reason no request on this path needs a market.
+func (s *FuturesService) QueryHoldsList(ctx context.Context, accountID domain.AccountID) (*domain.FuturesHoldResult, error) {
+	if accountID.IsZero() {
+		return nil, errs.New(types.StatusInvalidParam, opFuturesQueryHoldsList, "accountID must not be empty")
+	}
+
+	var out futuresHoldsListWireResponse
+	if err := s.client.Do(ctx, opFuturesQueryHoldsList, client.RouteTradeFuturesQueryHoldsList,
+		struct{}{}, s.client.JSON(), &out); err != nil {
+		return nil, err
+	}
+	return futuresHoldResultFromDTO(&out), nil
+}
+
+// QueryRealEntrustList returns today's futures orders for the account.
+//
+// It is the unpaginated query: it sends struct{}{} and one call returns the whole
+// day, so it does not walk pages — futures pagination is page-numbered and has no
+// cursor to walk — and it returns a slice rather than a page, because a reply with
+// no page state must not be dressed up with four zero-valued page fields. The
+// result is the non-nil empty slice when nothing is outstanding.
+//
+// A zero accountID is refused before anything is sent, with a
+// types.StatusInvalidParam *errs.Error carrying opFuturesQueryRealEntrustList.
+// CanBeCanceled on each order is the field that distinguishes a live order from
+// one that has already gone, and it is also how a caller reconciles an ambiguous
+// futures mutation (docs/adr/0003-no-auto-retry-orders.md): this method and
+// QueryHistoryEntrustPage are the reconciliation queries for a submit, a cancel or a
+// modify, and neither of those retries.//
+// Every price and quantity on a row crosses as a quoted string and is read
+// verbatim; an absent field becomes an explicit zero rather than a panic.
+func (s *FuturesService) QueryRealEntrustList(ctx context.Context, accountID domain.AccountID) ([]*domain.FuturesOrder, error) {
+	if accountID.IsZero() {
+		return nil, errs.New(types.StatusInvalidParam, opFuturesQueryRealEntrustList, "accountID must not be empty")
+	}
+
+	var out futuresOrderListWireResponse
+	if err := s.client.Do(ctx, opFuturesQueryRealEntrustList, client.RouteTradeFuturesQueryRealEntrustList,
+		struct{}{}, s.client.JSON(), &out); err != nil {
+		return nil, err
+	}
+
+	orders := make([]*domain.FuturesOrder, len(out.Data))
+	for i := range out.Data {
+		orders[i] = domain.FuturesOrderFromDTO(&out.Data[i])
+	}
+	return orders, nil
+}
+
+// QueryHistoryEntrustPage returns one page of futures orders for the account.
+//
+// The method returns a page, and only the history route populates the page counters
+// it reports: a real-list reply carries curPageNo, curPageSize, totalPageNo and
+// lastPage as zeros, so a page built from it would be a fiction with four zero
+// fields. That is why this reads the history route rather than
+// FuturesQueryRealEntrustList, and why it is named for what it calls.
+// design-futures-requests.md §7.2 point 3 agrees, while the signature block in that
+// same section misnamed it QueryRealEntrustPage -- the name is corrected here, at the
+// point where the two were still free to change, because pkg/services is not yet
+// reachable by a caller and a method named "Real" that reads the history route is a
+// trap to freeze into a public API at v1.0.
+//
+// page.PageNo and page.PageSize are defaulted to 1 and 20 at the mapping boundary
+// when they are zero or negative, matching the Gateway's documented defaults and
+// the released pkg/hstong/future. A page size of 100 or more is refused, not
+// clamped, and both dates must be yyyyMMdd calendar dates when supplied; each
+// refusal is a types.StatusInvalidParam *errs.Error carrying
+// opFuturesQueryHistoryEntrust and costs zero HTTP requests. An empty date bound
+// is legitimate and means unbounded, which is the released layer's behaviour and
+// design-futures-requests.md §4.1's deliberate divergence from the vendor SDKs'
+// client-side guard.
+//
+// There is no stockCode filter: neither vendor SDK offers one, so a futures
+// history query cannot be narrowed to a single contract. That is a vendor
+// limitation a caller will notice, not an SDK choice. Orders is the non-nil empty
+// slice for an empty page, and LastPage is true only for the wire's 1.
+//
+// This is one of the two reconciliation queries for an ambiguous futures
+// mutation, alongside QueryRealEntrustList.
+func (s *FuturesService) QueryHistoryEntrustPage(ctx context.Context, accountID domain.AccountID, page PageRequest) (*domain.FuturesOrderPage, error) {
+	if accountID.IsZero() {
+		return nil, errs.New(types.StatusInvalidParam, opFuturesQueryHistoryEntrust, "accountID must not be empty")
+	}
+	params, err := futuresValidatePage(opFuturesQueryHistoryEntrust, page)
+	if err != nil {
+		return nil, err
+	}
+
+	var out futuresOrderListWireResponse
+	if err := s.client.Do(ctx, opFuturesQueryHistoryEntrust, client.RouteTradeFuturesQueryHistoryEntrustList,
+		params, s.client.JSON(), &out); err != nil {
+		return nil, err
+	}
+	return futuresOrderPageFromDTO(&out), nil
+}
+
+// QueryRealDeliverList returns today's futures fills for the account.
+//
+// It is the unpaginated query, so it sends struct{}{}, one call returns the whole
+// day, and it returns a slice rather than a page: a real-list reply carries no
+// page state, and QueryHistoryDeliverPage is the method that does. The result is the
+// non-nil empty slice when nothing traded.
+//
+// A zero accountID is refused before anything is sent, with a
+// types.StatusInvalidParam *errs.Error carrying opFuturesQueryRealDeliverList.
+// This is one of the two reconciliation queries for an ambiguous futures mutation
+// (docs/adr/0003-no-auto-retry-orders.md); a caller reconciling a fill reads this
+// rather than QueryRealEntrustList, because a fill and a resting order are
+// different facts even though the Gateway documents one object for both.
+//
+// FilledQty is the filled quantity and Quantity the order quantity, which exceeds
+// it on a partially filled order. Every price and quantity crosses as a quoted
+// string and is read verbatim.
+func (s *FuturesService) QueryRealDeliverList(ctx context.Context, accountID domain.AccountID) ([]*domain.FuturesFill, error) {
+	if accountID.IsZero() {
+		return nil, errs.New(types.StatusInvalidParam, opFuturesQueryRealDeliverList, "accountID must not be empty")
+	}
+
+	var out futuresOrderListWireResponse
+	if err := s.client.Do(ctx, opFuturesQueryRealDeliverList, client.RouteTradeFuturesQueryRealDeliverList,
+		struct{}{}, s.client.JSON(), &out); err != nil {
+		return nil, err
+	}
+
+	fills := make([]*domain.FuturesFill, len(out.Data))
+	for i := range out.Data {
+		fills[i] = domain.FuturesFillFromDTO(&out.Data[i])
+	}
+	return fills, nil
+}
+
+// QueryHistoryDeliverPage returns one page of futures fills for the account.
+//
+// This reads the history route rather than FuturesQueryRealDeliverList, and is named
+// for what it calls, for the reason QueryHistoryEntrustPage states: only the history
+// route populates the page counters a page reports.
+//
+// page.PageNo and page.PageSize are defaulted to 1 and 20 when zero or negative;
+// a page size of 100 or more is refused rather than clamped, and both dates must
+// be yyyyMMdd calendar dates when supplied. Each refusal is a
+// types.StatusInvalidParam *errs.Error carrying opFuturesQueryHistoryDeliver and
+// costs zero HTTP requests. An empty date bound means unbounded, and there is no
+// stockCode filter — a vendor limitation, as QueryHistoryEntrustPage states.
+//
+// Fills is the non-nil empty slice for an empty page, and LastPage is true only
+// for the wire's 1.
+func (s *FuturesService) QueryHistoryDeliverPage(ctx context.Context, accountID domain.AccountID, page PageRequest) (*domain.FuturesFillPage, error) {
+	if accountID.IsZero() {
+		return nil, errs.New(types.StatusInvalidParam, opFuturesQueryHistoryDeliver, "accountID must not be empty")
+	}
+	params, err := futuresValidatePage(opFuturesQueryHistoryDeliver, page)
+	if err != nil {
+		return nil, err
+	}
+
+	var out futuresOrderListWireResponse
+	if err := s.client.Do(ctx, opFuturesQueryHistoryDeliver, client.RouteTradeFuturesQueryHistoryDeliverList,
+		params, s.client.JSON(), &out); err != nil {
+		return nil, err
+	}
+	return futuresFillPageFromDTO(&out), nil
 }
