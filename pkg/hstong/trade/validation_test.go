@@ -26,6 +26,7 @@ func TestCancelEntrustRequestValidateBranches(t *testing.T) {
 		mutate func(*CancelEntrustRequest)
 	}{
 		{"exchangeType required", func(r *CancelEntrustRequest) { r.ExchangeType = "" }},
+		{"exchangeType not in set", func(r *CancelEntrustRequest) { r.ExchangeType = "Z" }},
 		{"stockCode required", func(r *CancelEntrustRequest) { r.StockCode = "" }},
 		{"entrustId required", func(r *CancelEntrustRequest) { r.EntrustID = "" }},
 	}
@@ -60,6 +61,7 @@ func TestChangeEntrustRequestValidateBranches(t *testing.T) {
 		mutate func(*ChangeEntrustRequest)
 	}{
 		{"exchangeType required", func(r *ChangeEntrustRequest) { r.ExchangeType = "" }},
+		{"exchangeType not in set", func(r *ChangeEntrustRequest) { r.ExchangeType = "Z" }},
 		{"stockCode required", func(r *ChangeEntrustRequest) { r.StockCode = "" }},
 		{"entrustAmount must be positive", func(r *ChangeEntrustRequest) { r.EntrustAmount = "0" }},
 		{"entrustAmount must be numeric", func(r *ChangeEntrustRequest) { r.EntrustAmount = "lots" }},
@@ -120,6 +122,7 @@ func TestMaxAvailableAssetRequestValidateBranches(t *testing.T) {
 		mutate func(*MaxAvailableAssetRequest)
 	}{
 		{"exchangeType required", func(r *MaxAvailableAssetRequest) { r.ExchangeType = "" }},
+		{"exchangeType not in set", func(r *MaxAvailableAssetRequest) { r.ExchangeType = "Z" }},
 		{"stockCode required", func(r *MaxAvailableAssetRequest) { r.StockCode = "" }},
 		{"entrustPrice required", func(r *MaxAvailableAssetRequest) { r.EntrustPrice = "" }},
 		{"entrustType required", func(r *MaxAvailableAssetRequest) { r.EntrustType = "" }},

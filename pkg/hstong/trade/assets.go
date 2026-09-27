@@ -179,7 +179,12 @@ type MarginFundInfo struct {
 }
 
 // MarginFundInfo returns the account-funds snapshot for the requested market.
+// The market selects which book's funds are read, so exchangeType is required
+// and is checked against the documented four-market set.
 func (m *Manager) MarginFundInfo(ctx context.Context, req MarginFundInfoRequest) (*MarginFundInfo, error) {
+	if err := validateExchange(opMarginFundInfo, req.ExchangeType); err != nil {
+		return nil, err
+	}
 	var out MarginFundInfo
 	if err := m.call(ctx, opMarginFundInfo, client.RouteTradeQueryMarginFundInfo, req, &out); err != nil {
 		return nil, err
@@ -280,8 +285,13 @@ func (r *HoldsListResponse) UnmarshalJSON(data []byte) error {
 }
 
 // Positions returns the account's positions for the requested market. An empty
-// ExchangeType asks the Gateway for every market.
+// ExchangeType asks the Gateway for every market, so an absent one is accepted;
+// a supplied one is checked against the documented four-market set, because a
+// market the SDK does not recognise is a request it knows it does not mean.
 func (m *Manager) Positions(ctx context.Context, req PositionsRequest) ([]HoldsVo, error) {
+	if err := validateOptionalExchange(opHoldsList, req.ExchangeType); err != nil {
+		return nil, err
+	}
 	var out HoldsListResponse
 	if err := m.call(ctx, opHoldsList, client.RouteTradeQueryHoldsList, req, &out); err != nil {
 		return nil, err
@@ -340,8 +350,12 @@ type FundJourListResponse struct {
 }
 
 // RealFundJourList returns one page of the day's fund journeys. Use Paginate to
-// walk every page.
+// walk every page. The market selects which book's journeys are read, so
+// exchangeType is required and is checked against the documented four-market set.
 func (m *Manager) RealFundJourList(ctx context.Context, req FundJourListRequest) ([]FundJourVo, error) {
+	if err := validateExchange(opRealFundJourList, req.ExchangeType); err != nil {
+		return nil, err
+	}
 	req.QueryCount = ClampPageSize(req.QueryCount)
 	var out FundJourListResponse
 	if err := m.call(ctx, opRealFundJourList, client.RouteTradeQueryRealFundJourList, req, &out); err != nil {
@@ -351,8 +365,12 @@ func (m *Manager) RealFundJourList(ctx context.Context, req FundJourListRequest)
 }
 
 // HistoryFundJourList returns one page of the historical fund journeys between
-// StartDate and EndDate. Use Paginate to walk every page.
+// StartDate and EndDate. Use Paginate to walk every page. exchangeType is
+// required and is checked against the documented four-market set.
 func (m *Manager) HistoryFundJourList(ctx context.Context, req HistoryFundJourListRequest) ([]FundJourVo, error) {
+	if err := validateExchange(opHistoryFundJourList, req.ExchangeType); err != nil {
+		return nil, err
+	}
 	req.QueryCount = ClampPageSize(req.QueryCount)
 	var out FundJourListResponse
 	if err := m.call(ctx, opHistoryFundJourList, client.RouteTradeQueryHistoryFundJourList, req, &out); err != nil {

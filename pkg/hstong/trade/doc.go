@@ -32,6 +32,34 @@
 // session sends each call directly, which is useful for a caller that owns
 // session management itself or for offline tests.
 //
+// # Validation
+//
+// Every Manager method validates its request before any HTTP request is sent and
+// returns a typed "1016" invalid-parameter error, matchable with errs.CodeOf,
+// when a field is empty, malformed, or outside a documented closed set. The
+// closed sets are exchangeType — K (Hong Kong), P (US), v (Shenzhen Connect),
+// t (Shanghai Connect), which is case-sensitive — and entrustBs — 1 (open long),
+// 2 (close long), 3 (close short), 4 (open short). All four directions are
+// valid; 3 and 4 are the short-selling directions.
+//
+// A value outside either set is rejected locally rather than forwarded, because
+// exchangeType names the book an order, cancel, or change resolves against and a
+// direction the SDK does not recognise is a request it knows it does not mean. In
+// particular a mutation that fails validation never reaches the Gateway, and is
+// never retried (see the no-auto-retry section below).
+//
+// Positions is the one request whose exchangeType is optional: an absent market
+// asks the Gateway for every market, so it is accepted, while a supplied one is
+// checked against the same closed set as everywhere else. Every other request
+// type in this package requires the field. The response types — OrderVo,
+// CondOrderVo, HoldsVo — carry Gateway-supplied exchangeType and entrustBs
+// values and are deliberately not validated; validating inbound data would turn
+// a vendor-side surprise into a decode error, which is a different policy from
+// validating outbound requests.
+//
+// The order type and session type remain emptiness-only, because their
+// documented code sets are not published as closed; see types.EntrustType.
+//
 // # No auto-retry
 //
 // The order mutations — Entrust, CancelEntrust, BatchCancelEntrust, and

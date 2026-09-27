@@ -5,6 +5,7 @@ package trade
 
 import (
 	"context"
+	"fmt"
 	"math/big"
 	"strconv"
 
@@ -33,6 +34,105 @@ const (
 // maxValidDays is the vendor's upper bound for a conditional order's lifetime,
 // in natural days.
 const maxValidDays = 100
+
+// validExchange reports whether e is one of the four documented market codes.
+//
+// The set is closed and is treated as such: the Gateway documents exactly four
+// markets (SPEC §7.3) with no non-exhaustive caveat, and pkg/types carries a
+// constant for each. A value outside the set is rejected before any request is
+// sent rather than forwarded, because exchangeType names the book the Gateway
+// resolves an order, a cancel, or a change against — an unrecognised market is a
+// request the SDK already knows it does not mean. That matters most on
+// BatchCancelEntrust, where an empty EntrustIDs cancels every cancellable order
+// in the market: an unvalidated market there is a cancel-everything request
+// against a book the caller did not name, issued once with no retry
+// (docs/adr/0003-no-auto-retry-orders.md). If the vendor adds a market,
+// validExchange and invalidExchange are updated together — the same receipt the
+// algo package's validExchange records. The predicate is a local unexported
+// function rather than a method on types.ExchangeType because pkg/types is
+// inside ADR 0011's protected surface and adding an exported method there would
+// widen the public API of a protected package.
+func validExchange(e types.ExchangeType) bool {
+	switch e {
+	case types.ExchangeHK, types.ExchangeUS, types.ExchangeShenzhenConnect, types.ExchangeShanghaiConnect:
+		return true
+	default:
+		return false
+	}
+}
+
+// validDirection reports whether bs is one of the four documented order
+// directions (SPEC §7.4): 1 opens a long position, 2 closes a long position,
+// 3 closes a short position, and 4 opens a short position. All four are valid.
+// 3 and 4 are types.EntrustCloseShort and types.EntrustOpenShort, the
+// short-selling directions; a check written against only 1 and 2 would refuse
+// legitimate orders, and one earlier pass at the algo package made exactly that
+// mistake. The set is closed on the same grounds as validExchange, and both
+// pkg/hstong/future (validateEntrustBS) and pkg/hstong/algo already reject
+// anything outside it locally, so the same types.EntrustBS value must not be
+// refused by one released surface and forwarded by another.
+func validDirection(bs types.EntrustBS) bool {
+	switch bs {
+	case types.EntrustBuy, types.EntrustSell, types.EntrustCloseShort, types.EntrustOpenShort:
+		return true
+	default:
+		return false
+	}
+}
+
+// invalidExchange builds the shared error for a market code outside the
+// documented set. All sixteen exchangeType fields in this package — the fifteen
+// required ones and the optional Positions market — report through it, so the
+// wording cannot drift between them. The message names the four valid codes
+// because the field is case-sensitive: "v" and "t" are lowercase, so a caller
+// that upper-cases the whole string produces a code that looks right and is not.
+func invalidExchange(op string, e types.ExchangeType) error {
+	return invalid(op, fmt.Sprintf("exchangeType %q is not one of K (Hong Kong), P (US), v (Shenzhen Connect), t (Shanghai Connect)", e))
+}
+
+// invalidDirection builds the shared error for a direction outside the
+// documented set. It names all four codes, 3 and 4 included, so the message
+// cannot be read as evidence that only buy and sell are accepted.
+func invalidDirection(op string, bs types.EntrustBS) error {
+	return invalid(op, fmt.Sprintf("entrustBs %q is not one of 1 (open long), 2 (close long), 3 (close short), 4 (open short)", bs))
+}
+
+// validateExchange enforces the exchangeType rule shared by every site where
+// the field is required. The emptiness branch is kept separate from the set
+// check on purpose: a caller who forgot the field is told the field is
+// required, rather than being handed a message about four market codes.
+//
+// The two checks live in one shared helper rather than being repeated at each
+// site because a site that checks only the set would still put an empty
+// exchangeType on the wire, and a site that checks only emptiness would forward
+// a market the SDK does not recognise. Both mistakes were live in this package
+// before the helper existed. Routing every site through here makes the pair
+// structural instead of per-site discipline.
+func validateExchange(op string, e types.ExchangeType) error {
+	if e == "" {
+		return invalid(op, "exchangeType is required")
+	}
+	if !validExchange(e) {
+		return invalidExchange(op, e)
+	}
+	return nil
+}
+
+// validateOptionalExchange is validateExchange for the one site where an
+// absent market is itself meaningful: Positions with no exchangeType asks the
+// Gateway for every market. An absent value is therefore accepted, while a
+// supplied one is held to the same closed set as on every other request —
+// exempting the field altogether because it is optional would give
+// types.ExchangeType a second, different policy on one release.
+func validateOptionalExchange(op string, e types.ExchangeType) error {
+	if e == "" {
+		return nil
+	}
+	if !validExchange(e) {
+		return invalidExchange(op, e)
+	}
+	return nil
+}
 
 // CommonStringResponse is a Gateway body whose data field is a single string,
 // for example an entrust identifier or the before/after support flag.
@@ -106,10 +206,13 @@ func (m *Manager) Entrust(ctx context.Context, req EntrustRequest) (string, erro
 	return out.Data, nil
 }
 
-// validate enforces the documented Entrust constraints.
+// validate enforces the documented Entrust constraints. exchangeType and
+// entrustBs are closed sets and are checked against them, not merely for
+// emptiness: a market or direction the SDK does not recognise is a request it
+// knows it does not mean, and Entrust is issued once and never retried.
 func (r EntrustRequest) validate() error {
-	if r.ExchangeType == "" {
-		return invalid(opEntrust, "exchangeType is required")
+	if err := validateExchange(opEntrust, r.ExchangeType); err != nil {
+		return err
 	}
 	if r.StockCode == "" {
 		return invalid(opEntrust, "stockCode is required")
@@ -120,6 +223,9 @@ func (r EntrustRequest) validate() error {
 	}
 	if r.EntrustBS == "" {
 		return invalid(opEntrust, "entrustBs is required")
+	}
+	if !validDirection(r.EntrustBS) {
+		return invalidDirection(opEntrust, r.EntrustBS)
 	}
 	if r.EntrustType == "" {
 		return invalid(opEntrust, "entrustType is required")
@@ -180,10 +286,12 @@ func (m *Manager) CancelEntrust(ctx context.Context, req CancelEntrustRequest) (
 	return out.Data, nil
 }
 
-// validate enforces the documented CancelEntrust constraints.
+// validate enforces the documented CancelEntrust constraints. The cancel names
+// the book the Gateway resolves the order against, so exchangeType is a closed
+// set here as on every other site in this package.
 func (r CancelEntrustRequest) validate() error {
-	if r.ExchangeType == "" {
-		return invalid(opCancelEntrust, "exchangeType is required")
+	if err := validateExchange(opCancelEntrust, r.ExchangeType); err != nil {
+		return err
 	}
 	if r.StockCode == "" {
 		return invalid(opCancelEntrust, "stockCode is required")
@@ -229,8 +337,12 @@ type BatchCancelEntrustResult struct {
 // ambiguous failure must be reconciled with a real entrust query before
 // resubmitting (docs/adr/0003-no-auto-retry-orders.md).
 func (m *Manager) BatchCancelEntrust(ctx context.Context, req BatchCancelEntrustRequest) (*BatchCancelEntrustResult, error) {
-	if req.ExchangeType == "" {
-		return nil, invalid(opBatchCancelEntrust, "exchangeType is required")
+	// An empty EntrustIDs cancels every cancellable order in the market, so the
+	// market is the only thing keeping the blast radius of a mistaken call
+	// bounded. It is validated as a closed set, not merely for emptiness, and
+	// the request is issued once with no retry.
+	if err := validateExchange(opBatchCancelEntrust, req.ExchangeType); err != nil {
+		return nil, err
 	}
 	var out BatchCancelEntrustResult
 	if err := m.call(ctx, opBatchCancelEntrust, client.RouteTradeBatchCancelEntrust, req, &out); err != nil {
@@ -281,10 +393,11 @@ func (m *Manager) ChangeEntrust(ctx context.Context, req ChangeEntrustRequest) (
 	return out.Data, nil
 }
 
-// validate enforces the documented ChangeEntrust constraints.
+// validate enforces the documented ChangeEntrust constraints. The change
+// resolves against a book, so exchangeType is a closed set here too.
 func (r ChangeEntrustRequest) validate() error {
-	if r.ExchangeType == "" {
-		return invalid(opChangeEntrust, "exchangeType is required")
+	if err := validateExchange(opChangeEntrust, r.ExchangeType); err != nil {
+		return err
 	}
 	if r.StockCode == "" {
 		return invalid(opChangeEntrust, "stockCode is required")
@@ -388,10 +501,11 @@ func (m *Manager) MaxAvailableAsset(ctx context.Context, req MaxAvailableAssetRe
 	return &out.Data, nil
 }
 
-// validate enforces the documented MaxAvailableAsset constraints.
+// validate enforces the documented MaxAvailableAsset constraints. exchangeType
+// selects the book the purchasing power is read from, so it is a closed set.
 func (r MaxAvailableAssetRequest) validate() error {
-	if r.ExchangeType == "" {
-		return invalid(opMaxAvailableAsset, "exchangeType is required")
+	if err := validateExchange(opMaxAvailableAsset, r.ExchangeType); err != nil {
+		return err
 	}
 	if r.StockCode == "" {
 		return invalid(opMaxAvailableAsset, "stockCode is required")
@@ -528,6 +642,9 @@ type OrderListResponse struct {
 // RealEntrustList returns one page of the day's entrusts. Use Paginate to walk
 // every page.
 func (m *Manager) RealEntrustList(ctx context.Context, req RealEntrustListRequest) ([]OrderVo, error) {
+	if err := validateExchange(opRealEntrustList, req.ExchangeType); err != nil {
+		return nil, err
+	}
 	req.QueryCount = ClampPageSize(req.QueryCount)
 	var out OrderListResponse
 	if err := m.call(ctx, opRealEntrustList, client.RouteTradeQueryRealEntrustList, req, &out); err != nil {
@@ -539,6 +656,9 @@ func (m *Manager) RealEntrustList(ctx context.Context, req RealEntrustListReques
 // RealDeliverList returns one page of the day's delivers (成交). Use Paginate to
 // walk every page.
 func (m *Manager) RealDeliverList(ctx context.Context, req RealDeliverListRequest) ([]OrderVo, error) {
+	if err := validateExchange(opRealDeliverList, req.ExchangeType); err != nil {
+		return nil, err
+	}
 	req.QueryCount = ClampPageSize(req.QueryCount)
 	var out OrderListResponse
 	if err := m.call(ctx, opRealDeliverList, client.RouteTradeQueryRealDeliverList, req, &out); err != nil {
@@ -625,8 +745,8 @@ type CondOrderPage struct {
 
 // RealCondOrderList returns one page of the day's conditional orders.
 func (m *Manager) RealCondOrderList(ctx context.Context, req CondOrderListRequest) (*CondOrderPage, error) {
-	if req.ExchangeType == "" {
-		return nil, invalid(opRealCondOrderList, "exchangeType is required")
+	if err := validateExchange(opRealCondOrderList, req.ExchangeType); err != nil {
+		return nil, err
 	}
 	if req.PageNo <= 0 {
 		req.PageNo = 1
@@ -688,6 +808,9 @@ type HistoryCondOrderListRequest struct {
 // HistoryEntrustList returns one page of the historical entrusts between
 // StartDate and EndDate. Use Paginate to walk every page.
 func (m *Manager) HistoryEntrustList(ctx context.Context, req HistoryEntrustListRequest) ([]OrderVo, error) {
+	if err := validateExchange(opHistoryEntrustList, req.ExchangeType); err != nil {
+		return nil, err
+	}
 	req.QueryCount = ClampPageSize(req.QueryCount)
 	var out OrderListResponse
 	if err := m.call(ctx, opHistoryEntrustList, client.RouteTradeQueryHistoryEntrustList, req, &out); err != nil {
@@ -699,6 +822,9 @@ func (m *Manager) HistoryEntrustList(ctx context.Context, req HistoryEntrustList
 // HistoryDeliverList returns one page of the historical delivers between
 // StartDate and EndDate. Use Paginate to walk every page.
 func (m *Manager) HistoryDeliverList(ctx context.Context, req HistoryDeliverListRequest) ([]OrderVo, error) {
+	if err := validateExchange(opHistoryDeliverList, req.ExchangeType); err != nil {
+		return nil, err
+	}
 	req.QueryCount = ClampPageSize(req.QueryCount)
 	var out OrderListResponse
 	if err := m.call(ctx, opHistoryDeliverList, client.RouteTradeQueryHistoryDeliverList, req, &out); err != nil {
@@ -710,8 +836,8 @@ func (m *Manager) HistoryDeliverList(ctx context.Context, req HistoryDeliverList
 // HistoryCondOrderList returns one page of the historical conditional orders
 // between StartTime and EndTime.
 func (m *Manager) HistoryCondOrderList(ctx context.Context, req HistoryCondOrderListRequest) (*CondOrderPage, error) {
-	if req.ExchangeType == "" {
-		return nil, invalid(opHistoryCondOrderList, "exchangeType is required")
+	if err := validateExchange(opHistoryCondOrderList, req.ExchangeType); err != nil {
+		return nil, err
 	}
 	if req.PageNo == "" {
 		req.PageNo = "1"
@@ -799,8 +925,8 @@ func (m *Manager) BeforeAndAfterSupport(ctx context.Context, req BeforeAndAfterS
 	if req.StockCode == "" {
 		return "", invalid(opBeforeAndAfterSupport, "stockCode is required")
 	}
-	if req.ExchangeType == "" {
-		return "", invalid(opBeforeAndAfterSupport, "exchangeType is required")
+	if err := validateExchange(opBeforeAndAfterSupport, req.ExchangeType); err != nil {
+		return "", err
 	}
 	var out CommonStringResponse
 	if err := m.call(ctx, opBeforeAndAfterSupport, client.RouteTradeQueryBeforeAndAfterSupport, req, &out); err != nil {

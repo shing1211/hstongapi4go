@@ -91,8 +91,10 @@ func TestOrders_EntrustValidation(t *testing.T) {
 		req  EntrustRequest
 	}{
 		{"missing exchangeType", func() EntrustRequest { r := validEntrust(); r.ExchangeType = ""; return r }()},
+		{"exchangeType not in set", func() EntrustRequest { r := validEntrust(); r.ExchangeType = "Z"; return r }()},
 		{"missing stockCode", func() EntrustRequest { r := validEntrust(); r.StockCode = ""; return r }()},
 		{"missing entrustBs", func() EntrustRequest { r := validEntrust(); r.EntrustBS = ""; return r }()},
+		{"entrustBs not in set", func() EntrustRequest { r := validEntrust(); r.EntrustBS = "9"; return r }()},
 		{"missing entrustType", func() EntrustRequest { r := validEntrust(); r.EntrustType = ""; return r }()},
 		{"zero amount", func() EntrustRequest { r := validEntrust(); r.EntrustAmount = "0"; return r }()},
 		{"negative amount", func() EntrustRequest { r := validEntrust(); r.EntrustAmount = "-1"; return r }()},
