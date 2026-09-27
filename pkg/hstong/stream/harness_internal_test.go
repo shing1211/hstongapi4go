@@ -10,7 +10,6 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -297,25 +296,30 @@ func drainErrors(sub *Subscription) []error {
 }
 
 // assertReconnectNotice checks that err is the ErrReconnected notice raised by
-// onReconnect.
+// onReconnect for cause.
 //
-// onReconnect builds the notice as fmt.Errorf("%w: %v", ErrReconnected, cause),
-// so the wrap target is ErrReconnected and the reconnect cause is rendered into
-// the message text rather than wrapped. That contradicts the ErrReconnected
-// doc comment, which says the error that ended the connection "is wrapped and
-// available with errors.Unwrap". This test pins the behaviour as implemented so
-// a future change to either the notice or the doc is a visible diff; the
-// discrepancy is reported as a finding rather than fixed here, because this is a
-// coverage task.
+// The notice satisfies the ErrReconnected doc comment, which promises the error
+// that ended the previous connection is "wrapped and available with
+// errors.Unwrap": it matches the sentinel under errors.Is, unwraps to the
+// cause, and renders exactly the message the previous
+// fmt.Errorf("%w: %v", ErrReconnected, cause) produced, so logs and string
+// matches are unaffected.
+//
+// The cause is checked only through errors.Is and errors.Unwrap. Asserting on
+// the rendered text would pass for a notice that carries the cause as text and
+// no chain at all, which is the defect these assertions exist to keep fixed.
 func assertReconnectNotice(t *testing.T, err, cause error) {
 	t.Helper()
 	if !errors.Is(err, ErrReconnected) {
 		t.Errorf("reconnect notice = %v, want ErrReconnected", err)
 	}
-	if got := errors.Unwrap(err); got != ErrReconnected {
-		t.Errorf("reconnect notice wraps %v, want ErrReconnected (the cause is rendered as text)", got)
+	if !errors.Is(err, cause) {
+		t.Errorf("reconnect notice = %v, want it to match the reconnect cause %v", err, cause)
 	}
-	if !strings.Contains(err.Error(), cause.Error()) {
-		t.Errorf("reconnect notice %q does not mention the reconnect cause %q", err, cause)
+	if got := errors.Unwrap(err); got != cause {
+		t.Errorf("errors.Unwrap(reconnect notice) = %v, want the reconnect cause %v", got, cause)
+	}
+	if want := ErrReconnected.Error() + ": " + cause.Error(); err.Error() != want {
+		t.Errorf("reconnect notice message = %q, want %q", err, want)
 	}
 }

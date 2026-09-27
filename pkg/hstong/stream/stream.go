@@ -409,7 +409,7 @@ func (s *Client) onReconnect(cause error) {
 	s.mu.Unlock()
 
 	for _, sub := range subs {
-		sub.sendErr(fmt.Errorf("%w: %v", ErrReconnected, cause))
+		sub.sendErr(newReconnectNotice(cause))
 	}
 	for _, sub := range subs {
 		if sub.trade {
@@ -419,7 +419,7 @@ func (s *Client) onReconnect(cause error) {
 		err := s.market.Subscribe(ctx, sub.topicID, sub.securities...)
 		cancel()
 		if err != nil {
-			sub.sendErr(fmt.Errorf("stream: resubscribe %s: %w", sub.topicID, err))
+			sub.sendErr(fmt.Errorf("stream: resubscribe %d: %w", sub.topicID, err))
 		}
 	}
 	if tradeActive && trade != nil {
@@ -434,6 +434,42 @@ func (s *Client) onReconnect(cause error) {
 			}
 		}
 	}
+}
+
+// reconnectNotice reports a completed push reconnect. It matches
+// ErrReconnected under errors.Is and unwraps to the error that ended the
+// previous connection, so a caller can branch on the cause with errors.Is or
+// errors.As instead of parsing the message.
+//
+// An error holds one position in a chain, so the sentinel and the cause cannot
+// both occupy Unwrap. Is takes the sentinel's place and Unwrap hands back the
+// cause, which is the position the ErrReconnected doc comment promises.
+type reconnectNotice struct{ cause error }
+
+// Error renders the sentinel and the cause on one line, byte-identical to the
+// fmt.Errorf("%w: %v", ErrReconnected, cause) this type replaces, so log output
+// and any out-of-repo string match are unaffected by the change.
+func (e *reconnectNotice) Error() string {
+	return ErrReconnected.Error() + ": " + e.cause.Error()
+}
+
+// Is reports whether target is ErrReconnected, standing in for the %w the old
+// format string placed on the sentinel.
+func (e *reconnectNotice) Is(target error) bool { return target == ErrReconnected }
+
+// Unwrap returns the error that ended the previous connection.
+func (e *reconnectNotice) Unwrap() error { return e.cause }
+
+// newReconnectNotice builds the notice pushed on a subscription's Errors
+// channel after a reconnect. A nil cause yields the bare sentinel rather than a
+// wrapped nil: the cause arrives from the push package, which guards against a
+// nil error but does not promise one cannot occur, and rendering it must not be
+// able to panic in a public API.
+func newReconnectNotice(cause error) error {
+	if cause == nil {
+		return ErrReconnected
+	}
+	return &reconnectNotice{cause: cause}
 }
 
 // Subscription is one active market subscription. Updates and Errors are
