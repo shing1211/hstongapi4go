@@ -553,10 +553,24 @@ func (s *FuturesService) QueryRealDeliverList(ctx context.Context, accountID dom
 func (s *FuturesService) QueryRealDeliverPage(ctx context.Context, accountID domain.AccountID, page PageRequest) (*domain.FuturesFillPage, error)
 
 // Mutations
-func (s *FuturesService) Entrust(ctx context.Context, accountID domain.AccountID, order domain.FuturesOrderRequest) (*domain.OrderResult, error)
+func (s *FuturesService) Entrust(ctx context.Context, accountID domain.AccountID, order FuturesOrderRequest) (*domain.OrderResult, error)
 func (s *FuturesService) CancelEntrust(ctx context.Context, accountID domain.AccountID, entrustID domain.EntrustID, symbol domain.Symbol) error
-func (s *FuturesService) ModifyEntrust(ctx context.Context, accountID domain.AccountID, change domain.FuturesModifyRequest) error
+func (s *FuturesService) ModifyEntrust(ctx context.Context, accountID domain.AccountID, change FuturesModifyRequest) error
 ```
+
+> **Correction, found while implementing C3: `FuturesOrderRequest` and
+> `FuturesModifyRequest` belong in `pkg/services`, not `pkg/domain`, so the
+> `domain.`-qualified forms this section originally wrote would not compile.**
+> The package split is the cash layer's, and the cash layer is unambiguous: every
+> caller-facing request wrapper lives in `pkg/services` — `MarginFundInfoRequest`,
+> `HoldsFilter`, `FundJourFilter`, `RealFundJourListRequest` in `account.go`,
+> `EntrustFilter` in `trading.go` — while `pkg/domain` holds the domain models and
+> the exported `…Wire` row DTOs the mappers consume, and nothing else. A request type
+> is a caller's construct, and the layer that owns a request is the layer that
+> decodes its reply, so a request type in `pkg/domain` would be a type with no
+> decoder in its own package. The names are unchanged from what was written here, so
+> what a later move costs is a qualifier rather than a rename. **C4 and C5 are
+> written against the three corrected signatures above.**
 
 Four points C3 should get right, each of which a careless implementation gets
 wrong:
