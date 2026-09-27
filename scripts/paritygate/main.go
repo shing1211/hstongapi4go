@@ -598,6 +598,13 @@ func unquoteString(lit *ast.BasicLit) (string, error) {
 // makes the parse line-ending agnostic, and SPEC contains non-ASCII (the em
 // dash), so the match is over runes.
 func parseSpec(path string) (specInfo, error) {
+	// #nosec G304 -- path is filepath.Join(root, "docs/SPEC.md"): a fixed relative
+	// filename joined to the repository root the developer supplied via --root. Same
+	// threat model as the G204 annotation in scripts/coverage_gate.go: a local
+	// developer tool with no external input, and the root is the very thing the
+	// operator asked it to read. Annotating rather than restructuring, because
+	// "refuse to read a file whose path came from a flag" is not a property this
+	// script can have.
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
