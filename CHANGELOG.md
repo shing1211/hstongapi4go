@@ -7,6 +7,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.15] - 2026-09-26
+
+One behaviour change, in `pkg/hstong/stream`, and it is the fix a documented
+guarantee had been failing to deliver since the type was introduced.
+
+### Fixed
+
+- **`ErrReconnected` now actually wraps the reconnect cause.** Its documentation
+  has always said the error that ended the previous connection "is wrapped and
+  available with `errors.Unwrap`", but the notice was built with `%w: %v`, so the
+  cause was rendered as text only. `errors.Unwrap` returned the sentinel, and
+  `errors.Is(notice, cause)` was always false — a caller could not branch on *why*
+  a connection dropped. The notice is now an unexported `reconnectNotice` type
+  whose `Unwrap` returns the cause, so `errors.Is` and `errors.As` both reach it.
+  A multi-`%w` was considered and rejected: it yields a value whose
+  `errors.Unwrap` returns `nil`, which would have made the documented sentence
+  more wrong rather than less. The rendered message is byte-identical, so nothing
+  that matches on text changes, and a nil cause is handled without panicking.
+  Per ADR 0011 this is a bug fix, not a breaking change: wrapability was
+  documented and never implemented, so there was no specified behaviour to break.
+
+- **A resubscribe error printed the topic's label where its number belongs.**
+  `types.TopicID` already has a `String()` method, so the `%s` verb rendered
+  `basic-qot` rather than the topic id the Gateway is addressed with. Now `%d`.
+
+### Added
+
+- **`pkg/hstong/algo`: 87.5% → 100.0%.** The last package sitting within a thin
+  margin above the 85% coverage gate, and the reason CI coverage was fragile. All
+  26 uncovered blocks are covered and the figure is stable across cold
+  clean-checkout runs. The gap turned out to be a sampling artefact: `validate`
+  returns on the *first* failure, so a suite that started from one valid fixture
+  and mutated a single sampled field could only ever reach the branches it
+  happened to name. Specifically, the two **read-only** query methods had no test
+  for a failing Gateway call — the safe half of the API, which is exactly why a
+  dropped error there would have shipped.
+
+### Known issues found, not fixed
+
+Recorded rather than silently patched, because each is a decision:
+
+- **`pkg/hstong/algo` forwards unknown market and direction codes.** Unlike
+  `entrustType`, `sessionType`, `sensitivity`, and `action` — all locally
+  validated closed sets — `ExchangeType` and `EntrustBS` have no validation, so
+  `ExchangeType: "Z"` sends a request naming a market this SDK does not
+  recognise. On a cancel that is the more dangerous half.
+- `pkg/services` (not yet reachable by any caller) discards a
+  `time.LoadLocation` error and dereferences five `wireResp.Security` fields
+  without a nil check; both would panic on a malformed Gateway reply.
+
 ## [0.1.14] - 2026-09-26
 
 **Tests only. No production code changed**, so ADR 0011 is untouched and no caller
@@ -782,7 +832,7 @@ canonical in [docs/SPEC.md](./docs/SPEC.md).
 - The plaintext trade password is held in memory only, encrypted before it
   leaves the process, and never logged or embedded in an error.
 
-[Unreleased]: https://github.com/shing1211/hstongapi4go/compare/v0.1.14...HEAD
+[Unreleased]: https://github.com/shing1211/hstongapi4go/compare/v0.1.15...HEAD
 [0.1.0]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.0
 [0.1.1]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.1
 [0.1.2]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.2
@@ -798,3 +848,4 @@ canonical in [docs/SPEC.md](./docs/SPEC.md).
 [0.1.12]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.12
 [0.1.13]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.13
 [0.1.14]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.14
+[0.1.15]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.15
