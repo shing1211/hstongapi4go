@@ -25,6 +25,7 @@ func main() {
 		{"./pkg/types", "github.com/shing1211/hstongapi4go/pkg/types"},
 		{"./pkg/transport", "github.com/shing1211/hstongapi4go/pkg/transport"},
 		{"./internal/push", "github.com/shing1211/hstongapi4go/internal/push"},
+		{"./pkg/services/...", "github.com/shing1211/hstongapi4go/pkg/services"},
 	}
 	gate := 85.0
 	failed := false

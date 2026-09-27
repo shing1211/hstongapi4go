@@ -98,3 +98,19 @@ scripts/coverage_gate.go` **from a clean clone only**, `scripts/check_links.py`,
   overstated `internal/push` by 2.8pp and produced a wrong published figure.
 - **B2/B3 are the largest test tasks.** If they stall, report partial coverage
   rather than lowering the gate.
+- **`-covermode=atomic` makes the coverage gate nondeterministic, and this is a
+  different cause from the `internal/push` instability already recorded above.**
+  Found while registering `pkg/services` (B5): with byte-identical code, the gate
+  reported `internal/push` at 94.7% twice and 93.7% once. Atomic mode marks a block
+  covered when a goroutine *enters* it, so a block only ever entered by a goroutine
+  that loses a race is counted as uncovered. At ~94% against an 85% gate this is not
+  a risk today, but a package sitting near the line would be flaky, and a coverage
+  figure that moves between runs of the same commit is a defect in the *tests* under
+  AGENTS.md — not noise to be averaged away. Cheapest resolution is
+  `-covermode=count`, or `set` with an explicit concurrency-safety argument. Not
+  fixed under B5, which was scoped to a one-line registration.
+- **The gate runs `go test` without `-count=1`,** so a reported figure may come
+  from the test cache. Safe in practice — the cache keys on package and test-file
+  content, so an edit misses — and it is what keeps the gate fast, but the printed
+  number is not always from a run in that invocation. Worth a deliberate decision
+  rather than an accident.

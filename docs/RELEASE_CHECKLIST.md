@@ -19,8 +19,8 @@ manager runs through this list before tagging and pushing.
 - [ ] **4. Coverage gate** — `make coverage` shows ≥85% on
     `pkg/domain`, `internal/auth`, `internal/transport`, `internal/push`, the
     released public managers `pkg/hstong`, `pkg/hstong/stream`,
-    `pkg/hstong/trade`, `pkg/hstong/algo`, plus `pkg/types` and
-    `pkg/transport`.
+    `pkg/hstong/trade`, `pkg/hstong/algo`, plus `pkg/types`, `pkg/transport`
+    and the v-next `pkg/services`.
 
 - [ ] **5. Proto verify** — `make proto-verify` passes (generated code matches
     source protos).
