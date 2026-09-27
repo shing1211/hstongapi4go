@@ -7,11 +7,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.21] - 2026-09-26
+
+**The current release.** Ships the SPEC ↔ v-next parity guard. No production code
+changed: nothing under `client/`, `pkg/` or `internal/` was touched, and the SDK's
+behaviour is identical to 0.1.20.
+
+### Added
+
+- **`make parity` — a guard that answers "which documented endpoint has no v-next
+  service method?"** It reports **29 of 51 endpoints wired, 22 not**, grouped the
+  way SPEC groups them, and runs as its own CI job. Today the four complete groups
+  are market pull (9), market subscription (2), trade assets (5) and trade orders
+  (13); the 22 outstanding are futures 11, algo 7, trade session 2, and trade push
+  subscribe 2. Those numbers are a live progress meter for the v-next work, visible
+  on every run instead of living only in a tracker.
+
+  Try it locally:
+
+  ```sh
+  make parity          # report the gap; exits 0
+  make parity-enforce  # same guard, exits 1 on any gap
+  ```
+
+- **The guard is deliberately in report mode, and says so loudly.** It exits 0 for a
+  22-endpoint gap so the v-next work in flight cannot redden CI, and its output
+  says in two places that a green exit does not mean parity — because the failure
+  that matters here is someone skimming CI and concluding the layer is finished.
+  It still exits 1 when an *invariant* breaks: a route table that disagrees with
+  itself, a SPEC endpoint count that disagrees with the route table, or a scan root
+  that went missing. Those are failures, not gaps.
+
+- **Rule 5 is now enforced mechanically rather than by convention.** The guard
+  asserts the declared route count against the single total in `docs/SPEC.md`, so
+  the document and the code cannot drift apart without CI noticing.
+
+### Fixed
+
+- **`gosec` G304 on the guard's SPEC read**, annotated with its reason rather than
+  worked around. The path is a fixed relative filename joined to the repository root
+  the developer passes via `--root` — the same threat model as the existing G204
+  annotation in the coverage gate.
+
+- **A wrong claim in the guard's own design note.** It asserted that no identifier
+  named `client` existed, which was false: three service structs have a
+  `client Executor` field. A naive check would have made the guard refuse to run
+  against the real repository. Struct fields cannot shadow a package, so the check
+  excludes them, and a test pins that exclusion.
+
 ## [0.1.20] - 2026-09-26
 
-**The current release.** Closes the `pkg/services` test programme: the v-next layer
-is now at **100.0% of statements with all 59 functions at 100%**, and it is the
-eleventh package in the CI coverage gate. No production code changed.
+**Superseded by 0.1.21.** `pkg/services` at 100.0% and gated as the 11th coverage
+package. `v0.1.21` is the tag to use.
 
 ### Added
 
@@ -1016,7 +1063,7 @@ canonical in [docs/SPEC.md](./docs/SPEC.md).
 - The plaintext trade password is held in memory only, encrypted before it
   leaves the process, and never logged or embedded in an error.
 
-[Unreleased]: https://github.com/shing1211/hstongapi4go/compare/v0.1.20...HEAD
+[Unreleased]: https://github.com/shing1211/hstongapi4go/compare/v0.1.21...HEAD
 [0.1.0]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.0
 [0.1.1]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.1
 [0.1.2]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.2
@@ -1038,3 +1085,4 @@ canonical in [docs/SPEC.md](./docs/SPEC.md).
 [0.1.18]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.18
 [0.1.19]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.19
 [0.1.20]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.20
+[0.1.21]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.21
