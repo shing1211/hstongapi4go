@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.18] - 2026-09-26
+
+**Tests only — no production code changed.** This release hardens the v-next
+layer against regressions that had already caused real defects, before that layer
+is wired in and any of it becomes reachable by a caller.
+
+### Added
+
+- **`pkg/services` coverage: 17.4% → 88.9%.** `market.go` and `trading.go` are
+  both at 100% of statements, every function included. The point is not the
+  number but what the tests now hold in place.
+
+- **Market prices and order quantities are proven to cross the wire verbatim.**
+  Values were chosen to break a `float64` round-trip: 19- and 25-significant-digit
+  prices, a 27-digit quantity, and `1e-330` — positive as a decimal but *zero to
+  every `float64`*. That last value is the sharpest case: on a `float64` wire field
+  it silently becomes `0`, while on the `json.Number` field the SDK now uses it
+  stays exact. Reintroducing the removed `fmt.Sprintf("%.3f", …)` conversion fails
+  five tests, so the rounding defect fixed in 0.1.13 cannot return quietly.
+
+- **ADR 0003 is now proven at the service boundary, with a control.** Under a retry
+  policy of five attempts and a retryable Gateway rejection, all four trading
+  mutations still issue **exactly one** request, while a read-only entrust list
+  under the identical client takes all five. The control is what makes that
+  meaningful: without it, "one request" could just mean the policy never applied.
+  A cancelled mutation is also pinned as a single attempt.
+
+- **Every service method has an explicit error-arm test.** The recurring lesson of
+  this work: `pkg/hstong/trade` once had twenty endpoints covered and not one test
+  that made a Gateway call *fail*, leaving its entire error-propagation surface
+  dark while every happy path passed. These tests cover the failure path
+  deliberately, at both the fake-executor and real-HTTP levels.
+
 ## [0.1.17] - 2026-09-26
 
 Two latent panics in `pkg/services` — the unwired v-next layer — fixed before that
@@ -899,7 +932,7 @@ canonical in [docs/SPEC.md](./docs/SPEC.md).
 - The plaintext trade password is held in memory only, encrypted before it
   leaves the process, and never logged or embedded in an error.
 
-[Unreleased]: https://github.com/shing1211/hstongapi4go/compare/v0.1.17...HEAD
+[Unreleased]: https://github.com/shing1211/hstongapi4go/compare/v0.1.18...HEAD
 [0.1.0]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.0
 [0.1.1]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.1
 [0.1.2]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.2
@@ -918,3 +951,4 @@ canonical in [docs/SPEC.md](./docs/SPEC.md).
 [0.1.15]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.15
 [0.1.16]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.16
 [0.1.17]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.17
+[0.1.18]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.18
