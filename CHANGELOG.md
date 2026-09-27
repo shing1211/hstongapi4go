@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.17] - 2026-09-26
+
+Two latent panics in `pkg/services` — the unwired v-next layer — fixed before that
+layer is ever wired in. No released behaviour changes: `pkg/services` is not yet
+reachable by any caller.
+
+### Fixed
+
+- **A discarded `time.LoadLocation` error could panic the entrust path.** The
+  Hong Kong session-window check read the location, dropped the error, then called
+  `now.In(loc)`; a failed lookup yields a nil location and `In` panics. The lookup
+  is gone rather than the error handled: Hong Kong has observed no daylight saving
+  since 1979, so `Asia/Hong_Kong` is a constant +08:00 for every instant this code
+  can be asked about, and a fixed zone is exact rather than approximate. As a side
+  effect the check no longer reads the system timezone database on every order.
+
+- **Five market-data methods dereferenced a possibly-absent `security`.** A Gateway
+  reply omitting the field would panic and take the caller's goroutine with it. They
+  now tolerate its absence, matching the released surface, which already hands the
+  wire value straight back and so yields nil for the same reply. The field is an echo
+  of a request parameter the caller already holds, so failing an otherwise-successful
+  read would discard a decoded order book or candle series for nothing.
+
 ## [0.1.16] - 2026-09-26
 
 One theme: **`ExchangeType` and `EntrustBS` were being forwarded to the Gateway
@@ -876,7 +899,7 @@ canonical in [docs/SPEC.md](./docs/SPEC.md).
 - The plaintext trade password is held in memory only, encrypted before it
   leaves the process, and never logged or embedded in an error.
 
-[Unreleased]: https://github.com/shing1211/hstongapi4go/compare/v0.1.16...HEAD
+[Unreleased]: https://github.com/shing1211/hstongapi4go/compare/v0.1.17...HEAD
 [0.1.0]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.0
 [0.1.1]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.1
 [0.1.2]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.2
@@ -894,3 +917,4 @@ canonical in [docs/SPEC.md](./docs/SPEC.md).
 [0.1.14]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.14
 [0.1.15]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.15
 [0.1.16]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.16
+[0.1.17]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.17
