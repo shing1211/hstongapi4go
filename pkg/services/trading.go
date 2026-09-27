@@ -69,6 +69,31 @@ var hkSessionWindows = map[string]struct {
 	},
 }
 
+// hkZone is the Hong Kong wall clock the session windows in hkSessionWindows are
+// expressed in. It is a fixed +08:00 zone rather than a
+// time.LoadLocation("Asia/Hong_Kong") lookup, and that is a correctness decision,
+// not a shortcut: Hong Kong has observed no daylight saving since 1979, so for
+// every instant this SDK can be asked about (time.Now()) the IANA zone resolves
+// to a constant +08:00 offset and a FixedZone is exact, not an approximation.
+//
+// A LoadLocation call is not, by contrast, a total function here. It reads a
+// host-provided database (the OS zoneinfo, $ZONEINFO, or $GOROOT/lib/time/zoneinfo.zip)
+// and returns (nil, err) when none is available — a scratch container, a
+// trimmed Windows install, a statically linked binary. Discarding that error
+// left a nil *Location to reach Time.In, which panics on nil, so a missing tz
+// database would crash the entrust path rather than reject an order.
+//
+// Neither degraded alternative is wanted now that the lookup is gone. Falling
+// back to UTC would shift every window by eight hours and silently validate an
+// order against the wrong clock — the exact outcome a fail-closed check exists to
+// prevent. Failing closed would refuse every HK entrust on a host without tz
+// data, trading a rare crash for a routine rejection of valid orders. Because a
+// correct total answer exists, validateSessionWindow has no error path at all.
+//
+// Never reassign hkZone: Time.In panics on a nil Location, and the point of the
+// fixed zone is that it cannot be nil.
+var hkZone = time.FixedZone("HKT", 8*60*60)
+
 type TradingService struct {
 	client Executor
 }
@@ -553,9 +578,7 @@ func validateSessionWindow(market domain.Market, sessionType string) error {
 		return nil
 	}
 
-	now := time.Now()
-	loc, _ := time.LoadLocation("Asia/Hong_Kong")
-	now = now.In(loc)
+	now := time.Now().In(hkZone)
 
 	currentTime := now.Format("15:04")
 

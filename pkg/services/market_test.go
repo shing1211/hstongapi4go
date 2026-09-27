@@ -4,8 +4,10 @@
 package services
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/shing1211/hstongapi4go/gen/hq/dto"
@@ -365,5 +367,192 @@ func TestDecimalOrZero(t *testing.T) {
 		if got := decimalOrZero(tt.in); got != tt.want {
 			t.Errorf("decimalOrZero(%q) = %q, want %q", tt.in, got, tt.want)
 		}
+	}
+}
+
+// echoField is the security echo carried by every body in marketEchoReads,
+// spelled exactly as those bodies spell it so the cases below can strip it
+// without hand-maintaining a second copy of each reply. A hand-written
+// second copy would drift from the first and quietly stop testing the echo.
+const echoField = `"security":{"dataType":10000,"code":"00700.HK"},`
+
+// marketEchoRead reduces one of the five MarketService methods that echo a
+// security back to the two things these tests assert on: the echoed *Security,
+// and a count of the market data the caller actually asked for.
+//
+// The data count is what gives "tolerate" teeth. Asserting only that the call
+// returned no error and no panic would also pass an implementation that
+// answered an absent echo with an empty response, which is the opposite of what
+// this change decided — the whole argument for tolerating is that the book,
+// candles, series, ticks, and queues survive.
+type marketEchoRead struct {
+	name string
+	// body is a reply that carries the echo, so the "present" case is the
+	// ordinary path the other two variants are derived from.
+	body    string
+	payload string
+	call    func(context.Context, *MarketService) (*Security, string, error)
+}
+
+// marketEchoReads is the table for the five dereference sites: OrderBook, KL,
+// TimeShare, Ticker, and Broker, each with a body holding real market data
+// alongside the echo.
+func marketEchoReads() []marketEchoRead {
+	return []marketEchoRead{
+		{
+			name: "OrderBook",
+			body: `{"security":{"dataType":10000,"code":"00700.HK"},` +
+				`"orderBookAskList":[{"level":1,"price":0.1,"volume":1200}],` +
+				`"orderBookBidList":[{"level":1,"price":0.09,"volume":800}],` +
+				`"spreadLevel":0.01}`,
+			payload: "2",
+			call: func(ctx context.Context, svc *MarketService) (*Security, string, error) {
+				resp, err := svc.OrderBook(ctx, OrderBookRequest{
+					Security: &Security{DataType: 10000, Code: "00700.HK"},
+				})
+				return resp.Security, fmt.Sprint(len(resp.Ask) + len(resp.Bid)), err
+			},
+		},
+		{
+			name: "KL",
+			body: `{"security":{"dataType":10000,"code":"00700.HK"},` +
+				`"kline":[{"date":"20260101","highPrice":1.1,"openPrice":1.0,"lowPrice":0.9,` +
+				`"closePrice":1.05,"lastClosePrice":1.0,"volume":7,"turnover":381200.125}]}`,
+			payload: "1",
+			call: func(ctx context.Context, svc *MarketService) (*Security, string, error) {
+				resp, err := svc.KL(ctx, KLRequest{
+					Security: &Security{DataType: 10000, Code: "00700.HK"},
+				})
+				return resp.Security, fmt.Sprint(len(resp.Kline)), err
+			},
+		},
+		{
+			name: "TimeShare",
+			body: `{"security":{"dataType":10000,"code":"00700.HK"},` +
+				`"timeShare":[{"time":"09:30","price":1.1,"lastClosePrice":1.0,` +
+				`"avgPrice":1.05,"volume":1000,"turnover":381200.125}]}`,
+			payload: "1",
+			call: func(ctx context.Context, svc *MarketService) (*Security, string, error) {
+				resp, err := svc.TimeShare(ctx, TimeShareRequest{
+					Security: &Security{DataType: 10000, Code: "00700.HK"},
+				})
+				return resp.Security, fmt.Sprint(len(resp.TimeShare)), err
+			},
+		},
+		{
+			name: "Ticker",
+			body: `{"security":{"dataType":10000,"code":"00700.HK"},` +
+				`"ticker":[{"time":"09:30","side":1,"price":1.1,"volume":100,` +
+				`"turnover":38800.125,"type":1}]}`,
+			payload: "1",
+			call: func(ctx context.Context, svc *MarketService) (*Security, string, error) {
+				resp, err := svc.Ticker(ctx, TickerRequest{
+					Security: &Security{DataType: 10000, Code: "00700.HK"},
+					Limit:    10,
+				})
+				return resp.Security, fmt.Sprint(len(resp.Ticker)), err
+			},
+		},
+		{
+			name: "Broker",
+			body: `{"security":{"dataType":10000,"code":"00700.HK"},` +
+				`"brokerAskList":[{"level":1,"item":"1","type":0,"name":"ask"}],` +
+				`"brokerBidList":[{"level":1,"item":"2","type":1,"name":"bid"}]}`,
+			payload: "2",
+			call: func(ctx context.Context, svc *MarketService) (*Security, string, error) {
+				resp, err := svc.Broker(ctx, BrokerRequest{
+					Security: &Security{DataType: 10000, Code: "00700.HK"},
+				})
+				return resp.Security, fmt.Sprint(len(resp.Ask) + len(resp.Bid)), err
+			},
+		},
+	}
+}
+
+// TestMarketReadEchoesTheRequestedSecurity is the ordinary case, and the reason
+// the nil guard is allowed to exist: a reply that does carry the security must
+// come back exactly as it did before, so nothing a caller can already rely on
+// changed. Each of the five sites is checked for both the narrowed DataType and
+// the code.
+func TestMarketReadEchoesTheRequestedSecurity(t *testing.T) {
+	for _, tt := range marketEchoReads() {
+		t.Run(tt.name, func(t *testing.T) {
+			if !strings.Contains(tt.body, echoField) {
+				t.Fatalf("test bug: the %s body carries no %s field", tt.name, echoField)
+			}
+			svc := NewMarketService(&fakeExecutor{reply: json.RawMessage(tt.body)})
+			got, payload, err := tt.call(t.Context(), svc)
+			if err != nil {
+				t.Fatalf("%s: %v", tt.name, err)
+			}
+			if got == nil {
+				t.Fatalf("%s.Security = nil, want the echoed security", tt.name)
+			}
+			if got.DataType != 10000 {
+				t.Errorf("%s.Security.DataType = %d, want 10000", tt.name, got.DataType)
+			}
+			if got.Code != "00700.HK" {
+				t.Errorf("%s.Security.Code = %q, want 00700.HK", tt.name, got.Code)
+			}
+			if payload != tt.payload {
+				t.Errorf("%s returned %s market item(s), want %s", tt.name, payload, tt.payload)
+			}
+		})
+	}
+}
+
+// TestMarketReadToleratesAMissingSecurityEcho is the regression test for the
+// five sites this change fixes. Each of them read wireResp.Security.DataType
+// with no nil check, so a Gateway reply omitting the field dereferenced nil and
+// took the caller's goroutine with it — for a read, and for a field that only
+// echoes back a request parameter the caller already holds.
+//
+// Both spellings of "missing" are covered because encoding/json leaves the
+// pointer nil for each, and only one of them is a key the reply is likely to
+// lose in the first place.
+func TestMarketReadToleratesAMissingSecurityEcho(t *testing.T) {
+	for _, tt := range marketEchoReads() {
+		for _, variant := range []struct{ name, replacement string }{
+			{"key absent", ""},
+			{"explicit null", `"security":null,`},
+		} {
+			t.Run(tt.name+"/"+variant.name, func(t *testing.T) {
+				body := strings.Replace(tt.body, echoField, variant.replacement, 1)
+				if body == tt.body {
+					t.Fatalf("test bug: the %s body carried no %s field to replace", tt.name, echoField)
+				}
+				svc := NewMarketService(&fakeExecutor{reply: json.RawMessage(body)})
+				got, payload, err := tt.call(t.Context(), svc)
+				if err != nil {
+					t.Fatalf("%s with a %s security echo: %v", tt.name, variant.name, err)
+				}
+				if got != nil {
+					t.Errorf("%s.Security = %+v, want nil for a %s echo", tt.name, got, variant.name)
+				}
+				if payload != tt.payload {
+					t.Errorf("%s returned %s market item(s), want %s: tolerating a missing echo "+
+						"must not cost the caller the data that did arrive", tt.name, payload, tt.payload)
+				}
+			})
+		}
+	}
+}
+
+// TestSecurityOrNil pins the conversion the five sites share: nil in, nil out,
+// and otherwise a security carrying the wire values, with DataType narrowed
+// from the DTO's int32.
+func TestSecurityOrNil(t *testing.T) {
+	if got := securityOrNil(nil); got != nil {
+		t.Errorf("securityOrNil(nil) = %+v, want nil", got)
+	}
+	got := securityOrNil(&dto.Security{DataType: 10000, Code: "00700.HK"})
+	if got == nil {
+		t.Fatal("securityOrNil(nil-dto-with-values) = nil, want a populated security")
+	}
+	if got.DataType != 10000 {
+		t.Errorf("DataType = %d, want 10000", got.DataType)
+	}
+	if got.Code != "00700.HK" {
+		t.Errorf("Code = %q, want 00700.HK", got.Code)
 	}
 }

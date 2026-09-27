@@ -111,6 +111,8 @@ type OrderBookRequest struct {
 }
 
 type OrderBookResponse struct {
+	// Security echoes the requested instrument. It is nil when the Gateway
+	// omits the field; the book is still returned rather than the call failing.
 	Security *Security               `json:"security"`
 	Ask      []domain.OrderBookLevel `json:"orderBookAskList"`
 	Bid      []domain.OrderBookLevel `json:"orderBookBidList"`
@@ -143,7 +145,7 @@ func (s *MarketService) OrderBook(ctx context.Context, req OrderBookRequest) (Or
 		return OrderBookResponse{}, err
 	}
 	return OrderBookResponse{
-		Security: &Security{DataType: types.DataType(wireResp.Security.DataType), Code: wireResp.Security.Code},
+		Security: securityOrNil(wireResp.Security),
 		Ask:      convertOrderBookLevels(wireResp.OrderBookAskList),
 		Bid:      convertOrderBookLevels(wireResp.OrderBookBidList),
 		TickSize: domain.MustNewPrice(decimalOrZero(string(wireResp.TickSize)), "0.001"),
@@ -169,6 +171,8 @@ type KLRequest struct {
 }
 
 type KLResponse struct {
+	// Security echoes the requested instrument. It is nil when the Gateway
+	// omits the field; the candles are still returned rather than the call failing.
 	Security *Security       `json:"security"`
 	Kline    []*domain.KLine `json:"kline"`
 }
@@ -193,7 +197,7 @@ func (s *MarketService) KL(ctx context.Context, req KLRequest) (KLResponse, erro
 	}, s.client.JSON(), &wireResp); err != nil {
 		return KLResponse{}, err
 	}
-	out := KLResponse{Security: &Security{DataType: types.DataType(wireResp.Security.DataType), Code: wireResp.Security.Code}}
+	out := KLResponse{Security: securityOrNil(wireResp.Security)}
 	out.Kline = make([]*domain.KLine, len(wireResp.Kline))
 	for i, k := range wireResp.Kline {
 		out.Kline[i] = convertToKLine(k)
@@ -212,6 +216,8 @@ type TimeShareRequest struct {
 }
 
 type TimeShareResponse struct {
+	// Security echoes the requested instrument. It is nil when the Gateway
+	// omits the field; the series is still returned rather than the call failing.
 	Security  *Security                `json:"security"`
 	TimeShare []*domain.TimeSharePoint `json:"timeShare"`
 }
@@ -232,7 +238,7 @@ func (s *MarketService) TimeShare(ctx context.Context, req TimeShareRequest) (Ti
 	}, s.client.JSON(), &wireResp); err != nil {
 		return TimeShareResponse{}, err
 	}
-	out := TimeShareResponse{Security: &Security{DataType: types.DataType(wireResp.Security.DataType), Code: wireResp.Security.Code}}
+	out := TimeShareResponse{Security: securityOrNil(wireResp.Security)}
 	out.TimeShare = make([]*domain.TimeSharePoint, len(wireResp.TimeShare))
 	for i, ts := range wireResp.TimeShare {
 		out.TimeShare[i] = convertToTimeSharePoint(ts)
@@ -253,6 +259,8 @@ type TickerRequest struct {
 }
 
 type TickerResponse struct {
+	// Security echoes the requested instrument. It is nil when the Gateway
+	// omits the field; the ticks are still returned rather than the call failing.
 	Security *Security            `json:"security"`
 	Ticker   []*domain.TickerTick `json:"ticker"`
 }
@@ -278,7 +286,7 @@ func (s *MarketService) Ticker(ctx context.Context, req TickerRequest) (TickerRe
 	}, s.client.JSON(), &wireResp); err != nil {
 		return TickerResponse{}, err
 	}
-	out := TickerResponse{Security: &Security{DataType: types.DataType(wireResp.Security.DataType), Code: wireResp.Security.Code}}
+	out := TickerResponse{Security: securityOrNil(wireResp.Security)}
 	out.Ticker = make([]*domain.TickerTick, len(wireResp.Ticker))
 	for i, t := range wireResp.Ticker {
 		out.Ticker[i] = convertToTickerTick(t)
@@ -295,6 +303,8 @@ type BrokerRequest struct {
 }
 
 type BrokerResponse struct {
+	// Security echoes the requested instrument. It is nil when the Gateway
+	// omits the field; the queues are still returned rather than the call failing.
 	Security *Security                 `json:"security"`
 	Ask      []domain.BrokerQueueEntry `json:"brokerAskList"`
 	Bid      []domain.BrokerQueueEntry `json:"brokerBidList"`
@@ -317,7 +327,7 @@ func (s *MarketService) Broker(ctx context.Context, req BrokerRequest) (BrokerRe
 		return BrokerResponse{}, err
 	}
 	return BrokerResponse{
-		Security: &Security{DataType: types.DataType(wireResp.Security.DataType), Code: wireResp.Security.Code},
+		Security: securityOrNil(wireResp.Security),
 		Ask:      convertBrokerEntries(wireResp.BrokerAskList),
 		Bid:      convertBrokerEntries(wireResp.BrokerBidList),
 	}, nil
@@ -472,6 +482,37 @@ func decimalOrZero(s string) string {
 		return "0"
 	}
 	return s
+}
+
+// securityOrNil converts the security a Gateway reply echoes back.
+//
+// It tolerates an absent echo and returns nil rather than raising, and that is
+// the deliberate choice for a market-data read rather than a mutation:
+//
+//   - The echoed security is a copy of a request parameter the caller already
+//     holds. Losing it costs the caller nothing, whereas failing the call
+//     discards the order book, candles, ticks, or broker queue that were
+//     decoded successfully — a large amount of good data traded for the sake of
+//     a redundant field. A mutation is the opposite case: an ambiguous reply
+//     there means the effect is unknown and the caller must reconcile
+//     (ADR 0003), so there refusing to answer is the safe reading.
+//   - Every response in this file already declares the field as a pointer, so a
+//     missing echo is representable and a caller can test for it. Synthesising a
+//     placeholder instead — DataType 0, Code "" — would be worse than nil: it
+//     would read as a real security that happens to have no code.
+//   - It matches the released surface. pkg/hstong/market hands the wire
+//     *dto.Security straight back, so a reply with no security already yields a
+//     nil there with no error, and the v-next layer diverging would make the two
+//     surfaces answer the same Gateway reply differently.
+//
+// The five sites that echo a security all route through here so the policy is
+// stated once; five separate nil checks are the same per-site discipline a
+// missing validation check would be.
+func securityOrNil(sec *dto.Security) *Security {
+	if sec == nil {
+		return nil
+	}
+	return &Security{DataType: types.DataType(sec.DataType), Code: sec.Code}
 }
 
 func convertToQuote(q *dto.BasicQot) *domain.Quote {
