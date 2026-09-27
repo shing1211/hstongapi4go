@@ -7,10 +7,72 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.20] - 2026-09-26
+
+**The current release.** Closes the `pkg/services` test programme: the v-next layer
+is now at **100.0% of statements with all 59 functions at 100%**, and it is the
+eleventh package in the CI coverage gate. No production code changed.
+
+### Added
+
+- **`pkg/services` reaches 100%.** The last five uncovered functions —
+  `MarginFundInfo`, `HoldsList`, `RealFundJourList`, `HistoryFundJourList`,
+  `RateQueryList` — went from 0% to 100%, taking the package from 88.9% to 100.0%
+  and every function with it. Stable across three cold clean-clone runs, which is
+  the only way a coverage number in this repository is trustworthy: a dirty tree
+  once overstated `internal/push` by 2.8 points and published the wrong figure.
+
+- **Money is proven byte-for-byte on the account path, with a stronger guarantee
+  than the market path can make.** An account request carries no numeric money at
+  all — only `queryCount` and two date strings — so the verbatim proof is
+  response-side, where every account numeric is a quoted `string`. This group can
+  therefore promise exact fidelity rather than the binary64 ceiling the market path
+  is limited to. Reintroducing `float64` on that path fails 44 tests;
+  reintroducing `%.3f`, the defect this project actually shipped, fails 103.
+
+- **`omitempty` is pinned in both directions**, and the assertion decodes the
+  request-params map instead of matching substrings. "Absent" and "spelled
+  differently" are indistinguishable to `strings.Contains`, so a check that cannot
+  tell those two apart would pass on a real regression.
+
+- **A nondeterminism trap, closed.** `RateQueryList` ranges over a nested
+  `map[string]map[string]string`, so Go's randomised map iteration makes the order
+  of its returned slice nondeterministic. Every assertion now sorts, and a fixture
+  source with an empty target map pins the nested loop by count. 18 shuffled runs
+  stay green.
+
+### Changed
+
+- **`pkg/services` is gated in CI** at the same 85% threshold as everything else.
+  The gate now covers 11 packages. The change is one line in
+  `scripts/coverage_gate.go`, with the three documents that list the gated packages
+  updated alongside it so the count cannot drift in one place and not the others.
+
+  Registering a package in a gate is worth nothing if the gate cannot fail, so that
+  was checked rather than assumed: raising the threshold makes it report `FAIL` and
+  exit 1, and the `0.0` fallback in its coverage parser was ruled out as the source
+  of the reported number.
+
+### Fixed
+
+- **Two coverage-gate defects found and recorded, not fixed here.** `-covermode=atomic`
+  makes the gate nondeterministic — `internal/push` measured 94.7% twice and 93.7%
+  once on byte-identical code, because atomic mode counts a block covered only when
+  a goroutine *enters* it, so a block reached solely by a goroutine that loses a
+  race reads as uncovered. Harmless at 94% against an 85% gate, but a package near
+  the line would be flaky. The gate also runs `go test` without `-count=1`, so a
+  reported figure may come from the test cache. Both are recorded in the run's risk
+  register with the reasoning; the cheaper fix is `-covermode=count`.
+
+- **A plan inaccuracy corrected.** B4's title named `executor.go` as needing
+  coverage. It contains only a `type Executor interface` and zero statements, so
+  there was nothing to cover and none was invented. That is the second time the B1
+  plan has described work that does not exist, after its stale line numbers.
+
 ## [0.1.19] - 2026-09-26
 
-**The current release.** Identical to 0.1.18 plus the two lint fixes below, so
-`v0.1.19` is the tag to use.
+**Superseded by 0.1.20.** Identical to 0.1.18 plus the two lint fixes below.
+`v0.1.20` is the tag to use.
 
 ## [0.1.18] - 2026-09-26
 
@@ -954,7 +1016,7 @@ canonical in [docs/SPEC.md](./docs/SPEC.md).
 - The plaintext trade password is held in memory only, encrypted before it
   leaves the process, and never logged or embedded in an error.
 
-[Unreleased]: https://github.com/shing1211/hstongapi4go/compare/v0.1.19...HEAD
+[Unreleased]: https://github.com/shing1211/hstongapi4go/compare/v0.1.20...HEAD
 [0.1.0]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.0
 [0.1.1]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.1
 [0.1.2]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.2
@@ -975,3 +1037,4 @@ canonical in [docs/SPEC.md](./docs/SPEC.md).
 [0.1.17]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.17
 [0.1.18]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.18
 [0.1.19]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.19
+[0.1.20]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.20
