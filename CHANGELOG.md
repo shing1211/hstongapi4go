@@ -7,6 +7,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.16] - 2026-09-26
+
+One theme: **`ExchangeType` and `EntrustBS` were being forwarded to the Gateway
+without validation, inconsistently across the SDK.** This release makes the whole
+SDK agree, and it is a behaviour change on the released surface.
+
+### Fixed
+
+- **`pkg/hstong/algo` forwarded unknown market and direction codes.** It checked
+  only for the empty string, while `entrustType`, `sessionType`, `sensitivity`, and
+  `action` in the same package were all locally-validated closed sets. So
+  `ExchangeType: "Z"` — a market this SDK does not recognise — was sent anyway. On
+  a cancel that is a request the Gateway may resolve against the wrong book. All
+  eight request validators now fail closed against the documented sets.
+
+- **`pkg/hstong/trade` validated no code at all.** Seventeen caller-reachable
+  request sites forwarded out-of-set values, and **eight were not even checked for
+  emptiness** — four of those fields are documented "required", so
+  `MarginFundInfo` with an empty `exchangeType` was being sent. All seventeen now
+  validate, with the eight missing emptiness checks added.
+
+  The argument for the algo fix was not a preference but an inconsistency:
+  `pkg/hstong/future` **already** set-validated the same four `EntrustBS` codes on
+  a released v0.1.x surface, so one SDK was giving two answers for one type. After
+  this release `future`, `algo`, and `trade` all agree.
+
+  `EntrustBS` 3 and 4 — close-short and open-short — remain valid throughout. A
+  first attempt at this work treated `"3"` as invalid, which would have rejected
+  legitimate short-position closes; the test suite now carries a mutation that
+  reproduces that specific mistake.
+
+### Changed
+
+- **Requests carrying an unrecognised market or direction code now fail locally**,
+  with a typed `ErrInvalidParams` naming the accepted codes, before any HTTP
+  request is made — rather than being sent for the Gateway to reject. Nothing that
+  previously succeeded stops working. Per ADR 0011 this is the permitted
+  "bug fixes that change runtime behaviour" case; all five compatibility
+  guarantees are untouched and no amendment is required.
+
+- **`pkg/services` remains a partial fourth policy**, validating order direction
+  only for Hong Kong stock and ETF. It is not yet reachable by any caller and will
+  be aligned as part of the v-next work.
+
 ## [0.1.15] - 2026-09-26
 
 One behaviour change, in `pkg/hstong/stream`, and it is the fix a documented
@@ -832,7 +876,7 @@ canonical in [docs/SPEC.md](./docs/SPEC.md).
 - The plaintext trade password is held in memory only, encrypted before it
   leaves the process, and never logged or embedded in an error.
 
-[Unreleased]: https://github.com/shing1211/hstongapi4go/compare/v0.1.15...HEAD
+[Unreleased]: https://github.com/shing1211/hstongapi4go/compare/v0.1.16...HEAD
 [0.1.0]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.0
 [0.1.1]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.1
 [0.1.2]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.2
@@ -849,3 +893,4 @@ canonical in [docs/SPEC.md](./docs/SPEC.md).
 [0.1.13]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.13
 [0.1.14]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.14
 [0.1.15]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.15
+[0.1.16]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.16
