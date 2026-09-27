@@ -246,6 +246,28 @@ jobs:
       - name: Fuzz ReadFrame
         run: go test ./internal/push/ -run=^$ -fuzz=FuzzReadFrame -fuzztime=30s
 
+  # Report mode, deliberately, until C14. The guard lists which documented
+  # Gateway endpoints have no v-next service method and exits 0 for that gap, so
+  # this job cannot redden CI while the C-series is in flight -- that is the
+  # whole reason report mode exists. It still exits 1 on a broken invariant (a
+  # route table that disagrees with itself, a SPEC count that disagrees with the
+  # const block, a missing scan root), and those conditions are all false today.
+  #
+  # C14 flips this one line to `make parity-enforce` and adds the job to
+  # docs/RELEASE_CHECKLIST.md. No `needs:`, like `coverage`, so a parity failure
+  # is never masked by a green test job and is never attributed to one.
+  parity:
+    name: parity guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          check-latest: true
+      - name: Run parity guard (report mode)
+        run: make parity
+
   coverage:
     name: coverage gate
     runs-on: ubuntu-latest

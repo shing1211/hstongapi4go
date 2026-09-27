@@ -91,6 +91,8 @@ make test              # unit tests
 make test-race         # unit tests with -race -count=1
 make test-integration  # env-gated real-Gateway tests (HSTONG_INTEGRATION=1)
 make coverage          # coverage gate: >=85% on pkg/domain, internal/auth, internal/transport, internal/push, pkg/hstong{,/stream,/trade,/algo}, pkg/types, pkg/transport, pkg/services
+make parity            # report the SPEC ↔ v-next parity gap; exits 0 for a gap, 1 for a broken invariant
+make parity-enforce    # same guard, but exit 1 on any gap (what CI becomes at C14)
 make check             # fmt + vet + tests + money-check
 make money-check       # reject float misuse of money fields
 make lint              # golangci-lint (v2.9+, required for the go 1.26 directive)

@@ -199,7 +199,21 @@ are `*ast.SelectorExpr`; only the route argument has an `*ast.Ident` receiver.
 declares an identifier named `client` — a local, a parameter, a receiver, a
 package-level `const`/`var`/`type`/`func` — then `client.RouteXxx` is ambiguous and
 the walk would under-count silently. The guard must fail loudly in that case rather
-than report a smaller gap. There is no such declaration today.
+than report a smaller gap.
+
+> **Correction, found while implementing C2: the original claim that "there is no
+> such declaration today" was wrong, in a way that would have made the guard
+> unable to run.** Three struct fields are named `client`:
+> `pkg/services/account.go:82`, `pkg/services/market.go:36`, and
+> `pkg/services/trading.go:98`, all of type `Executor`. A naive receiver test that
+> treated any `client` declaration as fatal would therefore refuse to run against
+> the real repository. Fields are also **not** a shadowing risk: a field is reached
+> only through its owner's selector (`s.client`), never as a bare `client`, so it
+> cannot make `client.RouteXxx` ambiguous. The fatal check covers locals,
+> parameters, receivers, package-level declarations, range clauses, type switches,
+> and foreign imports of the `client` package; struct fields are excluded, and
+> `TestStructFieldNamedClientIsNotAnError` pins that exclusion so it cannot be
+> "fixed" back into a permanent failure.
 
 ### 4.2 The one blind spot, and the diagnostic that closes it
 

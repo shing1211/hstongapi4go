@@ -33,7 +33,7 @@ PROTOC_GEN_GO_VERSION ?= v1.36.6
 
 .DEFAULT_GOAL := help
 
-.PHONY: help tools build fmt fmt-check vet test test-race test-integration coverage check \
+.PHONY: help tools build fmt fmt-check vet test test-race test-integration coverage parity parity-check parity-enforce check \
         money-check scripts-test proto proto-verify docs-check license license-check \
         mock-gateway clean lint gosec govulncheck enterprise-check goreleaser-check sbom
 
@@ -83,6 +83,26 @@ test-integration: ## Run env-gated integration tests (HSTONG_INTEGRATION=1 requi
 
 coverage: ## Run tests with coverage gate (>=85% on pkg/domain, internal/auth, internal/transport, internal/push, pkg/hstong{,/stream,/trade,/algo}, pkg/types, pkg/transport, pkg/services)
 	$(GO) run scripts/coverage_gate.go
+
+# The SPEC <-> v-next service parity guard. Three target names, two recipes.
+# `parity` and `parity-check` are the same report-mode run: the design note
+# (docs/runs/2026-09-26-vnext-parity-wire/design-parity-guard.md section 6)
+# names them `parity` and `parity-enforce`, while the C2 task names the
+# report-mode one `parity-check`. Both spellings are kept so neither document
+# points at a target that does not exist; there is still only one guard and one
+# recipe per mode.
+#
+# Report mode prints the gap and exits 0 for it, so the v-next work in flight
+# cannot redden CI. It still exits 1 on a broken invariant -- a route table that
+# disagrees with itself, a SPEC count that disagrees with the const block, a
+# scan root that went missing -- because those are failures, not gaps.
+parity: parity-check ## Report the SPEC <-> v-next parity gap (exit 0 unless an invariant is broken)
+
+parity-check: ## Report the SPEC <-> v-next parity gap (exit 0 unless an invariant is broken)
+	$(GO) run ./scripts/paritygate
+
+parity-enforce: ## Same guard, but exit 1 on any gap (what CI becomes at C14)
+	$(GO) run ./scripts/paritygate --enforce
 
 check: fmt vet money-check scripts-test test ## Format, vet, check money types, test scripts/ and test
 
