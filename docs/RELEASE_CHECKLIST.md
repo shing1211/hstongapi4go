@@ -31,10 +31,22 @@ manager runs through this list before tagging and pushing.
 - [ ] **7. License check** — `make license-check` passes and all new files
     carry the Apache-2.0 SPDX header.
 
-- [ ] **8. Money check** — `make money-check` passes: no `float64` money or
+- [ ] **8. Lint** — `make lint` reports `0 issues.`, using the same version CI
+    uses (golangci-lint v2.9+). `go vet` does **not** cover this: `golangci-lint`
+    runs `staticcheck` and `unused` among others, and those catch classes of defect
+    that vet and the tests both miss — a value assigned and then immediately
+    overwritten, or a helper with no callers. **Run it locally, before tagging, not
+    by waiting for CI.** This is not hypothetical: v0.1.18 was tagged and published
+    with two real lint failures, found only by the CI run that the push itself
+    triggered, and needed a superseded v0.1.19 to repair. The local checklist had
+    run build, vet, gofmt, test, race, the Python guards and mkdocs — everything
+    except the linter. A gate you can only observe after tagging is a gate that
+    arrives too late.
+
+- [ ] **9. Money check** — `make money-check` passes: no `float64` money or
     quantity fields in any `pkg/` or `client/` file.
 
-- [ ] **9. goreleaser check** — `goreleaser check --config .goreleaser.yaml`
+- [ ] **10. goreleaser check** — `goreleaser check --config .goreleaser.yaml`
     passes. **Understand its limit:** it validates configuration and nothing
     else. It does not build, and it does not check that the external binaries
     the pipeline shells out to are installed. A missing `syft` or `cosign`
@@ -43,19 +55,19 @@ manager runs through this list before tagging and pushing.
     `release.yml`; if you add a pipe that needs another tool, install it there
     too.
 
-- [ ] **10. OTel build** — `go build -tags otel ./...` and
+- [ ] **11. OTel build** — `go build -tags otel ./...` and
     `go test -tags otel -count=1 ./...` pass.
 
-- [ ] **11. Update version** — If this is a version-tagged release (not a
+- [ ] **12. Update version** — If this is a version-tagged release (not a
     pre-release snapshot), update `version` field references in documentation
     and confirm the version is consistent across docs.
 
 ## Tagging
 
-- [ ] **12. Tag format** — tags follow [SemVer](https://semver.org/):
+- [ ] **13. Tag format** — tags follow [SemVer](https://semver.org/):
     `v{major}.{minor}.{patch}`. Example: `v0.1.8`.
 
-- [ ] **13. Tag push** — after tagging, push to both remotes:
+- [ ] **14. Tag push** — after tagging, push to both remotes:
 
     ```bash
     git tag v0.1.x
@@ -63,14 +75,14 @@ manager runs through this list before tagging and pushing.
     git push gitee v0.1.x
     ```
 
-- [ ] **14. GitHub release** — the
+- [ ] **15. GitHub release** — the
     [release workflow](https://github.com/shing1211/hstongapi4go/blob/main/.github/workflows/release.yml)
     automatically creates a GitHub Release with artifacts (checksums, SBOM,
     archives). The tag push in step 13 is what triggers it, and the automatic
     `GITHUB_TOKEN` is what authorizes it, so no local token is needed. Verify the
     release at <https://github.com/shing1211/hstongapi4go/releases>.
 
-- [ ] **15. Signature verifies** — the checksum file is signed with cosign
+- [ ] **16. Signature verifies** — the checksum file is signed with cosign
     keyless over the Actions OIDC identity. This is the step that actually proves
     the artifacts came from this repository's workflow, so do not skip it because
     the release page looks correct. Download the checksums file, its bundle, and
@@ -90,7 +102,7 @@ manager runs through this list before tagging and pushing.
     must fail. Only the checksums are signed, so one successful
     `verify-blob` covers every archive.
 
-- [ ] **16. Gitee release** — **not expected, and not a `gitee:` stanza.**
+- [ ] **17. Gitee release** — **not expected, and not a `gitee:` stanza.**
     GoReleaser publishes releases to GitHub, GitLab, and Gitea only, and accepts
     exactly one of those three in `release`; a `gitee:` key is rejected with
     `field gitee not found in type config.Release`. Gitee is a separate host, not
@@ -102,17 +114,17 @@ manager runs through this list before tagging and pushing.
 
 ## Post-release
 
-- [ ] **17. SBOM published** — the `sbom` job uploads the SPDX JSON artifact.
+- [ ] **18. SBOM published** — the `sbom` job uploads the SPDX JSON artifact.
     Download from the CI run and publish alongside the release.
 
-- [ ] **18. Documentation update** — if the MkDocs site is auto-deployed,
+- [ ] **19. Documentation update** — if the MkDocs site is auto-deployed,
     verify the new version appears at
     <https://shing1211.github.io/hstongapi4go/>.
 
-- [ ] **19. Close milestone** — close the corresponding GitHub milestone and
+- [ ] **20. Close milestone** — close the corresponding GitHub milestone and
     mark all issues as completed.
 
-- [ ] **20. Announce** — post release notes to any relevant channels
+- [ ] **21. Announce** — post release notes to any relevant channels
     (optional, depending on release size).
 
 ## Hotfix Release
@@ -122,7 +134,7 @@ For a hotfix on a past version:
 1. Create a branch from the tag: `git checkout -b hotfix/v0.1.x v0.1.x`
 2. Apply the fix and add a hotfix-specific test.
 3. Bump the patch version in the tag: `v0.1.{patch+1}`.
-4. Follow steps 2–11, 12–16, 18–20.
+4. Follow steps 2–12, 13–17, 19–21.
 
 ## Rollback
 
@@ -152,5 +164,4 @@ the *checked-out commit*, and `.goreleaser.yaml` is read from that commit:
 So: if the cause is in the config, cut a new patch tag rather than re-dispatching.
 Re-dispatching from the Actions UI uses the automatic `GITHUB_TOKEN`; doing it
 through the API additionally needs a personal token. Either way, re-run the
-signature verification in step 15 afterwards to confirm what actually shipped.
-
+signature verification in step 16 afterwards to confirm what actually shipped.

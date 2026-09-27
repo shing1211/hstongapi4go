@@ -7,7 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.19] - 2026-09-26
+
+**The current release.** Identical to 0.1.18 plus the two lint fixes below, so
+`v0.1.19` is the tag to use.
+
 ## [0.1.18] - 2026-09-26
+
+**Superseded by 0.1.19, minutes after tagging.** Its CI failed on
+`golangci-lint` with two findings in the new test suite, both real. The tag is
+left in place because tags are immutable, and its published artifacts are
+byte-identical to 0.1.19's — the fix changed no production code and no test
+behaviour. Use 0.1.19.
 
 **Tests only — no production code changed.** This release hardens the v-next
 layer against regressions that had already caused real defects, before that layer
@@ -943,7 +954,7 @@ canonical in [docs/SPEC.md](./docs/SPEC.md).
 - The plaintext trade password is held in memory only, encrypted before it
   leaves the process, and never logged or embedded in an error.
 
-[Unreleased]: https://github.com/shing1211/hstongapi4go/compare/v0.1.18...HEAD
+[Unreleased]: https://github.com/shing1211/hstongapi4go/compare/v0.1.19...HEAD
 [0.1.0]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.0
 [0.1.1]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.1
 [0.1.2]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.2
@@ -963,3 +974,4 @@ canonical in [docs/SPEC.md](./docs/SPEC.md).
 [0.1.16]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.16
 [0.1.17]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.17
 [0.1.18]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.18
+[0.1.19]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.19
