@@ -78,6 +78,36 @@ outside `gen/`), `go test -count=1 ./...`, `go test -race -count=1 ./...`
 scripts/coverage_gate.go` **from a clean clone only**, `scripts/check_links.py`,
 `check_i18n.py`, `check_money.py`, `mkdocs build --strict`.
 
+### Verification labels
+
+`todos.md` cites `V1`–`V8` in its acceptance column, and until now **nothing in
+this repository defined them** — a grep for `V[1-8]` returns only `plan.md` and
+`todos.md`, so 43 acceptance references named a criterion no one could evaluate.
+The definitions below are reconstructed from how each label is used, and are
+marked where that reconstruction is a guess. **The run owner should confirm or
+correct them; if a label means something else, the acceptance column is what
+needs editing, not this table.**
+
+| Label | Command, from the list above | Proven by |
+|-------|-------------------------------|-----------|
+| V1 | `go build ./...` and `go vet ./...` | CI `build, vet, test` job |
+| V2 | `gofmt -l .` prints nothing outside `gen/` | CI `build, vet, test` job |
+| V3b | The parity guard runs and lists its gaps; **exit 0 in report mode** | `scripts/paritygate` (C2). A V-label reused for a sub-variant, hence the letter |
+| V3c | No ADR 0011 boundary violation — see `internal/layering` | C14/D2/D3 |
+| V4 | `check_links.py` reports 0 unresolved and `mkdocs build --strict` succeeds | CI `docs-check` |
+| V5 | `check_i18n.py` reports 6 languages consistent | CI `docs-check` |
+| V6 | Release assets published, and `cosign verify-blob` verifies the checksums against `release.yml` at that tag | CI `Release` (G1) |
+| V7 | The coverage gate exits 0 for all registered packages | CI `coverage gate` (B5) |
+| V8 | No stale reference to a renamed or removed identifier | E1/E3; **reconstructed, least certain** |
+
+Two labels are inferences rather than readings. **V8** is used only as "V4,V8" on
+E1 and "V4,V5,V8" on E3, and nothing names what a stale reference check would be;
+`scripts/` contains no such script, so either the label anticipates a check that
+does not exist yet or it means something narrower. **V1/V2** split build+vet from
+gofmt on the evidence of C3's "V1,V2 clean" applying to a scaffold task, but they
+could equally have been a different pair. Neither guess should be relied on
+without confirmation.
+
 ## Risks
 
 - **The price tick model is unresolved and now visible (P3).** Every price in
