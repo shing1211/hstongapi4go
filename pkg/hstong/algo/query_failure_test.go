@@ -373,17 +373,19 @@ func TestMoneyAndQuantitiesRoundTripVerbatim(t *testing.T) {
 	}`)
 }
 
-// TestUnvalidatedCodesAreForwardedToTheGateway pins the fail-open half of the
-// code surface. entrustType, sessionType, sensitivity, and action are closed
-// sets and are rejected locally, but targetStrategy, exchangeType, and
-// entrustBs are only checked for emptiness, so an unknown value is forwarded
-// unchanged and the Gateway decides. This is deliberate for targetStrategy —
-// the documented code set is self-contradictory, since "1005" is POV in the
-// parameter table and INLINE in the request examples — but exchangeType and
-// entrustBs are documented closed sets that carry no local check at all. The
-// test records the current behaviour so a change in either direction is visible;
-// it is not an endorsement, and tightening it would be a production change
-// outside a coverage pass.
+// TestUnvalidatedCodesAreForwardedToTheGateway pins the one code that is still
+// forwarded: targetStrategy. Its documented set is self-contradictory — "1005" is
+// POV in the parameter table and INLINE in the request examples — so the SDK
+// cannot decide which values are valid and only emptiness is rejected locally.
+//
+// This test previously also asserted that exchangeType and entrustBs were
+// forwarded, and used "3" as its example of an unvalidated direction. That was
+// wrong twice over: 3 is types.EntrustCloseShort, a documented short-selling
+// direction, and exchangeType and entrustBs are closed sets that are now
+// validated (A6). The test was inverted rather than deleted so that a future
+// relaxation of those two fields is visible; TestLocalRejectionSendsNothing
+// carries the fail-closed property and
+// TestValidatedCodeSetsRejectEveryOutOfSetValue enumerates the accepted sets.
 func TestUnvalidatedCodesAreForwardedToTheGateway(t *testing.T) {
 	m, rec := newManager(t, map[string]string{
 		pathAddOrder: `{"ok":true,"err":"","data":{"data":"MASTER-1"}}`,
@@ -391,21 +393,260 @@ func TestUnvalidatedCodesAreForwardedToTheGateway(t *testing.T) {
 
 	params := validAddOrder()
 	params.TargetStrategy = "9999"
-	params.ExchangeType = "Z"
-	params.EntrustBS = "3"
 
 	if _, err := m.AddOrder(context.Background(), params); err != nil {
 		t.Fatalf("AddOrder: %v", err)
 	}
 	assertRequest(t, rec.last(pathAddOrder), pathAddOrder, `{
 		"stockCode": "700.HK",
-		"exchangeType": "Z",
+		"exchangeType": "K",
 		"entrustType": "1",
 		"entrustPrice": "350.5",
 		"entrustAmount": "1000",
-		"entrustBs": "3",
+		"entrustBs": "1",
 		"targetStrategy": "9999",
 		"sessionType": "0",
 		"strategyParam": {"maxVolume": "100", "sensitivity": "1"}
 	}`)
+}
+
+// TestValidatedCodeSetsRejectEveryOutOfSetValue is the fail-closed property for
+// the two sets A6 closed. It enumerates the accepted values and drives each
+// request type through a Manager, so a value that escapes the check shows up as
+// a request recorded against the server rather than as a local error. The
+// out-of-set values are chosen to include the near-misses that a caller is
+// actually likely to send: a wrong case ("k" for the lowercase-insensitive
+// looking Hong Kong market, "V" for Shenzhen Connect), a neighbouring code, a
+// numeric where a letter belongs, and the name rather than the code.
+func TestValidatedCodeSetsRejectEveryOutOfSetValue(t *testing.T) {
+	t.Run("exchangeType", func(t *testing.T) {
+		for _, bad := range []types.ExchangeType{
+			"z", "k", "p", "vX", "T", "V", "X", "K ", "0", "1", "HK", "Shenzhen Connect",
+		} {
+			t.Run(string(bad), func(t *testing.T) {
+				m, rec := newManager(t, nil)
+
+				p := validAddOrder()
+				p.ExchangeType = bad
+				if _, err := m.AddOrder(context.Background(), p); err == nil {
+					t.Fatalf("AddOrder(exchangeType=%q) = nil error, want a local rejection", bad)
+				} else if !errors.Is(err, algo.ErrInvalidParams) {
+					t.Fatalf("AddOrder(exchangeType=%q): errors.Is(err, ErrInvalidParams) = false, err = %v", bad, err)
+				}
+				if got := rec.total(); got != 0 {
+					t.Fatalf("requests = %d, want 0 for a locally rejected call", got)
+				}
+			})
+		}
+	})
+
+	t.Run("entrustBs", func(t *testing.T) {
+		for _, bad := range []types.EntrustBS{
+			"0", "5", "9", "-1", "1.0", "01", " 1", "buy", "BUY", "3 ", "١",
+		} {
+			t.Run(string(bad), func(t *testing.T) {
+				m, rec := newManager(t, nil)
+
+				p := validAddOrder()
+				p.EntrustBS = bad
+				if _, err := m.AddOrder(context.Background(), p); err == nil {
+					t.Fatalf("AddOrder(entrustBs=%q) = nil error, want a local rejection", bad)
+				} else if !errors.Is(err, algo.ErrInvalidParams) {
+					t.Fatalf("AddOrder(entrustBs=%q): errors.Is(err, ErrInvalidParams) = false, err = %v", bad, err)
+				}
+				if got := rec.total(); got != 0 {
+					t.Fatalf("requests = %d, want 0 for a locally rejected call", got)
+				}
+			})
+		}
+	})
+}
+
+// TestEveryEndpointRejectsAnUnrecognisedExchangeType drives all seven request
+// types, not just AddOrder, so a check dropped from any single validate method
+// is caught. QueryOrderList is included in its optional shape: the field is
+// present but unrecognised, which must be refused even though an absent one is
+// accepted.
+func TestEveryEndpointRejectsAnUnrecognisedExchangeType(t *testing.T) {
+	rows := []struct {
+		name string
+		call func(context.Context, *algo.Manager) error
+	}{
+		{"AddOrder", func(ctx context.Context, m *algo.Manager) error {
+			p := validAddOrder()
+			p.ExchangeType = "Z"
+			_, err := m.AddOrder(ctx, p)
+			return err
+		}},
+		{"CancelOrder", func(ctx context.Context, m *algo.Manager) error {
+			p := validCancelOrder()
+			p.ExchangeType = "Z"
+			_, err := m.CancelOrder(ctx, p)
+			return err
+		}},
+		{"CancelEntrust", func(ctx context.Context, m *algo.Manager) error {
+			p := validCancelEntrust()
+			p.ExchangeType = "Z"
+			_, err := m.CancelEntrust(ctx, p)
+			return err
+		}},
+		{"ChangeOrder", func(ctx context.Context, m *algo.Manager) error {
+			p := validChangeOrder()
+			p.ExchangeType = "Z"
+			_, err := m.ChangeOrder(ctx, p)
+			return err
+		}},
+		{"ActionOrder", func(ctx context.Context, m *algo.Manager) error {
+			p := validActionOrder()
+			p.ExchangeType = "Z"
+			_, err := m.ActionOrder(ctx, p)
+			return err
+		}},
+		{"QueryOrderList", func(ctx context.Context, m *algo.Manager) error {
+			p := validQueryOrderList()
+			p.ExchangeType = "Z"
+			_, err := m.QueryOrderList(ctx, p)
+			return err
+		}},
+		{"QueryOrderList/optional and absent", func(ctx context.Context, m *algo.Manager) error {
+			// The control case: exchangeType and stockCode both omitted is the
+			// one QueryOrderList shape with no market in it at all, and it must
+			// be sent rather than rejected.
+			p := validQueryOrderList()
+			p.ExchangeType = ""
+			p.StockCode = ""
+			_, err := m.QueryOrderList(ctx, p)
+			return err
+		}},
+		{"QueryEntrustIDList", func(ctx context.Context, m *algo.Manager) error {
+			p := validQueryEntrustIDList()
+			p.ExchangeType = "Z"
+			_, err := m.QueryEntrustIDList(ctx, p)
+			return err
+		}},
+	}
+
+	for _, row := range rows {
+		t.Run(row.name, func(t *testing.T) {
+			m, rec := newManager(t, nil)
+
+			err := row.call(context.Background(), m)
+			if row.name == "QueryOrderList/optional and absent" {
+				if err != nil {
+					t.Fatalf("QueryOrderList with no exchangeType = %v, want the request to be sent", err)
+				}
+				if got := rec.total(); got != 1 {
+					t.Fatalf("requests = %d, want 1: an omitted optional exchangeType is not a rejection", got)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatal("error = nil, want a local rejection")
+			}
+			if !errors.Is(err, algo.ErrInvalidParams) {
+				t.Fatalf("errors.Is(err, ErrInvalidParams) = false, err = %v", err)
+			}
+			if code, ok := errs.CodeOf(err); ok {
+				t.Fatalf("errs.CodeOf(err) = (%q, true), want no code for a request that was never sent", code)
+			}
+			if got := rec.total(); got != 0 {
+				t.Fatalf("requests = %d, want 0 for a locally rejected call", got)
+			}
+		})
+	}
+}
+
+// TestEveryDocumentedCodeIsAccepted is the other half of the fail-closed
+// contract: closing a set must not narrow it. All four markets and all four
+// directions are driven through AddOrder and asserted on the wire, which also
+// proves the short-selling directions 3 and 4 reach the Gateway rather than
+// being refused by a set that mistakenly kept only buy and sell.
+func TestEveryDocumentedCodeIsAccepted(t *testing.T) {
+	exchanges := []struct {
+		code types.ExchangeType
+		want string
+	}{
+		{types.ExchangeHK, "K"},
+		{types.ExchangeUS, "P"},
+		{types.ExchangeShenzhenConnect, "v"},
+		{types.ExchangeShanghaiConnect, "t"},
+	}
+	for _, ex := range exchanges {
+		t.Run("exchangeType="+ex.want, func(t *testing.T) {
+			m, rec := newManager(t, map[string]string{
+				pathAddOrder: `{"ok":true,"err":"","data":{"data":"MASTER-1"}}`,
+			})
+
+			p := validAddOrder()
+			p.ExchangeType = ex.code
+			if _, err := m.AddOrder(context.Background(), p); err != nil {
+				t.Fatalf("AddOrder(exchangeType=%q): %v, want nil", ex.code, err)
+			}
+			assertRequest(t, rec.last(pathAddOrder), pathAddOrder, `{
+				"stockCode": "700.HK",
+				"exchangeType": "`+ex.want+`",
+				"entrustType": "1",
+				"entrustPrice": "350.5",
+				"entrustAmount": "1000",
+				"entrustBs": "1",
+				"targetStrategy": "1",
+				"sessionType": "0",
+				"strategyParam": {"maxVolume": "100", "sensitivity": "1"}
+			}`)
+		})
+	}
+
+	directions := []struct {
+		code types.EntrustBS
+		want string
+	}{
+		{types.EntrustBuy, "1"},
+		{types.EntrustSell, "2"},
+		{types.EntrustCloseShort, "3"},
+		{types.EntrustOpenShort, "4"},
+	}
+	for _, d := range directions {
+		t.Run("entrustBs="+d.want, func(t *testing.T) {
+			m, rec := newManager(t, map[string]string{
+				pathAddOrder: `{"ok":true,"err":"","data":{"data":"MASTER-1"}}`,
+			})
+
+			p := validAddOrder()
+			p.EntrustBS = d.code
+			if _, err := m.AddOrder(context.Background(), p); err != nil {
+				t.Fatalf("AddOrder(entrustBs=%q): %v, want nil", d.code, err)
+			}
+			assertRequest(t, rec.last(pathAddOrder), pathAddOrder, `{
+				"stockCode": "700.HK",
+				"exchangeType": "K",
+				"entrustType": "1",
+				"entrustPrice": "350.5",
+				"entrustAmount": "1000",
+				"entrustBs": "`+d.want+`",
+				"targetStrategy": "1",
+				"sessionType": "0",
+				"strategyParam": {"maxVolume": "100", "sensitivity": "1"}
+			}`)
+		})
+	}
+}
+
+// TestUnrecognisedDefaultExchangeTypeIsRejected proves the default substituted
+// by WithDefaultExchangeType is checked by the same rule as an explicit value.
+// The default is applied inside the Manager method before validate runs, so
+// without this the option would be a way to smuggle an unchecked market into
+// every call that relies on it.
+func TestUnrecognisedDefaultExchangeTypeIsRejected(t *testing.T) {
+	m, rec := newManager(t, nil, algo.WithDefaultExchangeType("Z"))
+
+	p := validCancelOrder()
+	p.ExchangeType = ""
+	if _, err := m.CancelOrder(context.Background(), p); err == nil {
+		t.Fatal("CancelOrder with an unrecognised default exchangeType = nil error, want a local rejection")
+	} else if !errors.Is(err, algo.ErrInvalidParams) {
+		t.Fatalf("errors.Is(err, ErrInvalidParams) = false, err = %v", err)
+	}
+	if got := rec.total(); got != 0 {
+		t.Fatalf("requests = %d, want 0 for a locally rejected call", got)
+	}
 }

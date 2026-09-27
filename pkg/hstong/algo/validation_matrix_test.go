@@ -145,6 +145,11 @@ func TestValidateRejectsEveryField(t *testing.T) {
 			p.ExchangeType = ""
 			return p.validate(opAddOrder)
 		}},
+		{"add/exchangeType not in set", opAddOrder, func() error {
+			p := fullAddOrder()
+			p.ExchangeType = "Z"
+			return p.validate(opAddOrder)
+		}},
 		{"add/entrustType required", opAddOrder, func() error {
 			p := fullAddOrder()
 			p.EntrustType = ""
@@ -178,6 +183,11 @@ func TestValidateRejectsEveryField(t *testing.T) {
 		{"add/entrustBs required", opAddOrder, func() error {
 			p := fullAddOrder()
 			p.EntrustBS = ""
+			return p.validate(opAddOrder)
+		}},
+		{"add/entrustBs not in set", opAddOrder, func() error {
+			p := fullAddOrder()
+			p.EntrustBS = "5"
 			return p.validate(opAddOrder)
 		}},
 		{"add/targetStrategy required", opAddOrder, func() error {
@@ -227,6 +237,11 @@ func TestValidateRejectsEveryField(t *testing.T) {
 			p.ExchangeType = ""
 			return p.validate(opCancelOrder)
 		}},
+		{"cancel/exchangeType not in set", opCancelOrder, func() error {
+			p := fullCancelOrder()
+			p.ExchangeType = "Z"
+			return p.validate(opCancelOrder)
+		}},
 
 		// CancelEntrustParams.validate.
 		{"cancelEntrust/orderId required", opCancelEntrust, func() error {
@@ -242,6 +257,11 @@ func TestValidateRejectsEveryField(t *testing.T) {
 		{"cancelEntrust/exchangeType required", opCancelEntrust, func() error {
 			p := fullCancelEntrust()
 			p.ExchangeType = ""
+			return p.validate(opCancelEntrust)
+		}},
+		{"cancelEntrust/exchangeType not in set", opCancelEntrust, func() error {
+			p := fullCancelEntrust()
+			p.ExchangeType = "Z"
 			return p.validate(opCancelEntrust)
 		}},
 
@@ -260,6 +280,11 @@ func TestValidateRejectsEveryField(t *testing.T) {
 		{"change/exchangeType required", opChangeOrder, func() error {
 			p := fullChangeOrder()
 			p.ExchangeType = ""
+			return p.validate(opChangeOrder)
+		}},
+		{"change/exchangeType not in set", opChangeOrder, func() error {
+			p := fullChangeOrder()
+			p.ExchangeType = "Z"
 			return p.validate(opChangeOrder)
 		}},
 		{"change/entrustPrice required", opChangeOrder, func() error {
@@ -302,6 +327,11 @@ func TestValidateRejectsEveryField(t *testing.T) {
 		{"action/exchangeType required", opActionOrder, func() error {
 			p := fullActionOrder()
 			p.ExchangeType = ""
+			return p.validate(opActionOrder)
+		}},
+		{"action/exchangeType not in set", opActionOrder, func() error {
+			p := fullActionOrder()
+			p.ExchangeType = "Z"
 			return p.validate(opActionOrder)
 		}},
 		{"action/action not in set", opActionOrder, func() error {
@@ -357,6 +387,14 @@ func TestValidateRejectsEveryField(t *testing.T) {
 			p.ExchangeType = ""
 			return p.validate(opQueryOrderList)
 		}},
+		// exchangeType is optional on this request, so the "not in set" branch
+		// is only reachable when the caller supplies one — and a supplied value
+		// outside the set is refused just as on the mutations.
+		{"query/exchangeType not in set", opQueryOrderList, func() error {
+			p := fullQueryOrderList()
+			p.ExchangeType = "Z"
+			return p.validate(opQueryOrderList)
+		}},
 
 		// QueryEntrustIDListParams.validate.
 		{"entrustQuery/orderId required", opQueryEntrustIDList, func() error {
@@ -377,6 +415,11 @@ func TestValidateRejectsEveryField(t *testing.T) {
 		{"entrustQuery/exchangeType required", opQueryEntrustIDList, func() error {
 			p := fullQueryEntrustIDList()
 			p.ExchangeType = ""
+			return p.validate(opQueryEntrustIDList)
+		}},
+		{"entrustQuery/exchangeType not in set", opQueryEntrustIDList, func() error {
+			p := fullQueryEntrustIDList()
+			p.ExchangeType = "Z"
 			return p.validate(opQueryEntrustIDList)
 		}},
 	}
@@ -427,6 +470,59 @@ func TestValidateAcceptsWellFormedRequests(t *testing.T) {
 			p.StrategyParam = StrategyParam{MaxVolume: "100", Sensitivity: SensitivityPassive}
 			return p.validate(opAddOrder)
 		}},
+	}
+
+	// exchangeType and entrustBs are closed sets (A6), so the accepted side
+	// needs the same enumeration as the rejected side: closing a set must not
+	// narrow it. In particular entrustBs 3 (close short) and 4 (open short) are
+	// documented short-selling directions and must be accepted — a check that
+	// kept only buy and sell would pass every row above and still be wrong.
+	exchanges := []types.ExchangeType{
+		types.ExchangeHK,
+		types.ExchangeUS,
+		types.ExchangeShenzhenConnect,
+		types.ExchangeShanghaiConnect,
+	}
+	directions := []types.EntrustBS{
+		types.EntrustBuy,
+		types.EntrustSell,
+		types.EntrustCloseShort,
+		types.EntrustOpenShort,
+	}
+	for _, x := range exchanges {
+		x := x
+		cases = append(cases, struct {
+			name string
+			run  func() error
+		}{"add/exchangeType accepted " + string(x), func() error {
+			p := fullAddOrder()
+			p.ExchangeType = x
+			return p.validate(opAddOrder)
+		}})
+	}
+	for _, d := range directions {
+		d := d
+		cases = append(cases, struct {
+			name string
+			run  func() error
+		}{"add/entrustBs accepted " + string(d), func() error {
+			p := fullAddOrder()
+			p.EntrustBS = d
+			return p.validate(opAddOrder)
+		}})
+	}
+	// QueryOrderList exercises its own optional field, so a valid market on
+	// that request type is proven here rather than only on AddOrder.
+	for _, x := range exchanges {
+		x := x
+		cases = append(cases, struct {
+			name string
+			run  func() error
+		}{"query/exchangeType accepted " + string(x), func() error {
+			p := fullQueryOrderList()
+			p.ExchangeType = x
+			return p.validate(opQueryOrderList)
+		}})
 	}
 
 	for _, tc := range cases {

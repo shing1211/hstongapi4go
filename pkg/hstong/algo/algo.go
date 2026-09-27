@@ -111,6 +111,60 @@ func (s Sensitivity) valid() bool {
 	}
 }
 
+// validExchange reports whether e is one of the four documented market codes.
+//
+// Unlike targetStrategy, this set is a closed one and is treated as such: the
+// Gateway documents exactly four markets (SPEC §7.3) with no non-exhaustive
+// caveat, and pkg/types carries a constant for each. A value outside the set is
+// rejected before any request is sent rather than forwarded, because
+// exchangeType on a cancel names the book the Gateway resolves the master
+// against, so an unrecognised market is a request the SDK already knows it does
+// not mean. If the vendor adds a market, validExchange and its error message
+// are updated together — the same receipt Action.Valid documents. The predicate
+// is a local unexported function rather than a method on types.ExchangeType
+// because pkg/types is inside ADR 0011's protected surface and adding an
+// exported method there would widen the public API.
+func validExchange(e types.ExchangeType) bool {
+	switch e {
+	case types.ExchangeHK, types.ExchangeUS, types.ExchangeShenzhenConnect, types.ExchangeShanghaiConnect:
+		return true
+	default:
+		return false
+	}
+}
+
+// validDirection reports whether bs is one of the four documented order
+// directions (SPEC §7.4): 1 opens a long position, 2 closes a long position,
+// 3 closes a short position, and 4 opens a short position. All four are valid;
+// 3 and 4 are the short-selling directions and rejecting them would refuse
+// legitimate orders. The set is closed on the same grounds as validExchange, and
+// pkg/hstong/future already rejects anything outside it locally
+// (future.go's validateEntrustBS), so the same types.EntrustBS value must not be
+// refused by one released surface and forwarded by another.
+func validDirection(bs types.EntrustBS) bool {
+	switch bs {
+	case types.EntrustBuy, types.EntrustSell, types.EntrustCloseShort, types.EntrustOpenShort:
+		return true
+	default:
+		return false
+	}
+}
+
+// invalidExchange builds the shared error for a market code outside the
+// documented set. The message names the four valid codes because the field is
+// case-sensitive: "v" and "t" are lowercase, so a caller that upper-cases the
+// whole string produces a code that looks right and is not.
+func invalidExchange(op string, e types.ExchangeType) error {
+	return invalid(op, fmt.Sprintf("exchangeType %q is not one of K (Hong Kong), P (US), v (Shenzhen Connect), t (Shanghai Connect)", e))
+}
+
+// invalidDirection builds the shared error for a direction outside the
+// documented set. It names all four codes, 3 and 4 included, so the message
+// cannot be read as evidence that only buy and sell are accepted.
+func invalidDirection(op string, bs types.EntrustBS) error {
+	return invalid(op, fmt.Sprintf("entrustBs %q is not one of 1 (open long), 2 (close long), 3 (close short), 4 (open short)", bs))
+}
+
 // Status is the lifecycle state of a master order as reported by
 // QueryOrderList. The codes are the algorithm-specific set documented on
 // query-algo-master-order.html and differ from types.EntrustStatus.
@@ -199,8 +253,8 @@ type AddOrderParams struct {
 	EntrustPrice string `json:"entrustPrice"`
 	// EntrustAmount is the total quantity as a decimal string.
 	EntrustAmount string `json:"entrustAmount"`
-	// EntrustBS is the buy/sell direction reused from the trade dictionary
-	// (1 buy, 2 sell).
+	// EntrustBS is the order direction reused from the trade dictionary: 1 open
+	// long, 2 close long, 3 close short, 4 open short. All four are accepted.
 	EntrustBS types.EntrustBS `json:"entrustBs"`
 	// TargetStrategy selects the execution algorithm.
 	TargetStrategy Strategy `json:"targetStrategy"`
@@ -211,12 +265,18 @@ type AddOrderParams struct {
 }
 
 // validate rejects an AddOrder request that would be malformed at the Gateway.
+// exchangeType and entrustBs are closed sets and are checked against them, not
+// merely for emptiness: a market or direction the SDK does not recognise is
+// refused here rather than sent.
 func (p AddOrderParams) validate(op string) error {
 	if p.StockCode == "" {
 		return invalid(op, "stockCode is required")
 	}
 	if p.ExchangeType == "" {
 		return invalid(op, "exchangeType is required")
+	}
+	if !validExchange(p.ExchangeType) {
+		return invalidExchange(op, p.ExchangeType)
 	}
 	if p.EntrustType == "" {
 		return invalid(op, "entrustType is required")
@@ -238,6 +298,9 @@ func (p AddOrderParams) validate(op string) error {
 	}
 	if p.EntrustBS == "" {
 		return invalid(op, "entrustBs is required")
+	}
+	if !validDirection(p.EntrustBS) {
+		return invalidDirection(op, p.EntrustBS)
 	}
 	if p.TargetStrategy == "" {
 		return invalid(op, "targetStrategy is required")
@@ -273,13 +336,17 @@ type CancelOrderParams struct {
 }
 
 // validate rejects a CancelOrder request that would be malformed at the
-// Gateway.
+// Gateway. exchangeType is a closed set: the cancel is resolved against the
+// market it names, so an unrecognised one is refused here rather than sent.
 func (p CancelOrderParams) validate(op string) error {
 	if p.OrderID == "" {
 		return invalid(op, "orderId is required")
 	}
 	if p.ExchangeType == "" {
 		return invalid(op, "exchangeType is required")
+	}
+	if !validExchange(p.ExchangeType) {
+		return invalidExchange(op, p.ExchangeType)
 	}
 	return nil
 }
@@ -296,7 +363,8 @@ type CancelEntrustParams struct {
 }
 
 // validate rejects a CancelEntrust request that would be malformed at the
-// Gateway.
+// Gateway. exchangeType is a closed set for the same reason as in CancelOrder:
+// the child is resolved against the market the request names.
 func (p CancelEntrustParams) validate(op string) error {
 	if p.OrderID == "" {
 		return invalid(op, "orderId is required")
@@ -306,6 +374,9 @@ func (p CancelEntrustParams) validate(op string) error {
 	}
 	if p.ExchangeType == "" {
 		return invalid(op, "exchangeType is required")
+	}
+	if !validExchange(p.ExchangeType) {
+		return invalidExchange(op, p.ExchangeType)
 	}
 	return nil
 }
@@ -329,7 +400,7 @@ type ChangeOrderParams struct {
 }
 
 // validate rejects a ChangeOrder request that would be malformed at the
-// Gateway.
+// Gateway. exchangeType is a closed set, as in the other mutations.
 func (p ChangeOrderParams) validate(op string) error {
 	if p.OrderID == "" {
 		return invalid(op, "orderId is required")
@@ -339,6 +410,9 @@ func (p ChangeOrderParams) validate(op string) error {
 	}
 	if p.ExchangeType == "" {
 		return invalid(op, "exchangeType is required")
+	}
+	if !validExchange(p.ExchangeType) {
+		return invalidExchange(op, p.ExchangeType)
 	}
 	if p.EntrustPrice == "" {
 		return invalid(op, "entrustPrice is required")
@@ -375,7 +449,8 @@ type ActionOrderParams struct {
 
 // validate rejects an ActionOrder request that would be malformed at the
 // Gateway. Every documented action requires orderId, targetStrategy, and
-// exchangeType; the action itself must be in the closed set.
+// exchangeType; the action itself must be in the closed set, and so must the
+// exchangeType.
 func (p ActionOrderParams) validate(op string) error {
 	if p.OrderID == "" {
 		return invalid(op, "orderId is required")
@@ -385,6 +460,9 @@ func (p ActionOrderParams) validate(op string) error {
 	}
 	if p.ExchangeType == "" {
 		return invalid(op, "exchangeType is required")
+	}
+	if !validExchange(p.ExchangeType) {
+		return invalidExchange(op, p.ExchangeType)
 	}
 	if !p.Action.Valid() {
 		return invalid(op, fmt.Sprintf("action %q is not one of 1 (START), 2 (STOP), 3 (SUSPEND), 4 (RESUME)", p.Action))
@@ -411,7 +489,10 @@ type QueryOrderListParams struct {
 }
 
 // validate rejects a QueryOrderList request that would be malformed at the
-// Gateway.
+// Gateway. exchangeType is optional here, so it is checked in its optional
+// shape: absent is accepted, present-and-unrecognised is not. Omitting the
+// market check here because the field is optional would be a different policy
+// from the one the five mutations apply to the same type.
 func (p QueryOrderListParams) validate(op string) error {
 	if p.PageNo == "" {
 		return invalid(op, "pageNo is required")
@@ -440,6 +521,9 @@ func (p QueryOrderListParams) validate(op string) error {
 	if p.StockCode != "" && p.ExchangeType == "" {
 		return invalid(op, "exchangeType is required when stockCode is set")
 	}
+	if p.ExchangeType != "" && !validExchange(p.ExchangeType) {
+		return invalidExchange(op, p.ExchangeType)
+	}
 	return nil
 }
 
@@ -455,7 +539,8 @@ type QueryEntrustIDListParams struct {
 }
 
 // validate rejects a QueryEntrustIDList request that would be malformed at the
-// Gateway.
+// Gateway. exchangeType is a closed set, as in the mutations: the child list is
+// scoped to the market the request names.
 func (p QueryEntrustIDListParams) validate(op string) error {
 	if p.OrderID == "" {
 		return invalid(op, "orderId is required")
@@ -468,6 +553,9 @@ func (p QueryEntrustIDListParams) validate(op string) error {
 	}
 	if p.ExchangeType == "" {
 		return invalid(op, "exchangeType is required")
+	}
+	if !validExchange(p.ExchangeType) {
+		return invalidExchange(op, p.ExchangeType)
 	}
 	return nil
 }
@@ -547,6 +635,12 @@ type config struct {
 // ExchangeType empty. Without it, every call whose endpoint requires a market
 // must supply one and an empty value is rejected. An empty value removes any
 // previously configured default.
+//
+// The default is substituted before validation and is then checked against the
+// same closed set as an explicit value, so configuring an unrecognised market
+// fails every call that falls back to it, with a local error and no request.
+// QueryOrderList does not apply a default, because its ExchangeType is
+// optional.
 func WithDefaultExchangeType(exchange types.ExchangeType) Option {
 	return func(c *config) { c.defaultExchangeType = exchange }
 }

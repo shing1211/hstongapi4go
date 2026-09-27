@@ -46,8 +46,15 @@
 //
 // Every method validates its arguments before any request is sent and returns an
 // error wrapping ErrInvalidParams for an empty required field, a malformed
-// amount/price, or an action code outside the documented set. In particular a
+// amount/price, or a code outside a documented closed set. In particular a
 // mutation that fails validation never reaches the Gateway.
+//
+// The closed sets are entrustType, sessionType, strategyParam.sensitivity,
+// action, exchangeType, and entrustBs; a value outside one is rejected locally
+// rather than forwarded. Two fields are deliberately not validated, because the
+// SDK cannot know their correct answer: targetStrategy, whose documented codes
+// contradict each other (see Strategy), and — because the field is optional on
+// that one request — an omitted exchangeType on QueryOrderList.
 //
 // All Manager methods are safe for concurrent use.
 package algo
