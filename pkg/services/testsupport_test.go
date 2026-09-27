@@ -219,12 +219,6 @@ func (s *sequencedExecutor) lastParams(t *testing.T) any {
 	return s.lastCall(t).params
 }
 
-// paramsAt returns the params of the ith recorded call.
-func (s *sequencedExecutor) paramsAt(t *testing.T, i int) any {
-	t.Helper()
-	return s.callAt(t, i).params
-}
-
 // ---------------------------------------------------------------------------
 // 6.3 The wire recorder and a real client
 // ---------------------------------------------------------------------------

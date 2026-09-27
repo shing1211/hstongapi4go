@@ -357,9 +357,8 @@ func TestD3CoversEveryReadOnlyTradingRoute(t *testing.T) {
 // the thirteen methods must all produce exactly one HTTP request — which is the
 // baseline the mutation rows above are measured against.
 func TestNoRetryPolicyMeansOneRequestForEveryMethod(t *testing.T) {
-	rec := newWireRecorder(map[string]string{})
 	for _, tc := range tradingErrorCases() {
-		rec = newWireRecorder(map[string]string{
+		rec := newWireRecorder(map[string]string{
 			string(tc.route): gatewayFailure(types.StatusServiceBusy, "service busy, retry later"),
 		})
 		svc := NewTradingService(newWireExecutor(t, rec))

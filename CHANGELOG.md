@@ -40,6 +40,17 @@ is wired in and any of it becomes reachable by a caller.
   dark while every happy path passed. These tests cover the failure path
   deliberately, at both the fake-executor and real-HTTP levels.
 
+### Fixed
+
+- **Two lint failures in the new test suite**, caught by CI after the tag was pushed:
+  a recorder assigned and immediately overwritten, and an unused fixture helper that
+  a superseding helper had made redundant. Both fixed at the source — the dead
+  helper deleted rather than suppressed, since dead code in a shared test fixture is
+  what rots silently.
+
+  Worth recording: this release's own verification pass missed `golangci-lint`,
+  which is a CI gate. The local pre-release checklist now runs it.
+
 ## [0.1.17] - 2026-09-26
 
 Two latent panics in `pkg/services` — the unwired v-next layer — fixed before that
