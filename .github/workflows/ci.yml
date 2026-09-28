@@ -246,16 +246,31 @@ jobs:
       - name: Fuzz ReadFrame
         run: go test ./internal/push/ -run=^$ -fuzz=FuzzReadFrame -fuzztime=30s
 
-  # Report mode, deliberately, until C14. The guard lists which documented
-  # Gateway endpoints have no v-next service method and exits 0 for that gap, so
-  # this job cannot redden CI while the C-series is in flight -- that is the
-  # whole reason report mode exists. It still exits 1 on a broken invariant (a
-  # route table that disagrees with itself, a SPEC count that disagrees with the
-  # const block, a missing scan root), and those conditions are all false today.
+  # Enforcing mode, since C14. This job used to run `make parity` — report
+  # mode — so it could not redden CI while the C-series was in flight, which was
+  # the whole reason report mode existed. C15 closed the last two endpoints
+  # (RouteTradeSubscribe, RouteTradeUnsubscribe), so the tree reached 51/51 with a
+  # zero gap and there is nothing left for report mode to tolerate.
   #
-  # C14 flips this one line to `make parity-enforce` and adds the job to
-  # docs/RELEASE_CHECKLIST.md. No `needs:`, like `coverage`, so a parity failure
-  # is never masked by a green test job and is never attributed to one.
+  # What enforcing mode means here: the job fails if any endpoint documented in
+  # docs/SPEC.md has no v-next service method (the gap), and it also fails if the
+  # reference walk left a secondary diagnostic unresolved — a route reachable only
+  # by `client.Route("...")` conversion, a service that spells a route path out as
+  # a string literal, or a `client.Route`-typed struct field whose value the walk
+  # cannot follow. A `client.Route`-typed *function parameter* is deliberately not
+  # a diagnostic: it is a signature, not a reference, so a value reaches it only at
+  # a call site, and call sites inside the scan roots are walked like any other
+  # code. C14 narrowed that distinction so the real tree carries zero diagnostics
+  # and the job can be red honestly; before the narrowing this job would have
+  # printed "ERROR parity:" and "PASS: 51/51" on the same run.
+  #
+  # Report mode is still available locally and unchanged: `make parity` (or
+  # `make parity-check`, the same recipe under the name the C2 task used) prints the
+  # full gap report and exits 0 for any gap, so the same measurement is available
+  # for a diagnosis without turning it into a gate.
+  #
+  # No `needs:`, like `coverage`, so a parity failure is never masked by a green
+  # test job and is never attributed to one.
   parity:
     name: parity guard
     runs-on: ubuntu-latest
@@ -265,8 +280,8 @@ jobs:
         with:
           go-version-file: go.mod
           check-latest: true
-      - name: Run parity guard (report mode)
-        run: make parity
+      - name: Run parity guard (enforcing mode)
+        run: make parity-enforce
 
   coverage:
     name: coverage gate

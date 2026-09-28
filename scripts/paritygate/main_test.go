@@ -737,45 +737,45 @@ func TestInlineConversionBlindSpot(t *testing.T) {
 			"a second file reached it by conversion:\n%s", target, out)
 	}
 
-	// In enforcing mode the finding is re-labelled ERROR. What it is *not* is fatal,
-	// and this row now measures that rather than assuming it.
+	// In enforcing mode the finding is re-labelled ERROR -- and since C14 it is
+	// also fatal. What it was *not* is fatal, and this row used to assert exactly
+	// that, and it had to be inverted rather than deleted.
 	//
 	// The design's verification plan calls this "the one class of secondary finding
-	// that can make a green run mean something is unproven", and this case used to
-	// assert exit 1 — but it passed for the wrong reason. While the real tree carried
-	// a gap of 2, enforcing mode exited 1 because of the *gap*, and the diagnostic
-	// contributed nothing; the assertion looked like it was covering the diagnostic
-	// and was not. On a zero-gap tree the distinction is visible: the gap is 0, so
-	// anything that made this run fail would have to be the diagnostic, and the
-	// diagnostic does not. report() sets the exit code from len(problems) and from
-	// the gap only; a diagnostic never enters that expression.
+	// that can make a green run mean something is unproven", and the case asserted
+	// exit 1 for a long time -- but it passed for the wrong reason. While the real
+	// tree carried a gap of 2, enforcing mode exited 1 because of the *gap*, and
+	// the diagnostic contributed nothing; the assertion looked like it was covering
+	// the diagnostic and was not. C15 corrected the row to measure what the code
+	// actually did (exit 0, because report() set the code from the problem count
+	// and the gap only) and recorded that the row is what C14 should decide about.
 	//
-	// This is recorded rather than fixed here because scripts/paritygate/main.go is
-	// outside C15's scope, and it matters to C14: the real tree carries a standing
-	// diagnostic of exactly this kind (pkg/services/executor.go:36, the Executor.Do
-	// client.Route-typed parameter), so `make parity-enforce` prints a line reading
-	// "ERROR parity: ..." and exits 0. A CI log that says ERROR and exits 0 is the
-	// exact misreading report mode's vocabulary rules exist to prevent, and it is the
-	// one thing C14 should decide about before flipping the job.
+	// C14 decided: an enforcing run that leaves a route reference unattributable
+	// must fail, because a diagnostic is a statement that the walk did not account
+	// for something, and a run that cannot say what it did not see is not a
+	// measurement. The run below is at a zero gap, so the gap contributes nothing
+	// to its exit code and the diagnostic is the only thing that can.
 	//
-	// The PASS line below is the other half of that: it is decided by the gap alone,
-	// so an enforcing run with a zero gap and an unresolvable reference prints both
-	// "ERROR parity:" and "PASS:" and exits 0. Both facts are asserted so a change to
-	// either is a failing test rather than a surprise in a CI log.
+	// The PASS line is the other half. It is keyed on the exit code rather than on
+	// the gap, so this run -- a zero gap that nonetheless fails -- prints no PASS.
+	// Both facts are asserted so a change to either is a failing test rather than a
+	// surprise in a CI log.
 	out, code = run(root, true)
-	if code != 0 {
-		t.Errorf("enforcing mode with a zero gap and one diagnostic exits %d, want 0: a "+
-			"secondary diagnostic does not enter the exit code. If this ever starts "+
-			"failing, the guard's exit contract has changed and C15's note here is stale:\n%s",
-			code, out)
+	if code != 1 {
+		t.Errorf("enforcing mode with a zero gap and one outstanding diagnostic exits %d, want 1: "+
+			"a secondary diagnostic is a statement that the walk could not account for a route "+
+			"reference, and C14 made it fatal in this mode. If this ever starts failing, the "+
+			"exit contract in report() has changed:\n%s", code, out)
 	}
 	if !diagnosticAt(out, "ERROR parity", "pkg/services/parity_conversion.go", `referenced without its named constant`) {
 		t.Errorf("want the conversion promoted to an ERROR-labelled line in enforcing mode:\n%s", out)
 	}
-	if !containsWord(out, "PASS") {
-		t.Errorf("the zero-gap enforcing run does not print PASS. If that ever changes, the "+
-			"PASS line is being decided by something other than the gap and C15's note here "+
-			"is stale:\n%s", out)
+	if !strings.Contains(out, "exit=1 (a secondary diagnostic is unresolved") {
+		t.Errorf("want the exit line to name the diagnostic as the reason, so a red CI log is diagnosable:\n%s", out)
+	}
+	if containsWord(out, "PASS") {
+		t.Errorf("a failing enforcing run must never print PASS, and the gap is 0 here, so "+
+			"the diagnostic is the only thing that can have failed it:\n%s", out)
 	}
 }
 
@@ -791,6 +791,198 @@ func diagnosticAt(out, verb, rel, want string) bool {
 		}
 	}
 	return false
+}
+
+// findings returns every WARN/ERROR line a report carries, whether a secondary
+// diagnostic or an integrity problem, so a case that needs "this run had nothing
+// to report beyond its numbers" can say so in one assertion rather than by
+// matching prefixes inline. Both prefixes are collected because a narrowing that
+// turned a diagnostic into a problem would otherwise read as the same silence.
+func findings(out string) []string {
+	var got []string
+	for _, line := range strings.Split(out, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "WARN parity:") || strings.HasPrefix(trimmed, "ERROR parity:") {
+			got = append(got, trimmed)
+		}
+	}
+	return got
+}
+
+// TestRouteTypedParameterIsNotADiagnostic pins the half of the client.Route
+// field check that C14 narrowed away, and it is pinned on the real tree as well
+// as on a fixture.
+//
+// A `client.Route`-typed parameter is a declaration of what a function accepts.
+// It is not a reference to a route, and it cannot become one: a value reaches a
+// parameter only at a call site, and a call site inside the scan roots is walked
+// like any other code. The standing example is Executor.Do's own signature at
+// pkg/services/executor.go:36 -- the seam every v-next call passes through, with
+// all 51 routes credited at the call sites on the far side of it.
+//
+// This mattered because C14 made a secondary diagnostic fatal in enforcing mode.
+// With the parameter half still reported, the real tree could never have had a
+// green enforcing run: the diagnostic was a permanent false positive, and
+// Executor is correct -- client.Client must keep satisfying it -- so "deal with
+// the parameter" was not an available fix. The two halves are therefore proved in
+// opposite directions by TestRouteTypedParameterIsNotADiagnostic and
+// TestRouteTypedStructFieldIsADiagnostic, and neither can be re-widened without
+// turning the other red.
+func TestRouteTypedParameterIsNotADiagnostic(t *testing.T) {
+	// Every shape a signature can take. An interface method's `route client.Route`
+	// is the one most likely to leak back in: its *ast.Field has no names and its
+	// type is an *ast.FuncType, so a walk keyed on the field's own type would see
+	// nothing and one keyed on the field itself would see the parameter. The
+	// `codec client.Codec` result is the over-widening control: a check that
+	// reported any client-qualified field rather than the route type itself would
+	// flag it.
+	const body = "package services\n\n" +
+		"import \"github.com/shing1211/hstongapi4go/client\"\n\n" +
+		"type parityIface interface {\n\tDo(route client.Route) error\n}\n\n" +
+		"type parityHolder struct{}\n\n" +
+		"func (parityHolder) M(route client.Route) client.Route { return route }\n\n" +
+		"func parityFn(route client.Route, codec client.Codec) client.Route { return route }\n\n" +
+		"var parityLit = func(route client.Route) client.Route { return route }\n\n" +
+		"var _ parityIface = parityHolder{}\n"
+
+	root := fixture(t)
+	writeFile(t, root, "pkg/services/parity_parameter.go", body)
+
+	out, code := run(root, false)
+	if code != 0 {
+		t.Fatalf("report mode must exit 0, got %d:\n%s", code, out)
+	}
+	if got := findings(out); len(got) != 0 {
+		t.Errorf("a client.Route-typed parameter is a signature, not a reference, so it must "+
+			"not be reported; got %d finding(s):\n%s\n%s", len(got), strings.Join(got, "\n"), out)
+	}
+	if !strings.Contains(out, "PARITY: 51/51 gap=0") {
+		t.Errorf("the fixture is the real tree plus an unreported signature, so coverage must "+
+			"be unchanged:\n%s", out)
+	}
+
+	// The real tree, in the mode CI now runs. This is the assertion that would
+	// have reddened the job on the day of the flip if the narrowing were reverted,
+	// and it names the file so a re-widened check is a failing test rather than a
+	// red log somebody has to diagnose.
+	for _, enforce := range []bool{false, true} {
+		out, code = run(repoRoot(t), enforce)
+		got := findings(out)
+		if len(got) != 0 {
+			t.Errorf("enforce=%v: the real tree must carry no findings at all, got %d:\n%s\n%s",
+				enforce, len(got), strings.Join(got, "\n"), out)
+		}
+		for _, f := range got {
+			if strings.Contains(f, "executor.go") {
+				t.Errorf("enforce=%v: Executor.Do's client.Route-typed parameter at "+
+					"pkg/services/executor.go:36 is not a blind spot and must never be reported: %s",
+					enforce, f)
+			}
+		}
+		if code != 0 {
+			t.Errorf("enforce=%v: the real tree must exit 0, got %d:\n%s", enforce, code, out)
+		}
+	}
+}
+
+// TestRouteTypedStructFieldIsADiagnostic is the half that survived the narrowing,
+// and it is the direction that keeps enforcing mode honest: a route stored in a
+// field is written somewhere the walk may never reach, so it can be neither
+// credited nor withdrawn by name, and an enforcing run that cannot tell must fail.
+//
+// Every assertion here is about a fixture. Proving this on the real tree would
+// mean putting a client.Route-typed field into pkg/services, which is the thing
+// that must never ship, so the case builds a throwaway tree instead -- the same
+// discipline the design's verification plan states, and the reason the guard's
+// mutation table can outlive any single state of the repository.
+func TestRouteTypedStructFieldIsADiagnostic(t *testing.T) {
+	// A named field and an anonymous inline struct literal's field type, so both
+	// spellings of a struct field are covered. The interface method below is the
+	// control from the other test: same file, same type, parameter position, and
+	// it must not be reported.
+	const body = "package services\n\n" +
+		"import \"github.com/shing1211/hstongapi4go/client\"\n\n" +
+		"type parityStored struct {\n\troute client.Route\n\tname  string\n}\n\n" +
+		"type parityIface interface {\n\tDo(route client.Route) error\n}\n\n" +
+		"var _ = parityStored{}\n\n" +
+		"var _ = struct{ route client.Route }{}\n\n" +
+		"func parityUse(c client.Route) client.Route {\n\treturn c\n}\n"
+
+	build := func(t *testing.T) string {
+		t.Helper()
+		root := fixture(t)
+		writeFile(t, root, "pkg/services/parity_stored.go", body)
+		return root
+	}
+
+	// Report mode: reported, not fatal. The two exit codes are different outcomes
+	// and the design's report-mode contract covers only one of them, so this is
+	// stated rather than assumed.
+	root := build(t)
+	out, code := run(root, false)
+	if code != 0 {
+		t.Fatalf("report mode never fails on a diagnostic, got %d:\n%s", code, out)
+	}
+	if !diagnosticAt(out, "WARN parity", "pkg/services/parity_stored.go", `a client.Route-typed struct field`) {
+		t.Errorf("want the stored-route diagnostic in report mode:\n%s", out)
+	}
+	if !strings.Contains(out, "PARITY: 51/51 gap=0") {
+		t.Errorf("a stored route must not move the coverage figure, and this tree is the real one:\n%s", out)
+	}
+
+	// Enforcing mode: the same finding, fatal. The gap is 0, so nothing in the
+	// coverage figure can be what failed this run.
+	root = build(t)
+	out, code = run(root, true)
+	if code != 1 {
+		t.Fatalf("enforcing mode with an unresolved stored-route diagnostic must exit 1, got %d:\n%s", code, out)
+	}
+	if !diagnosticAt(out, "ERROR parity", "pkg/services/parity_stored.go", `a client.Route-typed struct field`) {
+		t.Errorf("want the finding promoted to an ERROR-labelled line in enforcing mode:\n%s", out)
+	}
+	if !strings.Contains(out, "exit=1 (a secondary diagnostic is unresolved") {
+		t.Errorf("want the exit line to name the diagnostic as the reason:\n%s", out)
+	}
+	if containsWord(out, "PASS") {
+		t.Errorf("a zero-gap run that fails on a diagnostic must not print PASS:\n%s", out)
+	}
+	if !strings.Contains(out, "PARITY: 51/51 gap=0 mode=enforce enforce=on") {
+		t.Errorf("the measurement itself is still valid and must still be printed:\n%s", out)
+	}
+}
+
+// TestEnforcingModeWithABrokenInvariantPrintsNoPass covers the third way an
+// enforcing run can fail, which nothing else in this suite reaches: a run whose
+// inputs it could not read.
+//
+// open and wired are both 0 in that state, so a PASS line keyed on the gap
+// renders as "PASS: 0/0 endpoints named by a v-next service" on a run that
+// measured nothing at all -- the same ERROR/PASS contradiction C14 ends, reached
+// through a different door. Keying PASS on the exit code closes both.
+func TestEnforcingModeWithABrokenInvariantPrintsNoPass(t *testing.T) {
+	root := fixture(t)
+	spec := readFile(t, root, specFile)
+	mutated := strings.Replace(spec, "**Total: 51 HTTP endpoints**", "**Total: 52 HTTP endpoints**", 1)
+	if mutated == spec {
+		t.Fatal("the fixture SPEC does not carry the Total line this test mutates")
+	}
+	writeFile(t, root, specFile, mutated)
+
+	out, code := run(root, true)
+	if code != 1 {
+		t.Fatalf("enforcing mode must exit 1 on a broken invariant, got %d:\n%s", code, out)
+	}
+	if containsWord(out, "PASS") {
+		t.Errorf("a run that could not measure must not print PASS, and \"PASS: 0/52\" is exactly "+
+			"what it used to print here -- SPEC's total is readable, so the run returns before it "+
+			"can be compared and open is 0:\n%s", out)
+	}
+	if !strings.Contains(out, "NOT MEASURED") {
+		t.Errorf("want coverage reported as not measured:\n%s", out)
+	}
+	if !strings.Contains(out, "exit=1 (an integrity check failed") {
+		t.Errorf("want the exit line to name the integrity failure:\n%s", out)
+	}
 }
 
 // TestRoutePathLiteralIsReported covers the second secondary diagnostic: a

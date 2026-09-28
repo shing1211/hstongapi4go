@@ -10,8 +10,15 @@ manager runs through this list before tagging and pushing.
 
 - [ ] **2. CI is green** — go to
     <https://github.com/shing1211/hstongapi4go/actions> and confirm all jobs
-    (`build`, `lint`, `security`, `coverage`, `goreleaser`, `sbom`, `docs`,
-    `license`, `proto`) pass on the release commit.
+    (`build`, `lint`, `security`, `parity`, `coverage`, `goreleaser`, `sbom`,
+    `docs`, `license`, `proto`) pass on the release commit. **`parity` runs the
+    v-next endpoint-parity guard in enforcing mode** (`make parity-enforce`,
+    since C14), so a green run is a claim rather than an absence of one: every
+    endpoint documented in `docs/SPEC.md` has a v-next service method, and the
+    guard's reference walk left nothing unresolved. Reproduce it locally with
+    the same target before tagging, and use `make parity` if you want the full
+    report without the gate (report mode prints the same measurement and exits 0
+    for any gap).
 
 - [ ] **3. Offline tests** — `go test -race -count=1 ./...` passes locally
     without any credentials or network access.

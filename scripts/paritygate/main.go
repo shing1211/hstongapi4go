@@ -8,7 +8,24 @@
 // for any gap, so a run in the middle of the v-next work cannot redden CI. It
 // still exits 1 on a broken invariant, because "report mode" means "never fails
 // on a gap", not "never fails". Enforcing mode (--enforce) additionally exits 1
-// when the gap is non-zero.
+// when the gap is non-zero, or when a secondary diagnostic is outstanding.
+//
+// C14 is what makes the enforcing mode the CI default, and it is also the change
+// that made a diagnostic fatal in that mode. The reason is one the log can show
+// rather than argue about: before it, an enforcing run at a zero gap with one
+// outstanding diagnostic printed "ERROR parity: ..." and "PASS: 51/51 ..." on
+// the same run and exited 0. A run that contradicts itself is worse than a run
+// that fails, because a reader has no way to know which half to believe.
+//
+// Making the diagnostic fatal was only safe once the diagnostic stopped firing
+// on a permanent false positive. It used to fire on a client.Route-typed
+// function or method *parameter* -- specifically Executor.Do's signature at
+// pkg/services/executor.go:36, which every v-next call passes through -- and
+// that is a declaration of what a function accepts, not a reference to a route.
+// A value enters a parameter only at a call site, and call sites inside the scan
+// roots are walked like any other code, so suppressing it loses nothing. A
+// client.Route-typed *struct field* is the opposite and is still reported: a
+// route stored in a field is put there somewhere the walk cannot see.
 //
 // The canonical route set is parsed out of client/routes.go rather than obtained
 // from client.Routes(). That is deliberate: the registry would then come from
@@ -180,7 +197,7 @@ func main() {
 	fs := flag.NewFlagSet("paritygate", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	fs.StringVar(&cfg.Root, "root", "", "repository root to read (default: resolved from the source file, then the working directory)")
-	fs.BoolVar(&cfg.Enforce, "enforce", false, "exit 1 when any declared endpoint has no v-next service method")
+	fs.BoolVar(&cfg.Enforce, "enforce", false, "exit 1 when any declared endpoint has no v-next service method, or when a secondary diagnostic is outstanding")
 	// --enforce is a flag and not an environment variable on purpose. It
 	// appears in the `run:` line of the CI step, so the mode is greppable in
 	// the workflow and readable in the log, and default-off makes the safe
@@ -227,8 +244,9 @@ type reference struct {
 }
 
 // diagnostic is a secondary finding: something the reference walk cannot resolve
-// on its own. Diagnostics are warnings in report mode and errors in enforcing
-// mode.
+// on its own. Diagnostics are warnings in report mode, which reports them and
+// exits 0 anyway, and errors in enforcing mode, which fails on them: a run that
+// cannot say which route references it did not see must not be green.
 type diagnostic struct {
 	rel  string
 	line int
@@ -847,24 +865,67 @@ func scanFile(path, rel string, declaredNames, declaredPaths map[string]bool) ([
 					what: fmt.Sprintf("string literal %q is the declared route %q (or one of the two Gateway aliases); a service that builds the path itself is never credited by name", value, canonical),
 				})
 			}
-		case *ast.Field:
-			// A client.Route-typed parameter or struct field. The route can then
-			// only be supplied from outside the scan roots, so no textual walk
-			// can attribute it. This is the honest limit of the guard, reported
-			// rather than resolved.
-			if sel, ok := node.Type.(*ast.SelectorExpr); ok && isPkgIdent(sel.X) && sel.Sel.Name == "Route" {
-				diags = append(diags, diagnostic{
-					rel:  rel,
-					line: fset.Position(node.Pos()).Line,
-					what: fmt.Sprintf("a %s.%s-typed parameter or field: the route can only be supplied from outside the scan roots, so no textual walk can attribute it", pkgIdent, sel.Sel.Name),
-				})
-			}
 		}
 		return true
 	})
 
+	checkStoredRoutes(fset, file, rel, &diags)
 	probs = append(probs, checkClientBindings(fset, file, rel, &diags)...)
 	return refs, diags, probs
+}
+
+// checkStoredRoutes reports every client.Route-typed *struct field* declared in a
+// scanned file. It is the one shape where a route reference can exist in the
+// scanned set and still be unattributable, and it is fatal in enforcing mode
+// because of that: a route can be withdrawn into a field, or a route can be
+// implemented through one, and neither direction is resolvable from the
+// declaration.
+//
+// # Why a function or method parameter is not reported
+//
+// The distinction is mechanical rather than a matter of taste. Both a parameter
+// and a struct field are an *ast.Field, so a walk that matched on the node type
+// alone covered both -- and the parameter half fired permanently on
+// pkg/services/executor.go:36, which is Executor.Do's own signature:
+//
+//	Do(ctx context.Context, op string, route client.Route, params any, codec client.Codec, out any) error
+//
+// That declaration states what the interface *accepts*. It is not a reference to
+// a route, and it cannot become one: a value reaches a parameter only at a call
+// site, and every call site inside the scan roots is walked by scanFile like any
+// other code. The 51 routes are credited at those call sites, on the far side of
+// this parameter, which is the point of it. Reporting the signature therefore
+// reported a blind spot that does not exist -- and since Executor is correct and
+// client.Client must keep satisfying it, "deal with the parameter" was not an
+// available fix, so a fatal diagnostic would have reddened CI permanently.
+//
+// The field half is the opposite. A stored value is written somewhere the walk
+// may never visit, and nothing in the declaration says what.
+//
+// The walk is over *ast.StructType rather than *ast.Field, so which of the two is
+// being examined is decided by the node the walk descends into rather than by
+// string-matching the type, and an interface method's `route client.Route` --
+// which is a *ast.FuncType parameter, the suppressed case -- cannot leak in.
+func checkStoredRoutes(fset *token.FileSet, file *ast.File, rel string, diags *[]diagnostic) {
+	ast.Inspect(file, func(n ast.Node) bool {
+		st, ok := n.(*ast.StructType)
+		if !ok || st.Fields == nil {
+			return true
+		}
+		for _, f := range st.Fields.List {
+			sel, ok := f.Type.(*ast.SelectorExpr)
+			if !ok || !isPkgIdent(sel.X) || sel.Sel.Name != "Route" {
+				continue
+			}
+			*diags = append(*diags, diagnostic{
+				rel:  rel,
+				line: fset.Position(f.Pos()).Line,
+				what: fmt.Sprintf("a %s.%s-typed struct field: a route stored in a field is written somewhere the walk may not reach, so it can be neither credited nor withdrawn by name",
+					pkgIdent, sel.Sel.Name),
+			})
+		}
+		return true
+	})
 }
 
 // isPkgIdent reports whether expr is the bare identifier `client`.
@@ -1139,11 +1200,31 @@ func resolveRoot(explicit, routesRelPath string) string {
 
 // report renders the whole output and returns the exit code.
 //
-// The exit contract, in one line: exit 1 if and only if an integrity check
-// failed, or --enforce was given and the gap is non-zero. Report mode therefore
-// never fails *on a gap* -- and a report-mode run that exits 0 for 22 unwired
-// endpoints and a report-mode run that exits 0 on a corrupt SPEC are very
-// different outcomes, which is the whole reason there are two modes.
+// # The exit contract
+//
+// Before C14: exit 1 if and only if an integrity check failed, or --enforce was
+// given and the gap was non-zero. A secondary diagnostic never entered the
+// expression.
+//
+// After C14: exit 1 if and only if an integrity check failed; or --enforce was
+// given and either the gap is non-zero or a secondary diagnostic is outstanding.
+//
+// The added clause is what makes an enforcing run's PASS line trustworthy. A
+// diagnostic is a statement that the walk could not account for a route
+// reference, so leaving it out of the exit code allowed one run to print
+// "ERROR parity: ..." and "PASS: 51/51 ..." together and exit 0 -- the log
+// contradicting itself, which is the precise failure the vocabulary rules above
+// exist to prevent. It holds the diagnostic to the same standard as an integrity
+// failure: a run that cannot say what it did not see is not a measurement.
+//
+// # Report mode never fails on a gap
+//
+// Neither the gap nor a diagnostic is fatal outside enforcing mode, and this is
+// the invariant report mode exists to protect. A report-mode run that exits 0 for
+// 22 unwired endpoints, and a report-mode run that exits 0 while printing a
+// diagnostic, are both correct -- both are loudly not-parity runs. A
+// report-mode run that exits 0 on a corrupt SPEC is not, and that is why
+// "report mode" never meant "never fails".
 func (a analysis) report() (string, int) {
 	var b strings.Builder
 
@@ -1153,7 +1234,7 @@ func (a analysis) report() (string, int) {
 		wired = len(a.wiredName)
 	}
 	code := 0
-	if len(a.problems) > 0 || (a.cfg.Enforce && open > 0) {
+	if len(a.problems) > 0 || (a.cfg.Enforce && (open > 0 || len(a.diags) > 0)) {
 		code = 1
 	}
 
@@ -1298,13 +1379,26 @@ func (a analysis) report() (string, int) {
 		} else {
 			b.WriteString("  exit=1 (an integrity check failed; report mode never fails on a gap, but it does fail on a broken invariant)\n")
 		}
-	case open == 0:
-		// The one place PASS is allowed: the gap is zero and the mode is
-		// enforcing, so this is a claim rather than an absence of one.
+	case code == 0:
+		// The one place PASS is allowed, and it is keyed on the exit code rather
+		// than on the gap for two reasons that only C14's contract separates. A
+		// zero gap with an outstanding diagnostic is a failure, and printing PASS
+		// there is the ERROR/PASS contradiction C14 exists to end. And a run that
+		// could not measure has open == 0 too, so keying on the gap alone also
+		// printed a PASS line on a run that measured nothing -- observed as
+		// "PASS: 0/52" on a SPEC/code count mismatch, where the SPEC total is
+		// known but the run returns before it can be compared.
 		fmt.Fprintf(&b, "  PASS: %d/%d endpoints named by a v-next service; 0 NOT implemented\n", wired, a.spec.total)
 		b.WriteString("  exit=0 (every declared endpoint is named by a v-next service)\n")
 	default:
-		b.WriteString("  exit=1 (--enforce requires every declared endpoint to be named by a v-next service)\n")
+		reason := "a secondary diagnostic is unresolved; --enforce requires the reference walk to account for every route reference"
+		switch {
+		case len(a.problems) > 0:
+			reason = "an integrity check failed; a run that cannot account for its own inputs is not a parity result"
+		case open > 0:
+			reason = "--enforce requires every declared endpoint to be named by a v-next service"
+		}
+		fmt.Fprintf(&b, "  exit=1 (%s)\n", reason)
 	}
 	return b.String(), code
 }
