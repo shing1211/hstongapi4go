@@ -401,13 +401,6 @@ type CondOrderWire struct {
 	CondTrackType string             `json:"condTrackType"`
 }
 
-type CondOrderPageWire struct {
-	Data        []CondOrderWire `json:"data"`
-	CurPageNo   int32           `json:"curPageNo"`
-	CurPageSize int32           `json:"curPageSize"`
-	TotalPages  int64           `json:"totalPages"`
-}
-
 type MaxAvailableWire struct {
 	PositionStatus               string `json:"positionStatus"`
 	Position                     string `json:"position"`
@@ -447,10 +440,6 @@ type RateWire struct {
 	CurrencyCode               string `json:"currencyCode"`
 	CurrencyDesc               string `json:"currencyDesc"`
 	InterestRateWithinMortgage string `json:"interestRateWithinMortgage"`
-}
-
-type OrderListWire struct {
-	Data []EntrustWire `json:"data"`
 }
 
 type CancelResultWire struct {

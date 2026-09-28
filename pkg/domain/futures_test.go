@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"os"
 	"strconv"
 	"strings"
 	"testing"
@@ -834,5 +835,134 @@ func TestFuturesTickStringAgreesWithTheWireRendering(t *testing.T) {
 	if got := futuresTickString(FuturesProductFromDTO(&row).DecInPrice); got != "0.01" {
 		t.Errorf("the derived tick = %q, want 0.01; a disagreeing priceDecimalPoint "+
 			"must not become the source", got)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// C3b - the envelope-in-domain mistake has no example left to copy
+// ---------------------------------------------------------------------------
+
+// TestDomainDeclaresNoEnvelopeIs the structural guard for the rule this file's
+// header states and the futures move obeyed: a payload the Gateway sends as a row
+// lives here, and an envelope that holds rows lives in the service layer that
+// decodes it.
+//
+// The rule is otherwise unassertable, because a test cannot reference a type that
+// is not there. So this reads the package's own sources as text and looks for the
+// shape rather than the name: an exported struct that carries a slice of rows plus
+// the Gateway's page counters is an envelope, and an envelope here is a type with
+// no decoder in its own package. It is the same test internal/layering would write
+// if it owned the shape, expressed locally so the failure names this rule rather
+// than a dependency edge.
+//
+// C3b deleted the two instances this repository carried — trading.go's
+// CondOrderPageWire and OrderListWire — after a repo-wide search found no decoder
+// for either. A test that only said "those two are gone" would pass the moment
+// somebody added a third, which is why the assertion is on the shape.
+func TestDomainDeclaresNoEnvelope(t *testing.T) {
+	// The page counters SPEC gives a paged list reply. An envelope is the shape
+	// that carries a row slice together with them.
+	counters := []string{"curPageNo", "curPageSize", "totalPageNo", "totalPages", "lastPage"}
+
+	entries, err := os.ReadDir(".")
+	if err != nil {
+		t.Fatalf("reading the package directory: %v", err)
+	}
+	checked := 0
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		source, readErr := os.ReadFile(name)
+		if readErr != nil {
+			t.Fatalf("reading %s: %v", name, readErr)
+		}
+		checked++
+		text := string(source)
+		for _, decl := range exportedStructDecls(text) {
+			body := decl.body
+			sliceOfRows := false
+			carriesCounter := false
+			for _, counter := range counters {
+				if strings.Contains(body, counter) {
+					carriesCounter = true
+				}
+			}
+			sliceOfRows = strings.Contains(body, "[]") &&
+				(strings.Contains(body, "Wire") || strings.Contains(body, "data"))
+			if sliceOfRows && carriesCounter {
+				t.Errorf("%s declares exported type %s, which carries a row slice together with "+
+					"the Gateway's page counters. That is an envelope, and an envelope belongs to "+
+					"the service layer that decodes it: a type here with no decoder in its own "+
+					"package is the mistake C3b removed (CondOrderPageWire, OrderListWire), and "+
+					"pkg/domain importing pkg/services to fix it would be a cycle besides",
+					name, decl.name)
+			}
+		}
+	}
+	if checked == 0 {
+		t.Fatal("no source file was scanned, so this test would pass vacuously")
+	}
+}
+
+// exportedStructDecls is a small reader for `type Name struct {` … `}` in a Go
+// source file, returned with the unexported names skipped. It is deliberately
+// textual rather than a go/ast walk: the assertion is about a *shape* in a comment
+// or a declaration, and a text read also catches an envelope reintroduced in a
+// file the parser would have to be taught about.
+func exportedStructDecls(source string) []struct {
+	name string
+	body string
+} {
+	var out []struct {
+		name string
+		body string
+	}
+	lines := strings.Split(source, "\n")
+	for i := 0; i < len(lines); i++ {
+		name, ok := strings.CutPrefix(strings.TrimSpace(lines[i]), "type ")
+		if !ok {
+			continue
+		}
+		name, ok = strings.CutSuffix(name, " struct {")
+		if !ok {
+			continue
+		}
+		if name == "" || name[0] < 'A' || name[0] > 'Z' {
+			continue
+		}
+		var body strings.Builder
+		for j := i + 1; j < len(lines) && lines[j] != "}"; j++ {
+			body.WriteString(lines[j])
+			body.WriteByte('\n')
+		}
+		out = append(out, struct {
+			name string
+			body string
+		}{name: name, body: body.String()})
+	}
+	return out
+}
+
+// TestDomainTradingHasNoDeadEnvelope is the named half of the guard above, and it
+// exists because a shape test cannot report a *name*.
+//
+// It asserts the two types C3b deleted are gone from this package's sources, by
+// name. That is a weaker assertion than the shape test on purpose: the shape test
+// is what stops the mistake returning, and this one is what makes the deletion
+// itself a checked fact rather than a claim in a commit message.
+func TestDomainTradingHasNoDeadEnvelope(t *testing.T) {
+	source, err := os.ReadFile("trading.go")
+	if err != nil {
+		t.Fatalf("reading trading.go: %v", err)
+	}
+	for _, gone := range []string{"CondOrderPageWire", "OrderListWire"} {
+		if strings.Contains(string(source), "type "+gone+" struct") {
+			t.Errorf("trading.go declares %s again. It is an envelope: an exported type in this "+
+				"package that no service ever decodes into, which is the shape the layering rule "+
+				"protects against. C3b removed it after a repo-wide search found no decoder.",
+				gone)
+		}
 	}
 }

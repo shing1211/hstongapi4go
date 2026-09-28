@@ -21,8 +21,11 @@ import (
 // belong to the layer that owns the request, which is the layer that decodes the
 // reply. A mapper here that took a pkg/services envelope would invert the
 // dependency ADR 0010 draws, and it would be a cycle besides: pkg/services
-// imports this package. trading.go's CondOrderPageWire is the cautionary shape —
-// an envelope declared in this package that no service ever decodes into.
+// imports this package. The cautionary shape is the one this package used to
+// carry: trading.go's CondOrderPageWire and OrderListWire were exported envelope
+// types here that no service ever decoded into, and they were deleted rather than
+// commented on, so the mistake now has no example left in the tree to be copied
+// from. An envelope in this package is a type with no decoder in its own package.
 //
 // The one respect in which these mappers deliberately diverge from the cash
 // ones is load-bearing and is stated on futuresMoney: a futures row is read

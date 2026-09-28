@@ -74,21 +74,68 @@ const (
 	// the field carries no omitempty, so an unset caller value would otherwise
 	// put "" on the wire — a worse default than the documented one.
 	futuresDefaultOrderOptions = "0"
+	// futuresValidTimeTypeSpecifiedDate is the one time-in-force code that
+	// carries a date with it. The coupling is the vendors' own: the Java handle
+	// refuses a ValidTimeType of "4" with a blank validTime, and the Python
+	// docstring states the same. It is named here rather than written as a
+	// literal at the two call sites so the constant and its only use cannot
+	// drift apart.
+	futuresValidTimeTypeSpecifiedDate = "4"
 )
+
+// futuresValidTimeTypes is the closed set of futures time-in-force codes, and it
+// is the same set in three independent places: the Java FuturesValidTimeType
+// enum (five rows, no non-exhaustive note), the Python futures_constant
+// counterpart, and the released pkg/hstong/future. design-futures-requests.md
+// §9.1 rules it boundable and fail closed, so this layer validates against it.
+var futuresValidTimeTypes = map[string]struct{}{
+	"0": {}, // 当天有效, valid today
+	"1": {}, // 立即成交否则撤销, deal-or-cancel
+	"2": {}, // 全部成交否则撤销, fill-or-kill
+	"3": {}, // 到期日有效, valid to expiry
+	"4": {}, // 指定日期有效, valid to a specified date
+}
+
+// futuresOrderOptionCodes is the closed set of futures order-option codes: "0"
+// for the default and "1" for T+1. The two vendor enums and the released
+// pkg/hstong/future all carry exactly these two, and docs/SPEC.md §3's
+// EntrustOrder independently corroborates them for the response direction
+// ("orderOptions int32, 0 default or 1 T+1"). design-futures-requests.md §9.1
+// rules the family boundable and fail closed.
+//
+// It is a set rather than a types constant on purpose: pkg/types is inside ADR
+// 0011's protected surface, and adding a closed enum there for a two-value
+// family that no request body names as a types.EntrustBS would be a
+// public-surface change for a check two literals express.
+var futuresOrderOptionCodes = map[string]struct{}{
+	futuresDefaultOrderOptions: {},
+	"1":                        {},
+}
 
 // FuturesService is the use-case surface for the eleven futures endpoints.
 //
 // It holds no per-request state, is safe for concurrent use once constructed,
 // and takes its request path from an Executor the caller supplies — the same
 // inversion MarketService, AccountService and TradingService use
-// (docs/adr/0010-vnext-layered-architecture.md). Eight of the eleven endpoints
-// are implemented here; the three mutations arrive with the mutation work, so
-// nothing in this package can place, cancel or reprice an order yet.
+// (docs/adr/0010-vnext-layered-architecture.md). All eleven endpoints are
+// implemented here: the eight reads, and the three mutations Entrust,
+// CancelEntrust and ModifyEntrust.
 //
 // Every method takes a domain.AccountID first, validates it, and never places it
-// in a request body — see the account rule on this type. The three mutations
-// that would carry it are the reason it is first and unconditional: a caller
-// that named no account is refused before the Gateway sees anything.
+// in a request body — see the account rule on this type. The three mutations are
+// the reason it is first and unconditional: a caller that named no account is
+// refused before the Gateway sees anything, and on a money-moving call a
+// rejection that costs zero requests is the only kind worth having.
+//
+// The three mutations are never retried, at any configuration, by any option.
+// The guarantee is structural — client.Client.execute derives the retry class
+// from the route path and internal/resilience.IsMutation answers for the three
+// futures paths — so it is C5's job to *prove* it and not to implement it; see
+// TestFuturesMutationsAreSentExactlyOnceUnderARetryPolicy and
+// TestFuturesReadsRetryUnderARetryPolicy, the control that makes the single
+// request in the first a decision rather than a default. Nothing in this package
+// may add a retry, a backoff loop, or a "try once more on timeout" of its own
+// (docs/adr/0003-no-auto-retry-orders.md).
 //
 // Four facts about the futures protocol are structural and are stated here
 // because each is a mistake a reader would otherwise make, and none of them can
@@ -637,6 +684,184 @@ func futuresValidatePage(op string, page PageRequest) (futuresPageQueryWireReque
 }
 
 // ---------------------------------------------------------------------------
+// Mutation input validation
+//
+// Every predicate below runs before the request is built, so a bad mutation
+// costs zero HTTP requests. That is not only cheaper: it is the property that
+// makes a local rejection safe on an order. A request the Gateway saw and refused
+// may have had a side effect; a request this SDK never sent cannot have had one.
+// It is also why the rejects are typed at types.StatusInvalidParam under the
+// method's own op — a caller must be able to tell "I built this wrong" from "the
+// exchange said no", and only the former is free of consequence.
+// ---------------------------------------------------------------------------
+
+// futuresDigitsShaped reports whether code is a non-empty run of ASCII decimal
+// digits. It is a digit scan and never a parse, so no value a float would have
+// mangled can pass or fail it.
+//
+// It deliberately says nothing about magnitude. A caller who reaches for a
+// bounds check here would be inventing one, and a length cap in particular would
+// be an invented limit on a code the Gateway, not this SDK, defines.
+func futuresDigitsShaped(code string) bool {
+	if code == "" {
+		return false
+	}
+	for i := 0; i < len(code); i++ {
+		if code[i] < '0' || code[i] > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// futuresValidateOrderType checks the futures order type, and it checks the two
+// things that are decidable and deliberately not the third.
+//
+// Required: both vendor SDKs refuse to send an entrust without it, and an absent
+// order type is a request the Gateway cannot classify. Well-formed: a non-empty
+// run of decimal digits, which is the honest type for a code this repository
+// cannot bound.
+//
+// NOT value-bounded, and this is a decision rather than an omission. The two
+// vendor SDKs, both v2.3.0 shipped the same day, disagree: the Java
+// FuturesEntrustType declares four values including OPTION("3") and the Python
+// one declares exactly three. A local closed set would therefore reject a code
+// one of them documents, and picking a side is a guess on a money-moving field
+// with no evidence behind it (design-futures-requests.md §9.2). The released
+// pkg/hstong/future validates this field not at all, so the check is
+// parity-safe. If G6 resolves the conflict, a types.FuturesEntrustType becomes a
+// separate and non-breaking addition — but it is a decision for then, not here.
+func futuresValidateOrderType(op, orderType string) error {
+	if !futuresDigitsShaped(orderType) {
+		return errs.New(types.StatusInvalidParam, op,
+			"entrustType must be a non-empty run of decimal digits")
+	}
+	return nil
+}
+
+// futuresValidateEntrustBS checks the direction against the four-value cash set.
+//
+// **The set is disputed and this method deliberately keeps the wider one.** The
+// vendor's *futures* enum has two values (1 buy, 2 sell), while SPEC §7.4, the
+// vendor's own shared cash enum, and the released pkg/hstong/future:158 all carry
+// four (3 close short, 4 open short). Narrowing here would be a caller-visible
+// behaviour change on a mutation, made on incomplete evidence, against a field
+// the v0.1.x SDK has accepted as 1-4 since v0.1.0 — a caller may be sending "4"
+// today and receiving whatever the Gateway does with it. The failure mode of
+// staying permissive is the good one: an out-of-set direction is refused by the
+// Gateway with a clear message and no side effect, where a fail-closed rejection
+// here would refuse a request the vendor's shared dictionary endorses
+// (design-futures-requests.md §9.3, tracked as C1b). One live order settles it;
+// until then the dispute is recorded rather than resolved.
+//
+// Fail-closed within the four: a value outside them is refused locally, because
+// the Gateway's own rejection of a malformed direction is a worse outcome than
+// never sending it.
+func futuresValidateEntrustBS(op string, side types.EntrustBS) error {
+	switch side {
+	case types.EntrustBuy, types.EntrustSell, types.EntrustCloseShort, types.EntrustOpenShort:
+		return nil
+	default:
+		return errs.New(types.StatusInvalidParam, op, "entrustBs must be 1, 2, 3 or 4")
+	}
+}
+
+// futuresValidateOrderPrice checks the order price on a mutation.
+//
+// It is required with no market-order waiver. Both vendor SDKs send entrustPrice
+// unconditionally and require it non-blank, with no exemption for a market order,
+// and the released layer's waiver (a blank price when the order type is "2") is
+// the one place design-futures-requests.md §4.3 chose to be *stricter* than the
+// released surface. A market order is therefore spelled as the conventional "0",
+// which is a well-formed non-negative decimal and needs no special case in this
+// path. That is recommendation (a) of §4.3 and it removes the one judgement in
+// the design note that could reject a legitimate order.
+//
+// A domain.Price cannot be malformed — MustNewPrice panics rather than construct
+// one — so the only failure left is a negative price, and that is what is
+// checked. The tick step check is deliberately *not* applied: this package has no
+// futures tick schedule, and Price.Validate skips the step whenever the tick is
+// zero, so a caller who arrives with a real grid should not have their price
+// measured against a grid this SDK invented (see domain.FuturesProduct.DecInPrice
+// for the tick source that exists but is not yet a schedule).
+//
+// An empty FuturesOrderRequest.Price is the zero Price, which reads as "0" and is
+// therefore indistinguishable from a market order. That is a property of the type
+// rather than a hole in the check, and it is why the field is always sent quoted
+// on the wire rather than omitted: an absent price and a market order are the same
+// request, so the Gateway must never be asked to infer one.
+func futuresValidateOrderPrice(op string, price domain.Price) error {
+	if err := price.Validate(false); err != nil {
+		return errs.New(types.StatusInvalidParam, op,
+			"entrustPrice must be a non-negative decimal: "+err.Error())
+	}
+	return nil
+}
+
+// futuresValidateOrderQuantity checks that the order quantity is strictly
+// positive. Zero and negative are both refused: a zero-quantity order is not an
+// order, and a negative one is a direction, which is what entrustBs is for.
+func futuresValidateOrderQuantity(op string, qty domain.Quantity) error {
+	if !qty.IsPositive() {
+		return errs.New(types.StatusInvalidParam, op, "entrustAmount must be a positive decimal")
+	}
+	return nil
+}
+
+// futuresValidateEntrustID checks the order id on the two methods that name one.
+// It trims before testing, so an all-whitespace id is refused, matching the
+// released pkg/hstong/future's own strings.TrimSpace check.
+func futuresValidateEntrustID(op, entrustID string) error {
+	if strings.TrimSpace(entrustID) == "" {
+		return errs.New(types.StatusInvalidParam, op, "entrustId must not be empty")
+	}
+	return nil
+}
+
+// futuresValidateValidTimeType checks the time-in-force code and the date it
+// carries, which is the one conditional field on either mutation body.
+//
+// The code is validated against futuresValidTimeTypes, a set three independent
+// sources agree on, and design-futures-requests.md §9.1 rules it fail closed.
+// The coupling is the vendors' own rather than this SDK's: a specified-date order
+// requires a real yyyyMMdd date, and any supplied date is format- and
+// calendar-checked whatever the code is. Both the Java handle and the Python
+// docstring state it, and the released layer implements it.
+//
+// Note the direction the date travels in. The *request* validTime is yyyyMMdd;
+// the *response* validTime is yyyy/MM/dd. The two must not be conflated, and
+// futuresValidateDate is the request's validator (domain.FuturesOrder.ValidTime
+// documents the reply's form).
+func futuresValidateValidTimeType(op, validTimeType, validTime string) error {
+	if _, ok := futuresValidTimeTypes[validTimeType]; !ok {
+		return errs.New(types.StatusInvalidParam, op, "validTimeType must be 0, 1, 2, 3 or 4")
+	}
+	if validTime == "" {
+		if validTimeType == futuresValidTimeTypeSpecifiedDate {
+			return errs.New(types.StatusInvalidParam, op,
+				"validTime is required when validTimeType is 4")
+		}
+		return nil
+	}
+	return futuresValidateDate(op, "validTime", validTime)
+}
+
+// futuresValidateOrderOptions checks the order-option code *after* the mapping
+// boundary has substituted the default, so an empty caller value is the
+// documented "0" and not a rejection.
+//
+// The set is futuresOrderOptionCodes — {0, 1} — corroborated by the two vendor
+// enums, the released layer, and SPEC §3's response-side orderOptions
+// independently. design-futures-requests.md §9.1 rules the family fail closed, so
+// anything else is refused here rather than at the Gateway.
+func futuresValidateOrderOptions(op, orderOptions string) error {
+	if _, ok := futuresOrderOptionCodes[orderOptions]; !ok {
+		return errs.New(types.StatusInvalidParam, op, "orderOptions must be 0 or 1")
+	}
+	return nil
+}
+
+// ---------------------------------------------------------------------------
 // The eight futures reads
 // ---------------------------------------------------------------------------
 
@@ -927,4 +1152,313 @@ func (s *FuturesService) QueryHistoryDeliverPage(ctx context.Context, accountID 
 		return nil, err
 	}
 	return futuresFillPageFromDTO(&out), nil
+}
+
+// ---------------------------------------------------------------------------
+// The three futures mutations
+//
+// All three are in the closed mutation set internal/resilience keeps, so each
+// issues exactly one attempt at every retry-policy configuration. The GoDoc on
+// each repeats the reconciliation path in full, because a caller who does not
+// know what to do after a failure on a money-moving call is the failure mode
+// ADR 0003 is about: not the lost order, but the second order placed while
+// reconciling the first.
+// ---------------------------------------------------------------------------
+
+// Entrust places a futures order on /trade/FuturesEntrust.
+//
+// # It issues exactly one attempt
+//
+// Under any configuration, at any layer, with any option. The Gateway's own
+// timeout_sec means a call can time out *after* the request reached the platform
+// and before the reply was read, and there is no idempotency key to make a
+// resubmission safe, so a second attempt is a possible duplicate order rather
+// than a possible success (docs/adr/0003-no-auto-retry-orders.md). Nothing in
+// this package retries it, and no option can be made to.
+//
+// # What to do after a failure
+//
+// **Reconcile; never resubmit.** The failure is ambiguous, not final:
+//
+//   - The error is a typed *errs.Error carrying opFuturesEntrust. A Gateway
+//     rejection keeps the Gateway's own code and category — a "1007 duplicate
+//     submission" arrives in errs.CategoryTrading, which is the code that exists
+//     precisely because of this ambiguity — and a local rejection is
+//     types.StatusInvalidParam in errs.CategoryAPI and provably cost no request.
+//     Both stay traversable with errors.Is and errors.As, so a caller branching
+//     on the category is reading the exchange, not the SDK's opinion of it.
+//   - Then call QueryRealEntrustList for today's orders and
+//     QueryHistoryEntrustPage for the day's history, and read
+//     domain.FuturesOrder.CanBeCanceled to tell a live order from one that has
+//     already gone. Call QueryRealDeliverList as well if the order may have
+//     filled: a fill and a resting order are different facts even though the
+//     Gateway documents one object for both.
+//
+// OrderResult.EntrustID is the order number the Gateway returned, and the
+// Gateway does not guarantee that it is populated: it is documented as the empty
+// string when omitted. So a non-empty id is a convenience, never a substitute for
+// the reconciliation above, and an empty one is not evidence the order was
+// refused.
+//
+// # Validation, all of it local and all of it free
+//
+// Every check below runs before the request is built, so each refusal is a
+// types.StatusInvalidParam *errs.Error under opFuturesEntrust that costs zero
+// HTTP requests and provably had no side effect:
+//
+//   - accountID is not zero. It names the session and appears in no request body
+//     — see the account rule on FuturesService.
+//   - Symbol.Code is non-empty and free of interior whitespace. No futures code
+//     grammar is documented in this repository, so the check stays permissive
+//     about characters.
+//   - OrderType is a non-empty run of decimal digits, and is deliberately *not*
+//     value-bounded: the two vendor SDKs disagree on whether a fourth code
+//     exists. See futuresValidateOrderType.
+//   - Side is one of 1, 2, 3 or 4, the released layer's set. The vendor's futures
+//     enum says two and this does not narrow it; see futuresValidateEntrustBS
+//     for why permissiveness is the safer side of that dispute.
+//   - Price is a non-negative decimal, with no market-order waiver: a market order
+//     passes "0" through domain.MustNewPrice.
+//   - Quantity is strictly positive.
+//   - ValidTimeType is 0 to 4, and ValidTime is a real yyyyMMdd calendar date
+//     required if and only if ValidTimeType is "4". An empty ValidTime with any
+//     other code is legitimate and the key is then omitted from the body.
+//   - OrderOptions is "0" or "1", with "" replaced by the documented "0" at the
+//     mapping boundary.
+//
+// No market is sent and none is needed, and no account id is sent at all.
+func (s *FuturesService) Entrust(ctx context.Context, accountID domain.AccountID, order FuturesOrderRequest) (*domain.OrderResult, error) {
+	if accountID.IsZero() {
+		return nil, errs.New(types.StatusInvalidParam, opFuturesEntrust, "accountID must not be empty")
+	}
+	if err := futuresValidateStockCode(opFuturesEntrust, order.Symbol.Code); err != nil {
+		return nil, err
+	}
+	if err := futuresValidateOrderType(opFuturesEntrust, order.OrderType); err != nil {
+		return nil, err
+	}
+	if err := futuresValidateEntrustBS(opFuturesEntrust, order.Side); err != nil {
+		return nil, err
+	}
+	if err := futuresValidateOrderPrice(opFuturesEntrust, order.Price); err != nil {
+		return nil, err
+	}
+	if err := futuresValidateOrderQuantity(opFuturesEntrust, order.Quantity); err != nil {
+		return nil, err
+	}
+	if err := futuresValidateValidTimeType(opFuturesEntrust, order.ValidTimeType, order.ValidTime); err != nil {
+		return nil, err
+	}
+	orderOptions := futuresOrderOptionsParam(order.OrderOptions)
+	if err := futuresValidateOrderOptions(opFuturesEntrust, orderOptions); err != nil {
+		return nil, err
+	}
+
+	req := futuresEntrustWireRequest{
+		StockCode:     order.Symbol.Code,
+		EntrustType:   order.OrderType,
+		EntrustPrice:  order.Price.String(),
+		EntrustAmount: order.Quantity.String(),
+		EntrustBS:     string(order.Side),
+		ValidTimeType: order.ValidTimeType,
+		OrderOptions:  orderOptions,
+		ValidTime:     order.ValidTime,
+	}
+
+	var out futuresMutationWireResponse
+	if err := s.client.Do(ctx, opFuturesEntrust, client.RouteTradeFuturesEntrust,
+		req, s.client.JSON(), &out); err != nil {
+		return nil, err
+	}
+	// The Gateway does not guarantee the order number, so EntrustID is empty on
+	// a successful reply that omitted it. Status is the one the host is in the
+	// instant the reply is built — the cash layer reports the same for
+	// TradeEntrust, and neither is a claim about the order's final state; the
+	// reconciliation query is.
+	return &domain.OrderResult{
+		EntrustID: domain.EntrustID(out.Data),
+		Status:    types.EntrustStatusWaitToRegister,
+	}, nil
+}
+
+// CancelEntrust cancels a futures order, or the unfilled remainder of a
+// partially filled one, on /trade/FuturesCancelEntrust.
+//
+// # It issues exactly one attempt
+//
+// Under any configuration, for the reason Entrust states. A cancel is not the
+// idempotent-looking operation it appears to be: a retried cancel can hit a
+// reused identifier or report the wrong terminal state, so it is in the same
+// closed set as the submit (docs/adr/0003-no-auto-retry-orders.md).
+//
+// # What to do after a failure
+//
+// **Reconcile; never resubmit.** The error is a typed *errs.Error carrying
+// opFuturesCancelEntrust, with a Gateway rejection keeping its own code — a
+// "1007" arriving in errs.CategoryTrading is the ambiguous case and stays
+// traversable with errors.Is and errors.As. Then call QueryRealEntrustList and
+// read domain.FuturesOrder.CanBeCanceled: false means the order is already gone
+// and the cancel took effect or the order was never live, and true means it is
+// still there and the cancel did not land. QueryHistoryEntrustPage gives the
+// day's history for the same order, and QueryRealDeliverList the fills, because a
+// cancel that raced a fill leaves a fill and a reduced order rather than no
+// order.
+//
+// # Validation, all of it local and all of it free
+//
+// Each refusal is a types.StatusInvalidParam *errs.Error under
+// opFuturesCancelEntrust costing zero HTTP requests:
+//
+//   - accountID is not zero.
+//   - entrustID is not blank, trimmed.
+//   - Symbol.Code is non-empty and free of interior whitespace. It is required
+//     even though the order id is globally unique, because the Gateway's
+//     two-field body carries it and so does the released layer.
+//
+// Nothing else is required, and nothing else exists on the wire to require: this
+// is the smallest request body in the SDK.
+func (s *FuturesService) CancelEntrust(ctx context.Context, accountID domain.AccountID, entrustID domain.EntrustID, symbol domain.Symbol) error {
+	if accountID.IsZero() {
+		return errs.New(types.StatusInvalidParam, opFuturesCancelEntrust, "accountID must not be empty")
+	}
+	if err := futuresValidateEntrustID(opFuturesCancelEntrust, entrustID.String()); err != nil {
+		return err
+	}
+	if err := futuresValidateStockCode(opFuturesCancelEntrust, symbol.Code); err != nil {
+		return err
+	}
+
+	req := futuresCancelEntrustWireRequest{
+		EntrustID: entrustID.String(),
+		StockCode: symbol.Code,
+	}
+
+	var out futuresMutationWireResponse
+	if err := s.client.Do(ctx, opFuturesCancelEntrust, client.RouteTradeFuturesCancelEntrust,
+		req, s.client.JSON(), &out); err != nil {
+		return err
+	}
+	return nil
+}
+
+// ModifyEntrust changes the price and quantity of a resting futures order in
+// place, on /trade/FuturesModifyEntrust.
+//
+// # It is not a convenience over cancel-then-entrust
+//
+// The two are not interchangeable, and the difference is the whole reason this
+// endpoint exists:
+//
+//   - One request reaches the wire, against two. Between a cancel and a
+//     re-entrust the position is flat, and a competing order, a margin call or a
+//     limit move fills that window.
+//   - The order never leaves the book, so its priority survives. A cancel and a
+//     re-entrust reset it.
+//   - Under ADR 0003 that is the decisive row: a cancel-then-entrust pair is two
+//     unreconciled mutations, and if the cancel succeeded while the entrust timed
+//     out the SDK cannot tell the caller which, leaving a flat position they may
+//     not know about. A modify is one unreconciled mutation whose failure mode is
+//     bounded — worst case the change did not apply and the original order stands.
+//
+// **A modify is not a price increase and a cancel is not a failure.** Choosing
+// between them is the caller's decision, and this method says so rather than
+// implying that repricing is free.
+//
+// The body carries no order type. Both vendors omit it from a modify and include
+// it on an entrust, so the order keeps the type it was placed with; a modify
+// that could retype an order would be a strictly more powerful operation than
+// this endpoint offers.
+//
+// # It issues exactly one attempt
+//
+// Under any configuration, for the reason Entrust states. A modify is a
+// live-state mutation with no retry and no second chance.
+//
+// # What to do after a failure
+//
+// **Reconcile; never resubmit, and in particular never follow a failed modify
+// with a cancel.** The error is a typed *errs.Error carrying
+// opFuturesModifyEntrust, with a Gateway rejection keeping its own code — a
+// "1007" in errs.CategoryTrading is the ambiguous case. Then call
+// QueryRealEntrustList and read two fields on the matching
+// domain.FuturesOrder:
+//
+//   - OrderPrice, which is the field whose value is in question. A modify whose
+//     result is ambiguous leaves an order whose current price is unknown, so this
+//     is the query that answers it.
+//   - CanBeUpdated, which is how a *pending* modify is told from a live one: the
+//     Gateway reports it false while a change it has not yet applied is in
+//     flight, and true once the order is again modifiable. A false CanBeUpdated
+//     on an order you just tried to modify is a reconcile-in-progress, not a
+//     failure to resubmit against.
+//
+// QueryHistoryEntrustPage gives the same order from the day's history, and
+// QueryRealDeliverList its fills, since a modify that raced a fill changes what
+// is left to reprice.
+//
+// # Validation, all of it local and all of it free
+//
+// Each refusal is a types.StatusInvalidParam *errs.Error under
+// opFuturesModifyEntrust costing zero HTTP requests. The requirements past the
+// vendor's own guard (which checks only stockCode and entrustId) are the released
+// layer's, retained deliberately (design-futures-requests.md §4.3): a modify that
+// silently forwards a non-positive quantity or an out-of-set direction is a live
+// order mutation issued once, with no retry and no second chance.
+//
+//   - accountID is not zero.
+//   - EntrustID is not blank, trimmed.
+//   - Symbol.Code is non-empty and free of interior whitespace.
+//   - Price is a non-negative decimal, with no market-order waiver.
+//   - Quantity is strictly positive.
+//   - Side is one of 1, 2, 3 or 4, the released layer's disputed four.
+//   - ValidTimeType is 0 to 4, and ValidTime is a real yyyyMMdd calendar date
+//     required if and only if ValidTimeType is "4".
+//   - OrderOptions is "0" or "1", with "" replaced by the documented "0" at the
+//     mapping boundary.
+//
+// It deliberately does *not* require, and cannot carry, an order type.
+func (s *FuturesService) ModifyEntrust(ctx context.Context, accountID domain.AccountID, change FuturesModifyRequest) error {
+	if accountID.IsZero() {
+		return errs.New(types.StatusInvalidParam, opFuturesModifyEntrust, "accountID must not be empty")
+	}
+	if err := futuresValidateEntrustID(opFuturesModifyEntrust, change.EntrustID.String()); err != nil {
+		return err
+	}
+	if err := futuresValidateStockCode(opFuturesModifyEntrust, change.Symbol.Code); err != nil {
+		return err
+	}
+	if err := futuresValidateOrderPrice(opFuturesModifyEntrust, change.Price); err != nil {
+		return err
+	}
+	if err := futuresValidateOrderQuantity(opFuturesModifyEntrust, change.Quantity); err != nil {
+		return err
+	}
+	if err := futuresValidateEntrustBS(opFuturesModifyEntrust, change.Side); err != nil {
+		return err
+	}
+	if err := futuresValidateValidTimeType(opFuturesModifyEntrust, change.ValidTimeType, change.ValidTime); err != nil {
+		return err
+	}
+	orderOptions := futuresOrderOptionsParam(change.OrderOptions)
+	if err := futuresValidateOrderOptions(opFuturesModifyEntrust, orderOptions); err != nil {
+		return err
+	}
+
+	req := futuresModifyEntrustWireRequest{
+		EntrustID:     change.EntrustID.String(),
+		StockCode:     change.Symbol.Code,
+		EntrustPrice:  change.Price.String(),
+		EntrustAmount: change.Quantity.String(),
+		EntrustBS:     string(change.Side),
+		ValidTimeType: change.ValidTimeType,
+		OrderOptions:  orderOptions,
+		ValidTime:     change.ValidTime,
+	}
+
+	var out futuresMutationWireResponse
+	if err := s.client.Do(ctx, opFuturesModifyEntrust, client.RouteTradeFuturesModifyEntrust,
+		req, s.client.JSON(), &out); err != nil {
+		return err
+	}
+	return nil
 }

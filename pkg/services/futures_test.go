@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"reflect"
 	"sort"
 	"strconv"
@@ -2930,5 +2931,1769 @@ func TestFuturesReadMethodsAreSafeForConcurrentUse(t *testing.T) {
 	}
 	if got := rec.count(string(client.RouteTradeFuturesQueryFundInfo)); got != workers {
 		t.Errorf("requests = %d, want %d: a call that returned a result must have gone out", got, workers)
+	}
+}
+
+// ===========================================================================
+// C5 + C6 - the three futures mutations
+//
+// C5 implemented them and C6 tests them in one change, deliberately. A2 found
+// pkg/hstong/trade with twenty endpoints, a fully covered happy path, and not one
+// test that made a Gateway call *fail*: splitting implement-then-test is what
+// produces that shape, because the test is written against the code that was just
+// finished and the failure surface is the part nobody has an excuse to skip.
+//
+// So the same discipline as the eight reads applies, with one thing added - a
+// mutation's failure is money. The tables below therefore drive, for all three:
+//
+//   - the happy path, pinning the op, the route and the exact request body, so a
+//     field swapped or a key misspelled fails here. The mock Gateway answers by
+//     path and would not notice either.
+//   - the local rejections, each at *zero* recorded calls, which is the only
+//     thing that distinguishes "I built this wrong" from "the exchange said no".
+//   - both error levels - the sequenced fake, and a real client over an ok:false
+//     envelope - because a fake never builds a typed error.
+//   - the ADR 0003 proof, with the read control *in the same test* so that
+//     "exactly one request" cannot be a policy that never fired.
+//   - the typed reconciliation error a caller branches on.
+//   - hostile money, byte for byte, on the request side rather than the reply
+//     side, because a mutation's money is a *write*.
+//   - omitempty in the direction a public method can actually reach.
+//
+// No row sleeps: where a retry count is the assertion the policy installs
+// MaxAttempts with a zero backoff, so the count is a property of the retry
+// classification and not of elapsed time. No row recovers: a futures builder or
+// mapper that panicked would take the process down, and the partial-reply rows
+// below assert the opposite.
+// ===========================================================================
+
+// futuresFixtureEntrustID is the order the two id-bearing mutations name. It is
+// the same id the mock's own futures payload carries, so the fixture and the
+// order row cannot drift apart.
+func futuresFixtureEntrustID() domain.EntrustID { return domain.EntrustID("F20260921001") }
+
+// futuresFixtureOrder is a fully populated entrust.
+//
+// Every field is filled in, so a row cannot pass by reaching the executor and
+// being rejected there, and so the one defaulted field (OrderOptions) is
+// distinguishable from an absent one. ValidTime is set with a "0" time-in-force,
+// which the coupling permits: a supplied date is format-checked and carried
+// whatever the code is, and only a "4" *requires* one.
+func futuresFixtureOrder() FuturesOrderRequest {
+	return FuturesOrderRequest{
+		Symbol:        futuresFixtureSymbol(),
+		Side:          types.EntrustBuy,
+		OrderType:     "0",
+		Price:         domain.MustNewPrice("25000", "0"),
+		Quantity:      domain.MustNewQuantity("1"),
+		ValidTimeType: "0",
+		ValidTime:     "20260930",
+		OrderOptions:  "0",
+	}
+}
+
+// futuresFixtureModify is a fully populated modify, and it exercises the two
+// shapes the entrust fixture does not: a "4" time-in-force, so the date is
+// *required* rather than merely carried, and a "1" order option.
+func futuresFixtureModify() FuturesModifyRequest {
+	return FuturesModifyRequest{
+		EntrustID:     futuresFixtureEntrustID(),
+		Symbol:        futuresFixtureSymbol(),
+		Price:         domain.MustNewPrice("25100", "0"),
+		Quantity:      domain.MustNewQuantity("2"),
+		Side:          types.EntrustBuy,
+		ValidTimeType: "4",
+		ValidTime:     "20260930",
+		OrderOptions:  "1",
+	}
+}
+
+// futuresMutationCase is one row of every per-method table below. It is the read
+// table's shape for the read table's reason: a new mutation cannot be added
+// without a row here, and therefore cannot be added without a row in the error
+// arms, the local rejections and the money hosts.
+type futuresMutationCase struct {
+	name string
+	op   string
+	// route is the endpoint the method must reach.
+	route client.Route
+	// wantParams is the request body the method must hand the executor, compared
+	// with reflect.DeepEqual so a field added or dropped by mistake both fail.
+	wantParams any
+	// reply is the data object the sequencedExecutor answers with. It is a
+	// json.RawMessage because the executor marshals it as a document; a []byte
+	// would be marshalled as a base64 JSON string and every row would fail on a
+	// decode error.
+	reply json.RawMessage
+	// invoke performs the call and returns its error, asserting the zero value
+	// beside a failure against the concrete result type. That is the only way a
+	// generic zero check means anything here: a caller must never be handed a
+	// partially decoded payload alongside an error.
+	invoke func(t *testing.T, ctx context.Context, svc *FuturesService) error
+	// zeroAccount invokes the same method with a zero accountID and an otherwise
+	// valid request, so the accountID row cannot pass by failing on some other
+	// input first.
+	zeroAccount func(t *testing.T, ctx context.Context, svc *FuturesService) error
+}
+
+// futuresMutationCases is the three futures mutations.
+func futuresMutationCases() []futuresMutationCase {
+	return []futuresMutationCase{
+		{
+			name:  "Entrust",
+			op:    opFuturesEntrust,
+			route: client.RouteTradeFuturesEntrust,
+			wantParams: futuresEntrustWireRequest{
+				StockCode:     "HSI2609.HK",
+				EntrustType:   "0",
+				EntrustPrice:  "25000",
+				EntrustAmount: "1",
+				EntrustBS:     "1",
+				ValidTimeType: "0",
+				OrderOptions:  "0",
+				ValidTime:     "20260930",
+			},
+			reply: json.RawMessage(futuresMutationBody),
+			invoke: func(t *testing.T, ctx context.Context, svc *FuturesService) error {
+				t.Helper()
+				result, err := svc.Entrust(ctx, futuresFixtureAccount(), futuresFixtureOrder())
+				if err != nil {
+					requireZero(t, result)
+				}
+				return err
+			},
+			zeroAccount: func(t *testing.T, ctx context.Context, svc *FuturesService) error {
+				t.Helper()
+				result, err := svc.Entrust(ctx, domain.AccountID(""), futuresFixtureOrder())
+				requireZero(t, result)
+				return err
+			},
+		},
+		{
+			name:  "CancelEntrust",
+			op:    opFuturesCancelEntrust,
+			route: client.RouteTradeFuturesCancelEntrust,
+			wantParams: futuresCancelEntrustWireRequest{
+				EntrustID: "F20260921001",
+				StockCode: "HSI2609.HK",
+			},
+			reply: json.RawMessage(futuresMutationBody),
+			invoke: func(t *testing.T, ctx context.Context, svc *FuturesService) error {
+				t.Helper()
+				return svc.CancelEntrust(ctx, futuresFixtureAccount(), futuresFixtureEntrustID(),
+					futuresFixtureSymbol())
+			},
+			zeroAccount: func(t *testing.T, ctx context.Context, svc *FuturesService) error {
+				t.Helper()
+				return svc.CancelEntrust(ctx, domain.AccountID(""), futuresFixtureEntrustID(),
+					futuresFixtureSymbol())
+			},
+		},
+		{
+			name:  "ModifyEntrust",
+			op:    opFuturesModifyEntrust,
+			route: client.RouteTradeFuturesModifyEntrust,
+			wantParams: futuresModifyEntrustWireRequest{
+				EntrustID:     "F20260921001",
+				StockCode:     "HSI2609.HK",
+				EntrustPrice:  "25100",
+				EntrustAmount: "2",
+				EntrustBS:     "1",
+				ValidTimeType: "4",
+				OrderOptions:  "1",
+				ValidTime:     "20260930",
+			},
+			reply: json.RawMessage(futuresMutationBody),
+			invoke: func(t *testing.T, ctx context.Context, svc *FuturesService) error {
+				t.Helper()
+				return svc.ModifyEntrust(ctx, futuresFixtureAccount(), futuresFixtureModify())
+			},
+			zeroAccount: func(t *testing.T, ctx context.Context, svc *FuturesService) error {
+				t.Helper()
+				return svc.ModifyEntrust(ctx, domain.AccountID(""), futuresFixtureModify())
+			},
+		},
+	}
+}
+
+// futuresMutationCaseNamed returns the row for one method, failing the test if
+// the name no longer resolves, so a renamed method cannot silently drop out of
+// the single-method tables below.
+func futuresMutationCaseNamed(t *testing.T, name string) futuresMutationCase {
+	t.Helper()
+	for _, tc := range futuresMutationCases() {
+		if tc.name == name {
+			return tc
+		}
+	}
+	t.Fatalf("no mutation row named %q; futuresMutationCases has drifted", name)
+	return futuresMutationCase{}
+}
+
+// ---------------------------------------------------------------------------
+// Routing
+// ---------------------------------------------------------------------------
+
+// TestFuturesMutationsReachTheirRouteWithTheirOp is the positive path for all
+// three: the op label and the route are the ones the method names, the request
+// body is the one the call built, and exactly one call was recorded.
+//
+// It is also the control for every rejection table below. A validator that
+// refused every input, or one whose check was accidentally inverted, would satisfy
+// the rejection tables while making the three methods unusable; the recorded call
+// here is the evidence that validation was really skipped rather than merely
+// outvoted.
+func TestFuturesMutationsReachTheirRouteWithTheirOp(t *testing.T) {
+	for _, tc := range futuresMutationCases() {
+		t.Run(tc.name, func(t *testing.T) {
+			exec := newSequencedExecutor(t, sequencedReply{reply: tc.reply})
+			svc := NewFuturesService(exec)
+
+			if err := tc.invoke(t, t.Context(), svc); err != nil {
+				t.Fatalf("%s with a valid request = %v, want nil", tc.name, err)
+			}
+			futuresExpectCall(t, exec, tc.op, tc.route)
+			requireCalls(t, exec, 1)
+
+			if got := exec.lastParams(t); !reflect.DeepEqual(got, tc.wantParams) {
+				t.Errorf("the request body = %#v, want %#v", got, tc.wantParams)
+			}
+		})
+	}
+}
+
+// TestFuturesEntrustReturnsTheGatewayOrderNumber checks the one thing a mutation
+// reply is for.
+//
+// The Gateway documents data as the resulting order number *or the empty string
+// when it omits it*, so all three rows below are legitimate replies. What is
+// pinned is that the empty one is reported as an empty id on a non-nil result
+// rather than as nil, so a caller reading the id cannot mistake an omitted field
+// for a failed call - and, as the GoDoc on Entrust says, must reconcile either
+// way, because an absent order number is not evidence the order was refused.
+func TestFuturesEntrustReturnsTheGatewayOrderNumber(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		reply string
+		want  string
+	}{
+		{"the Gateway supplied one", futuresMutationBody, "F20260921001"},
+		{"the Gateway omitted it", `{"data":""}`, ""},
+		{"the data member is absent entirely", `{}`, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			exec := newSequencedExecutor(t, sequencedReply{reply: json.RawMessage(tc.reply)})
+			result, err := NewFuturesService(exec).Entrust(t.Context(), futuresFixtureAccount(),
+				futuresFixtureOrder())
+			if err != nil {
+				t.Fatalf("Entrust on %s = %v, want nil: a mutation's reply carries a field the "+
+					"Gateway documents as optional, and its absence is not a failure to report", tc.reply, err)
+			}
+			if result == nil {
+				t.Fatal("Entrust returned no result and no error, so a caller cannot tell an " +
+					"omitted order number from a failed call")
+			}
+			if got := result.EntrustID.String(); got != tc.want {
+				t.Errorf("EntrustID = %q, want %q", got, tc.want)
+			}
+			if result.Status != types.EntrustStatusWaitToRegister {
+				t.Errorf("Status = %q, want %q: it is the state the host is in when the reply is "+
+					"built, never a claim about the order's final state",
+					result.Status, types.EntrustStatusWaitToRegister)
+			}
+			requireCalls(t, exec, 1)
+		})
+	}
+}
+
+// TestFuturesMutationsRejectAZeroAccountIDWithoutARequest is the fail-closed row
+// for all three.
+//
+// Zero recorded calls is the assertion that matters. accountID is a session key
+// and never crosses the wire, so a zero-accountID request body is byte-identical
+// to a valid one and only the absence of the call distinguishes them - which is
+// why C2a §7.1 warns that adding accountID to a futures wire struct would leak
+// an account identifier into every futures request while staying invisible on the
+// mock.
+func TestFuturesMutationsRejectAZeroAccountIDWithoutARequest(t *testing.T) {
+	for _, tc := range futuresMutationCases() {
+		t.Run(tc.name, func(t *testing.T) {
+			exec := newSequencedExecutor(t)
+			assertInvalidParam(t, tc.zeroAccount(t, t.Context(), NewFuturesService(exec)), tc.op)
+			requireCalls(t, exec, 0)
+		})
+	}
+}
+
+// TestFuturesMutationAccountIDNeverReachesTheWire is the other direction of the
+// same rule, driven over real HTTP so it is the bytes the Gateway would receive.
+//
+// C2a §7.1 calls the accountID leak "invisible on the mock", which is why this
+// decodes the recorded request: the check is that no account-shaped key is
+// present *and* that the account id appears nowhere in the envelope.
+func TestFuturesMutationAccountIDNeverReachesTheWire(t *testing.T) {
+	for _, tc := range futuresMutationCases() {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := newWireRecorder(map[string]string{
+				string(tc.route): gatewaySuccess(string(tc.reply)),
+			})
+			svc := NewFuturesService(newWireExecutor(t, rec))
+
+			if err := tc.invoke(t, t.Context(), svc); err != nil {
+				t.Fatalf("%s = %v, want nil", tc.name, err)
+			}
+			params := futuresRecordedParams(t, rec, string(tc.route))
+			for key := range params {
+				lower := strings.ToLower(key)
+				for _, forbidden := range []string{"account", "accid", "userid", "clientid", "subaccount"} {
+					if strings.Contains(lower, forbidden) {
+						t.Errorf("%s sent the key %q: a futures request carries no account id, "+
+							"because the account and the book both come from the session "+
+							"(design-futures-requests §7.1)", tc.name, key)
+					}
+				}
+			}
+			if body := rec.lastBody(t, string(tc.route)); strings.Contains(body, string(futuresFixtureAccount())) {
+				t.Errorf("%s put the account id on the wire: %s", tc.name, body)
+			}
+		})
+	}
+}
+
+// TestFuturesMutationCarriesNoMarketField is the endpoint-level restatement of the
+// struct-level rule in TestFuturesRequestsCarryNoMarketOrCursorField.
+//
+// A futures contract code is unique across the Hong Kong and US books, so no
+// mutation sends a market - even though the caller supplied one on
+// domain.Symbol.Market and even though the cash layer's mutation bodies both
+// carry exchangeType. Adding it would be a wire change on a guess and an
+// invisible one, since the mock answers all eleven futures routes by path.
+func TestFuturesMutationCarriesNoMarketField(t *testing.T) {
+	for _, tc := range futuresMutationCases() {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := newWireRecorder(map[string]string{
+				string(tc.route): gatewaySuccess(string(tc.reply)),
+			})
+			svc := NewFuturesService(newWireExecutor(t, rec))
+
+			if err := tc.invoke(t, t.Context(), svc); err != nil {
+				t.Fatalf("%s = %v, want nil", tc.name, err)
+			}
+			params := futuresRecordedParams(t, rec, string(tc.route))
+			for key, raw := range params {
+				lower := strings.ToLower(key)
+				if strings.Contains(lower, "exchange") || strings.Contains(lower, "market") ||
+					lower == "datatype" {
+					t.Errorf("%s sent %q = %s: no futures request carries a market, in either "+
+						"vendor SDK or in the released pkg/hstong/future", tc.name, key, raw)
+				}
+			}
+			// The market the caller did supply must not appear as a value either.
+			if body := rec.lastBody(t, string(tc.route)); strings.Contains(body, "HSI2609.HK.HK") {
+				t.Errorf("%s joined the market onto the contract code: %s", tc.name, body)
+			}
+		})
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Local rejections
+// ---------------------------------------------------------------------------
+
+// futuresMutationLocalCases is the input-validation table for the three
+// mutations.
+//
+// Every row asserts a typed rejection under the method's own op *and* zero
+// recorded calls, and the table is driven with newSequencedExecutor(t) and no
+// scripted reply, so a rejection that accidentally reached the executor fails
+// through the fake's t.Fatalf naming the op rather than passing vacuously. That
+// is C4's pattern for the reads, and it is what makes the zero-call assertion
+// mean something rather than merely stated.
+func futuresMutationLocalCases() []futuresLocalCase {
+	id := futuresFixtureAccount()
+
+	// out is declared before the row builders that append to it, because Go's
+	// scoping puts a declaration's identifier in scope only from its own point on.
+	var out []futuresLocalCase
+
+	entrust := func(name string, mut func(*FuturesOrderRequest)) {
+		out = append(out, futuresLocalCase{
+			name: "Entrust: " + name,
+			op:   opFuturesEntrust,
+			run: func(t *testing.T, ctx context.Context, svc *FuturesService) error {
+				t.Helper()
+				req := futuresFixtureOrder()
+				mut(&req)
+				result, err := svc.Entrust(ctx, id, req)
+				requireZero(t, result)
+				return err
+			},
+		})
+	}
+	modifyRow := func(name string, mut func(*FuturesModifyRequest)) {
+		out = append(out, futuresLocalCase{
+			name: "ModifyEntrust: " + name,
+			op:   opFuturesModifyEntrust,
+			run: func(t *testing.T, ctx context.Context, svc *FuturesService) error {
+				t.Helper()
+				req := futuresFixtureModify()
+				mut(&req)
+				return svc.ModifyEntrust(ctx, id, req)
+			},
+		})
+	}
+	cancelRow := func(name string, mut func(*domain.EntrustID, *domain.Symbol)) {
+		out = append(out, futuresLocalCase{
+			name: "CancelEntrust: " + name,
+			op:   opFuturesCancelEntrust,
+			run: func(t *testing.T, ctx context.Context, svc *FuturesService) error {
+				t.Helper()
+				entrustID := futuresFixtureEntrustID()
+				sym := futuresFixtureSymbol()
+				mut(&entrustID, &sym)
+				return svc.CancelEntrust(ctx, id, entrustID, sym)
+			},
+		})
+	}
+
+	// The contract code, on all three. futuresValidateStockCode is shared with the
+	// reads, so these rows pin that the mutations really call it rather than
+	// reading Code straight into the body.
+	entrust("an empty contract code", func(r *FuturesOrderRequest) { r.Symbol = domain.Symbol{} })
+	entrust("an interior-whitespace contract code", func(r *FuturesOrderRequest) {
+		r.Symbol = domain.Symbol{Code: "HSI 2609"}
+	})
+	modifyRow("an empty contract code", func(r *FuturesModifyRequest) { r.Symbol = domain.Symbol{} })
+	modifyRow("an interior-whitespace contract code", func(r *FuturesModifyRequest) {
+		r.Symbol = domain.Symbol{Code: "HSI\t2609"}
+	})
+	cancelRow("an empty contract code", func(_ *domain.EntrustID, s *domain.Symbol) { *s = domain.Symbol{} })
+	cancelRow("an interior-whitespace contract code", func(_ *domain.EntrustID, s *domain.Symbol) {
+		*s = domain.Symbol{Code: "HSI 2609"}
+	})
+
+	// The order id on the two methods that name one, trimmed before testing.
+	cancelRow("an empty order id", func(e *domain.EntrustID, _ *domain.Symbol) { *e = "" })
+	cancelRow("an all-whitespace order id", func(e *domain.EntrustID, _ *domain.Symbol) { *e = "   " })
+	cancelRow("a tab-only order id", func(e *domain.EntrustID, _ *domain.Symbol) { *e = "\t" })
+	modifyRow("an empty order id", func(r *FuturesModifyRequest) { r.EntrustID = "" })
+	modifyRow("an all-whitespace order id", func(r *FuturesModifyRequest) { r.EntrustID = "   " })
+
+	// The order type: required and digit-shaped, and deliberately NOT bounded.
+	for _, orderType := range []string{"", "limit", "0 ", " 0", "-1", "0x0"} {
+		entrust("orderType "+strconv.Quote(orderType), func(r *FuturesOrderRequest) {
+			r.OrderType = orderType
+		})
+	}
+
+	// The direction, on both methods that carry one.
+	for _, side := range []types.EntrustBS{"", "0", "5", "9", "buy", "-1"} {
+		entrust("side "+strconv.Quote(string(side)), func(r *FuturesOrderRequest) { r.Side = side })
+	}
+	for _, side := range []types.EntrustBS{"", "0", "7", "sell"} {
+		modifyRow("side "+strconv.Quote(string(side)), func(r *FuturesModifyRequest) { r.Side = side })
+	}
+
+	// The price: required, with no market-order waiver, so a negative is the one
+	// failure a domain.Price can still express.
+	entrust("a negative price", func(r *FuturesOrderRequest) { r.Price = domain.MustNewPrice("-1", "0") })
+	entrust("a price below one", func(r *FuturesOrderRequest) {
+		r.Price = domain.MustNewPrice("-0.0001", "0")
+	})
+	modifyRow("a negative price", func(r *FuturesModifyRequest) {
+		r.Price = domain.MustNewPrice("-0.5", "0")
+	})
+
+	// The quantity: strictly positive, so zero and negative both fail.
+	entrust("a zero quantity", func(r *FuturesOrderRequest) { r.Quantity = domain.MustNewQuantity("0") })
+	entrust("a negative quantity", func(r *FuturesOrderRequest) {
+		r.Quantity = domain.MustNewQuantity("-1")
+	})
+	modifyRow("a zero quantity", func(r *FuturesModifyRequest) { r.Quantity = domain.MustNewQuantity("0") })
+	modifyRow("a negative quantity", func(r *FuturesModifyRequest) {
+		r.Quantity = domain.MustNewQuantity("-2")
+	})
+
+	// The time-in-force and the date it carries.
+	for _, vtt := range []string{"", "5", "6", "-1", "day", " 0"} {
+		entrust("validTimeType "+strconv.Quote(vtt), func(r *FuturesOrderRequest) {
+			r.ValidTimeType = vtt
+		})
+		modifyRow("validTimeType "+strconv.Quote(vtt), func(r *FuturesModifyRequest) {
+			r.ValidTimeType = vtt
+		})
+	}
+	entrust(`validTimeType "4" with no date`, func(r *FuturesOrderRequest) {
+		r.ValidTimeType = "4"
+		r.ValidTime = ""
+	})
+	modifyRow(`validTimeType "4" with no date`, func(r *FuturesModifyRequest) {
+		r.ValidTimeType = "4"
+		r.ValidTime = ""
+	})
+	entrust("a validTime that is not eight digits", func(r *FuturesOrderRequest) {
+		r.ValidTime = "2026-09-30"
+	})
+	entrust("a validTime shaped but not a calendar date", func(r *FuturesOrderRequest) {
+		r.ValidTime = "20260230"
+	})
+	entrust("a validTime that is a leap day on a non-leap year", func(r *FuturesOrderRequest) {
+		r.ValidTime = "20260229"
+	})
+	modifyRow("a validTime that is not eight digits", func(r *FuturesModifyRequest) {
+		r.ValidTime = "2026093"
+	})
+
+	// The order option, checked *after* the mapping boundary substitutes "0", so
+	// only a non-empty out-of-set value is a rejection.
+	for _, oo := range []string{"2", "-1", "01", "T+1", " 0"} {
+		entrust("orderOptions "+strconv.Quote(oo), func(r *FuturesOrderRequest) { r.OrderOptions = oo })
+		modifyRow("orderOptions "+strconv.Quote(oo), func(r *FuturesModifyRequest) {
+			r.OrderOptions = oo
+		})
+	}
+
+	return out
+}
+
+// TestFuturesMutationsRejectBadInputWithoutARequest is the input-validation arm:
+// a bad code, direction, price, quantity, time-in-force or order option is
+// refused locally, under the method's own op, at zero HTTP cost.
+//
+// The zero-call assertion is the load-bearing half and it is only credible
+// because the executor is built with no scripted reply: had a rejection ever
+// reached the executor, the fake's t.Fatalf would fire naming the op, instead of
+// the row quietly passing against a fixture the code never consulted. That is the
+// gap A2 found in pkg/hstong/trade, and it is closed here by construction rather
+// than by care.
+func TestFuturesMutationsRejectBadInputWithoutARequest(t *testing.T) {
+	for _, tc := range futuresMutationLocalCases() {
+		t.Run(tc.name, func(t *testing.T) {
+			exec := newSequencedExecutor(t)
+			assertInvalidParam(t, tc.run(t, t.Context(), NewFuturesService(exec)), tc.op)
+			requireCalls(t, exec, 0)
+		})
+	}
+}
+
+// TestFuturesMutationsAcceptTheDocumentedBoundaries is the accepting side of the
+// table above, because a validator that refused everything would satisfy the table
+// while making the three methods unusable.
+//
+// Four rows are worth naming. "0" is the recommended market-order price and must
+// be accepted even though the released layer waived the price entirely for a
+// market order - that is design-futures-requests §4.3 recommendation (a), and
+// "0" is a well-formed non-negative decimal needing no special case. A
+// specified-date order is accepted when it carries a real date. The leap day is
+// accepted on a leap year, so the calendar check is a calendar and not a length
+// check. And an empty order option is *accepted* and becomes the documented "0" -
+// the one defaulted field on either body, and the only always-sent field whose
+// value a caller may legitimately leave unset.
+func TestFuturesMutationsAcceptTheDocumentedBoundaries(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		mutate     func(*FuturesOrderRequest)
+		wantParams futuresEntrustWireRequest
+	}{
+		{
+			name: `a market order carries "0" and no date`,
+			mutate: func(r *FuturesOrderRequest) {
+				r.OrderType = "2"
+				r.Price = domain.MustNewPrice("0", "0")
+				r.ValidTimeType = "0"
+				r.ValidTime = ""
+			},
+			wantParams: futuresEntrustWireRequest{
+				StockCode: "HSI2609.HK", EntrustType: "2", EntrustPrice: "0",
+				EntrustAmount: "1", EntrustBS: "1", ValidTimeType: "0", OrderOptions: "0",
+			},
+		},
+		{
+			name: "the leap day is a real date",
+			mutate: func(r *FuturesOrderRequest) {
+				r.ValidTimeType = "4"
+				r.ValidTime = "20240229"
+			},
+			wantParams: futuresEntrustWireRequest{
+				StockCode: "HSI2609.HK", EntrustType: "0", EntrustPrice: "25000",
+				EntrustAmount: "1", EntrustBS: "1", ValidTimeType: "4", OrderOptions: "0",
+				ValidTime: "20240229",
+			},
+		},
+		{
+			name:   "an empty order option becomes the documented 0",
+			mutate: func(r *FuturesOrderRequest) { r.OrderOptions = "" },
+			wantParams: futuresEntrustWireRequest{
+				StockCode: "HSI2609.HK", EntrustType: "0", EntrustPrice: "25000",
+				EntrustAmount: "1", EntrustBS: "1", ValidTimeType: "0", OrderOptions: "0",
+				ValidTime: "20260930",
+			},
+		},
+		{
+			name:   "a short quantity is legal and is not rounded",
+			mutate: func(r *FuturesOrderRequest) { r.Quantity = domain.MustNewQuantity("0.5") },
+			wantParams: futuresEntrustWireRequest{
+				StockCode: "HSI2609.HK", EntrustType: "0", EntrustPrice: "25000",
+				EntrustAmount: "0.5", EntrustBS: "1", ValidTimeType: "0", OrderOptions: "0",
+				ValidTime: "20260930",
+			},
+		},
+		{
+			name:   "a padded code is passed through verbatim, as the released layer does",
+			mutate: func(r *FuturesOrderRequest) { r.Symbol = domain.Symbol{Code: " HSI2609.HK "} },
+			wantParams: futuresEntrustWireRequest{
+				StockCode: " HSI2609.HK ", EntrustType: "0", EntrustPrice: "25000",
+				EntrustAmount: "1", EntrustBS: "1", ValidTimeType: "0", OrderOptions: "0",
+				ValidTime: "20260930",
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			exec := newSequencedExecutor(t, sequencedReply{reply: json.RawMessage(futuresMutationBody)})
+			req := futuresFixtureOrder()
+			tc.mutate(&req)
+
+			if _, err := NewFuturesService(exec).Entrust(t.Context(), futuresFixtureAccount(), req); err != nil {
+				t.Fatalf("Entrust with %+v = %v, want nil", req, err)
+			}
+			requireCalls(t, exec, 1)
+			if got := exec.lastParams(t); !reflect.DeepEqual(got, tc.wantParams) {
+				t.Errorf("the request body = %#v, want %#v", got, tc.wantParams)
+			}
+		})
+	}
+}
+
+// TestFuturesEntrustBSKeepsTheReleasedFour is the pin design-futures-requests
+// §9.3 asks for, in the spirit of A6's TestEveryDocumentedCodeIsAccepted.
+//
+// The set is disputed: the vendor's *futures* enum has two values and SPEC §7.4
+// plus the released pkg/hstong/future have four. §9.3 decides to keep four and
+// NOT to narrow, because narrowing is a caller-visible change on a
+// money-moving field decided on incomplete evidence, and because being
+// permissive fails as a clear Gateway rejection rather than a misroute. A test
+// that pinned {3,4} as accepted is what stops a future narrowing attempt
+// succeeding quietly on the strength of a plausible reading of the vendor enum.
+func TestFuturesEntrustBSKeepsTheReleasedFour(t *testing.T) {
+	for _, side := range []types.EntrustBS{
+		types.EntrustBuy, types.EntrustSell, types.EntrustCloseShort, types.EntrustOpenShort,
+		"3", "4",
+	} {
+		t.Run(string(side), func(t *testing.T) {
+			rec := newWireRecorder(map[string]string{
+				string(client.RouteTradeFuturesEntrust): gatewaySuccess(futuresMutationBody),
+			})
+			recMod := newWireRecorder(map[string]string{
+				string(client.RouteTradeFuturesModifyEntrust): gatewaySuccess(futuresMutationBody),
+			})
+			req := futuresFixtureOrder()
+			req.Side = side
+			if _, err := NewFuturesService(newWireExecutor(t, rec)).Entrust(
+				t.Context(), futuresFixtureAccount(), req); err != nil {
+				t.Errorf("Entrust with side %q = %v, want nil: the released layer has accepted "+
+					"{1,2,3,4} since v0.1.0 and narrowing it is a separate, caller-visible task "+
+					"(design-futures-requests §9.3, tracked as C1b)", side, err)
+			}
+			mod := futuresFixtureModify()
+			mod.Side = side
+			if err := NewFuturesService(newWireExecutor(t, recMod)).ModifyEntrust(
+				t.Context(), futuresFixtureAccount(), mod); err != nil {
+				t.Errorf("ModifyEntrust with side %q = %v, want nil, for the reason above", side, err)
+			}
+		})
+	}
+}
+
+// TestFuturesEntrustTypeIsNotValueBounded is the mirror pin, for §9.2.
+//
+// The two vendor SDKs, both v2.3.0 shipped the same day, disagree on whether a
+// fourth order-type code exists: Java declares four including OPTION("3") and
+// Python declares exactly three. A local closed set would therefore reject a code
+// one of them documents, so the SDK validates digit-ness and requiredness and
+// stops. This test fails if someone narrows it, and fails if the digit check is
+// dropped - the two directions of the same rule.
+func TestFuturesEntrustTypeIsNotValueBounded(t *testing.T) {
+	// Every digit run is accepted, including the codes no single vendor SDK
+	// documents and the ones a caller may already be sending in production.
+	for _, orderType := range []string{"0", "1", "2", "3", "7", "42", "007", "99999999999999999999"} {
+		t.Run("accepted: "+orderType, func(t *testing.T) {
+			rec := newWireRecorder(map[string]string{
+				string(client.RouteTradeFuturesEntrust): gatewaySuccess(futuresMutationBody),
+			})
+			req := futuresFixtureOrder()
+			req.OrderType = orderType
+			if _, err := NewFuturesService(newWireExecutor(t, rec)).Entrust(
+				t.Context(), futuresFixtureAccount(), req); err != nil {
+				t.Errorf("Entrust with orderType %q = %v, want nil: the two vendor SDKs disagree "+
+					"on the set, so a local closed set would refuse a code one of them documents "+
+					"(design-futures-requests §9.2)", orderType, err)
+			}
+		})
+	}
+	// And the digit check itself is not decorative: these are all refused.
+	exec := newSequencedExecutor(t)
+	req := futuresFixtureOrder()
+	req.OrderType = "limit"
+	_, err := NewFuturesService(exec).Entrust(t.Context(), futuresFixtureAccount(), req)
+	assertInvalidParam(t, err, opFuturesEntrust)
+	requireCalls(t, exec, 0)
+}
+
+// ---------------------------------------------------------------------------
+// Transport error arms
+// ---------------------------------------------------------------------------
+
+// errFuturesMutationDown is the sentinel the Level 1 mutation rows return. It is
+// compared with errors.Is and never on a rendered message.
+var errFuturesMutationDown = errors.New("futures: scripted mutation failure")
+
+// TestFuturesMutationExecutorFailurePropagates is Level 1: the executor's error
+// reaches the caller unchanged, the zero value comes back beside it, and exactly
+// one call was recorded.
+//
+// It is also the guard against a service growing a retry loop of its own. The
+// fake has no retry logic, so "the fake recorded one call" is trivially true
+// against it; what this row really rules out is a second Do.
+func TestFuturesMutationExecutorFailurePropagates(t *testing.T) {
+	for _, tc := range futuresMutationCases() {
+		t.Run(tc.name, func(t *testing.T) {
+			exec := newSequencedExecutor(t,
+				sequencedReply{err: errFuturesMutationDown},
+				sequencedReply{err: errFuturesMutationDown},
+			)
+
+			err := tc.invoke(t, t.Context(), NewFuturesService(exec))
+			if !errors.Is(err, errFuturesMutationDown) {
+				t.Fatalf("%s = %v, want the executor's own error", tc.name, err)
+			}
+			futuresExpectCall(t, exec, tc.op, tc.route)
+			requireCalls(t, exec, 1)
+		})
+	}
+}
+
+// TestFuturesMutationGatewayRejectionArrivesTyped is Level 2: a real ok:false
+// envelope becomes a typed *errs.Error carrying the Gateway's code, its category
+// and the service's own op.
+//
+// This is the row that proves the mutations do not launder a typed Gateway error
+// into an opaque one - something a fake cannot show, because a fake never builds a
+// typed error at all. It matters more on a mutation than on a read: a caller
+// deciding whether to re-establish a futures session branches on Op, and a
+// mutation that filled in the wrong one would be attributed to a route it never
+// called, on the one call the caller cannot safely retry.
+func TestFuturesMutationGatewayRejectionArrivesTyped(t *testing.T) {
+	const code = types.StatusServiceBusy
+	const text = "service busy, retry later"
+
+	for _, tc := range futuresMutationCases() {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := newWireRecorder(map[string]string{
+				string(tc.route): gatewayFailure(code, text),
+			})
+			svc := NewFuturesService(newWireExecutor(t, rec))
+
+			err := tc.invoke(t, t.Context(), svc)
+			if err == nil {
+				t.Fatalf("%s = nil error, want the Gateway rejection %q", tc.name, code)
+			}
+			errRejects(t, err, code, tc.op)
+			if got := errs.CategoryOf(err); got != errs.CategoryRateLimit {
+				t.Errorf("CategoryOf = %q, want %q", got, errs.CategoryRateLimit)
+			}
+			if got, ok := errs.CodeOf(err); !ok || got != code {
+				t.Errorf("CodeOf = (%q, %v), want (%q, true)", got, ok, code)
+			}
+			if got := rec.count(string(tc.route)); got != 1 {
+				t.Fatalf("requests to %s = %d, want exactly 1", tc.route, got)
+			}
+			if got := rec.total(); got != 1 {
+				t.Fatalf("total requests = %d, want 1: the mutation must not have issued a "+
+					"second request on any other path", got)
+			}
+		})
+	}
+}
+
+// TestFuturesMutationReconciliationErrorIsTypedAndRecoverable is the
+// reconciliation half of ADR 0003, and it is about the *error* rather than the
+// count.
+//
+// "1007 duplicate submission" is the code that exists precisely because of the
+// ambiguity ADR 0003 describes: the request may have reached the platform and
+// timed out before the reply was read, so the true state is unknown. ADR 0003
+// requires the SDK to return a typed error telling the caller to reconcile, and
+// requires it to be recoverable - which is a stronger claim than "some error came
+// back". Four properties are asserted per method:
+//
+//   - the Gateway's own code survives, so a caller can tell a duplicate from a
+//     rejection for any other reason;
+//   - the category is errs.CategoryTrading, the one the code table assigns to
+//     1007, so a caller can branch on the *kind* of failure without matching on
+//     a rendered message;
+//   - errors.As reaches an *errs.Error and errors.Is still traverses the chain,
+//     so a caller that wrapped the error on its way out has not lost the
+//     classification;
+//   - the Op is the method's own, which is how a caller decides which
+//     reconciliation query to run.
+//
+// The failure direction is also asserted: a service that wrapped this in its own
+// opaque type would keep the count at one and lose every one of these.
+func TestFuturesMutationReconciliationErrorIsTypedAndRecoverable(t *testing.T) {
+	const code = types.StatusDuplicateSubmit
+	const text = "duplicate submission"
+
+	for _, tc := range futuresMutationCases() {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := newWireRecorder(map[string]string{
+				string(tc.route): gatewayFailure(code, text),
+			})
+			svc := NewFuturesService(newWireExecutor(t, rec))
+
+			err := tc.invoke(t, t.Context(), svc)
+			if err == nil {
+				t.Fatalf("%s = nil error, want the %q rejection the caller must reconcile", tc.name, code)
+			}
+
+			typed := errRejects(t, err, code, tc.op)
+			if got := errs.CategoryOf(err); got != errs.CategoryTrading {
+				t.Errorf("CategoryOf = %q, want %q: a %s is a trading-state failure the caller "+
+					"must reconcile before resubmitting, and it is the one code that exists "+
+					"because of the ambiguity (docs/adr/0003-no-auto-retry-orders.md)",
+					got, errs.CategoryTrading, code)
+			}
+			if typed.Category != errs.CategoryTrading {
+				t.Errorf("Error.Category = %q, want %q on the error itself and not only on the "+
+					"CategoryOf projection", typed.Category, errs.CategoryTrading)
+			}
+			if got, ok := errs.CodeOf(err); !ok || got != code {
+				t.Errorf("CodeOf = (%q, %v), want (%q, true)", got, ok, code)
+			}
+			// errors.As must reach the typed error, and it must be reachable
+			// through a wrapper the caller adds - which is the "recoverable" half.
+			var viaAs *errs.Error
+			if !errors.As(err, &viaAs) {
+				t.Errorf("errors.As(%T) yielded no *errs.Error", err)
+			}
+			wrapped := fmt.Errorf("reconcile after: %w", err)
+			if !errors.As(wrapped, &viaAs) {
+				t.Error("errors.As yielded no *errs.Error through a caller-supplied wrapper, so " +
+					"the classification is lost the moment a caller annotates the error")
+			}
+			// The negative counterpart: a 1007 is a trading state, not a session
+			// failure, so a caller that re-logs-in on the wrong signal must not be
+			// misled into doing so and losing the order it is trying to reconcile.
+			if errs.ReLoginRequired(wrapped) {
+				t.Errorf("ReLoginRequired(%v) = true; a duplicate submission is a trading state, "+
+					"not a session failure", wrapped)
+			}
+			if got := rec.total(); got != 1 {
+				t.Errorf("total requests = %d, want 1", got)
+			}
+		})
+	}
+}
+
+// TestFuturesMutationsAreSentExactlyOnceUnderARetryPolicy is the ADR 0003 proof
+// for the three futures mutations, and it carries its own control.
+//
+// Three things make it non-obvious at this layer, and each is a way the assertion
+// could pass for the wrong reason.
+//
+//  1. The guarantee lives in client, not here. client.Client.execute derives the
+//     retry class from the route path and consults resilience.IsMutation, which
+//     issues one attempt for that class regardless of the policy. A fake executor
+//     has no retry logic at all, so "the fake recorded one call" is trivially true
+//     and says nothing about retries.
+//
+//  2. The proof therefore needs a real *client.Client over an httptest server and
+//     a retryable rejection, so the policy has every reason to fire. "1011 service
+//     busy" is the code errs.Retryable reports as retryable. BaseBackoff is 0, so
+//     the request count is a property of the classification and not of elapsed
+//     time - the discipline internal/push needed after its reconnect tests made a
+//     coverage figure a coin flip. Nothing here points at 127.0.0.1:11111.
+//
+//  3. A single request is also what a client with *no* retry policy produces, and
+//     also what a policy that was never applied produces. So the same test drives a
+//     read-only futures route under the identical client options and the identical
+//     rejection and shows it taking all five attempts. Without that control the
+//     three mutation rows would pass against a policy that did nothing, and a test
+//     that cannot fail is worse than no test because it reads as coverage.
+//
+// Every invocation uses a valid request, which is load-bearing: Entrust validates
+// before it calls the executor, so an invalid fixture would record zero requests -
+// and zero would look like "no attempt at all" rather than "exactly one". The
+// assertions therefore pair rec.count(route) == 1 with rec.total() == 1, and
+// TestFuturesMutationsRejectBadInputWithoutARequest covers the other case.
+func TestFuturesMutationsAreSentExactlyOnceUnderARetryPolicy(t *testing.T) {
+	const maxAttempts = 5
+	busy := gatewayFailure(types.StatusServiceBusy, "service busy, retry later")
+
+	// Every path answers busy, not just the one under test, so a service that
+	// quietly issued a second request somewhere else would show up in total().
+	paths := make(map[string]string, len(futuresMutationCases())+1)
+	for _, tc := range futuresMutationCases() {
+		paths[string(tc.route)] = busy
+	}
+	// The control route: a read-only futures query, which must be retryable.
+	const controlRoute = client.RouteTradeFuturesQueryRealEntrustList
+	paths[string(controlRoute)] = busy
+
+	// Prove the case is retryable before relying on it. Otherwise "one attempt"
+	// would be true for the boring reason that nothing wanted a second one.
+	if !errs.Retryable(errs.New(types.StatusServiceBusy, opFuturesEntrust, "service busy, retry later")) {
+		t.Fatalf("test bug: %q is not retryable, so a single request would be expected even "+
+			"without ADR 0003", types.StatusServiceBusy)
+	}
+
+	for _, tc := range futuresMutationCases() {
+		t.Run(tc.name+" issues exactly one attempt", func(t *testing.T) {
+			rec := newWireRecorder(paths)
+			svc := NewFuturesService(newWireExecutor(t, rec,
+				client.WithRetryPolicy(client.RetryPolicy{MaxAttempts: maxAttempts, BaseBackoff: 0})))
+
+			err := tc.invoke(t, t.Context(), svc)
+			if err == nil {
+				t.Fatalf("%s = nil error, want the %q rejection", tc.name, types.StatusServiceBusy)
+			}
+			// The typed error is asserted, not just the count: a caller reconciling
+			// an ambiguous order needs to know the exchange was busy, not that the
+			// SDK gave up.
+			errRejects(t, err, types.StatusServiceBusy, tc.op)
+			if got := errs.CategoryOf(err); got != errs.CategoryRateLimit {
+				t.Errorf("CategoryOf = %q, want %q", got, errs.CategoryRateLimit)
+			}
+
+			if got := rec.count(string(tc.route)); got != 1 {
+				t.Errorf("requests to %s = %d, want exactly 1: ADR 0003 permits one attempt for "+
+					"an order mutation at any policy configuration, and this one allowed %d",
+					tc.route, got, maxAttempts)
+			}
+			if got := rec.total(); got != 1 {
+				t.Errorf("total requests = %d, want 1: the mutation must not have issued a "+
+					"second request on any other path", got)
+			}
+			t.Logf("%s: %d request under MaxAttempts %d", tc.route, rec.total(), maxAttempts)
+		})
+	}
+
+	// The control, in the same test and under the same policy, so the two numbers
+	// are directly comparable: five for a read, one for each mutation.
+	t.Run("the read control retries under the identical policy", func(t *testing.T) {
+		rec := newWireRecorder(paths)
+		svc := NewFuturesService(newWireExecutor(t, rec,
+			client.WithRetryPolicy(client.RetryPolicy{MaxAttempts: maxAttempts, BaseBackoff: 0})))
+
+		_, err := svc.QueryRealEntrustList(t.Context(), futuresFixtureAccount())
+		if err == nil {
+			t.Fatalf("QueryRealEntrustList = nil error, want the %q rejection", types.StatusServiceBusy)
+		}
+		errRejects(t, err, types.StatusServiceBusy, opFuturesQueryRealEntrustList)
+
+		if got := rec.count(string(controlRoute)); got != maxAttempts {
+			t.Fatalf("requests to %s = %d, want %d. This control is what makes the three "+
+				"single-request rows above mean something: without it, a client whose policy "+
+				"was never applied would produce exactly the same one request.",
+				controlRoute, got, maxAttempts)
+		}
+		if got := rec.total(); got != maxAttempts {
+			t.Errorf("total requests = %d, want %d", got, maxAttempts)
+		}
+		t.Logf("CONTROL %s: %d requests under MaxAttempts %d (mutations: 1 each)",
+			controlRoute, rec.total(), maxAttempts)
+	})
+}
+
+// TestFuturesMutationAttemptCountIsIndependentOfThePolicySize widens the
+// guarantee from "one policy" to "every policy": a mutation issues one attempt
+// whatever the caller configures, including a budget below one.
+//
+// resilience.Policy treats a MaxAttempts below one as one, so the smallest row is
+// a floor rather than a distinct case, and it is here to make that floor explicit.
+func TestFuturesMutationAttemptCountIsIndependentOfThePolicySize(t *testing.T) {
+	paths := make(map[string]string)
+	for _, tc := range futuresMutationCases() {
+		paths[string(tc.route)] = gatewayFailure(types.StatusServiceBusy, "busy")
+	}
+
+	for _, maxAttempts := range []int{0, 1, 2, 5, 20} {
+		t.Run("MaxAttempts "+strconv.Itoa(maxAttempts), func(t *testing.T) {
+			for _, tc := range futuresMutationCases() {
+				t.Run(tc.name, func(t *testing.T) {
+					rec := newWireRecorder(paths)
+					svc := NewFuturesService(newWireExecutor(t, rec,
+						client.WithRetryPolicy(client.RetryPolicy{MaxAttempts: maxAttempts, BaseBackoff: 0})))
+
+					if err := tc.invoke(t, t.Context(), svc); err == nil {
+						t.Fatalf("%s = nil error, want the rejection", tc.name)
+					}
+					if got := rec.total(); got != 1 {
+						t.Errorf("%s with MaxAttempts %d produced %d requests, want 1",
+							tc.name, maxAttempts, got)
+					}
+				})
+			}
+		})
+	}
+}
+
+// TestFuturesMutationCallIsCancellable pins that a cancelled context is reported
+// as a cancellation and never as a success, matched through errors.Is on
+// context.Canceled rather than on a rendered message.
+//
+// All three are single-shot, so each costs at most one recorded request: each
+// hands the context to the executor and lets the request path report the
+// cancellation. A caller who gives up on the context must not be able to turn one
+// attempt into several, and the error it gets back must still be the
+// cancellation rather than a Gateway status the SDK made up on the way out.
+func TestFuturesMutationCallIsCancellable(t *testing.T) {
+	for _, tc := range futuresMutationCases() {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := newWireRecorder(map[string]string{
+				string(tc.route): gatewayFailure(types.StatusServiceBusy, "busy"),
+			})
+			svc := NewFuturesService(newWireExecutor(t, rec,
+				client.WithRetryPolicy(client.RetryPolicy{MaxAttempts: 5, BaseBackoff: 0})))
+
+			ctx, cancel := context.WithCancel(t.Context())
+			cancel()
+
+			err := tc.invoke(t, ctx, svc)
+			if !errors.Is(err, context.Canceled) {
+				t.Errorf("%s on a cancelled context = %v, want context.Canceled", tc.name, err)
+			}
+			if got := errs.CategoryOf(err); got != errs.CategoryTimeout {
+				t.Errorf("CategoryOf = %q, want %q for a cancelled call", got, errs.CategoryTimeout)
+			}
+			if got := rec.total(); got > 1 {
+				t.Errorf("%s issued %d requests before the cancellation took effect, want at most 1",
+					tc.name, got)
+			}
+		})
+	}
+}
+
+// TestFuturesMutationMalformedReplyIsReportedAndNotDressedAsAGatewayCode covers the
+// third way a mutation can fail: the Gateway says ok:true and then sends a data
+// member the endpoint cannot decode.
+//
+// A mutation that ignored the decode failure would return a nil error and an
+// empty result, and the caller would read that as an order placed. The zero value
+// is asserted, and so is the absence of a status code - a local transport failure
+// must not be dressed as a Gateway code, or a caller retrying on a code would
+// chase a fault the Gateway never reported. The Op is still filled in, because
+// that is what a caller branches on to decide whether to re-authenticate.
+func TestFuturesMutationMalformedReplyIsReportedAndNotDressedAsAGatewayCode(t *testing.T) {
+	for _, tc := range futuresMutationCases() {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := newWireRecorder(map[string]string{
+				string(tc.route): gatewaySuccess(`42`),
+			})
+			svc := NewFuturesService(newWireExecutor(t, rec))
+
+			err := tc.invoke(t, t.Context(), svc)
+			if err == nil {
+				t.Fatalf("%s on a data member of 42 = nil error; the caller would read the "+
+					"empty result as an order placed", tc.name)
+			}
+			if code, ok := errs.CodeOf(err); ok {
+				t.Errorf("CodeOf = (%q, true), want (false): a decode failure is a local "+
+					"transport error and must not carry a Gateway status code", code)
+			}
+			var typed *errs.Error
+			if !errors.As(err, &typed) {
+				t.Fatalf("errors.As(%T) yielded no *errs.Error, so the op is not attributable", err)
+			}
+			if typed.Op != tc.op {
+				t.Errorf("Op = %q, want %q: the op still identifies which method failed", typed.Op, tc.op)
+			}
+		})
+	}
+}
+
+// ---------------------------------------------------------------------------
+// omitempty, at the level a public method can reach
+// ---------------------------------------------------------------------------
+
+// futuresEntrustAlwaysSentKeys, futuresCancelAlwaysSentKeys and
+// futuresModifyAlwaysSentKeys are the always-sent key sets of the three mutation
+// bodies, written out here rather than derived from the structs so the assertion
+// is against the vendor's request literal and not against the code under test.
+//
+// Entrust and ModifyEntrust share six always-sent keys; entrustType belongs to the
+// entrust alone, because a modify must not retype an order, and entrustId belongs
+// to the two id-bearing bodies. validTime is deliberately in none of them: it is
+// the one conditional field on any futures request, and its presence is a property
+// of the time-in-force code rather than of the body.
+var (
+	futuresEntrustAlwaysSentKeys = []string{
+		"entrustAmount", "entrustBs", "entrustPrice", "entrustType",
+		"orderOptions", "stockCode", "validTimeType",
+	}
+	futuresCancelAlwaysSentKeys = []string{"entrustId", "stockCode"}
+	futuresModifyAlwaysSentKeys = []string{
+		"entrustAmount", "entrustBs", "entrustId", "entrustPrice",
+		"orderOptions", "stockCode", "validTimeType",
+	}
+)
+
+// TestFuturesMutationAlwaysSendsItsRequiredFields is the method-level half of
+// design-futures-requests §6.1's omitempty rule, and it is the half C3's
+// struct-level TestFuturesRequestOmitemptyInBothDirections could not reach.
+//
+// C3 pinned the rule on a marshalled struct, which proves the tag. This proves the
+// tag *through a public method over real HTTP*, where a default substitution or a
+// validation default could have quietly changed the key set. It asserts three
+// directions, and the second is the interesting one:
+//
+//  1. Every always-sent key is present on a well-formed request, with the value the
+//     method was given. This is what no-omitempty buys, and it is the observable
+//     difference from the released pkg/hstong/future body, which tags entrustType,
+//     entrustPrice, validTimeType and orderOptions omitempty. The bytes are
+//     identical for a well-formed request, so a future editor "fixing" the tags
+//     back would remove only this coverage.
+//  2. An unset orderOptions - the one field a caller may legitimately leave empty -
+//     still goes on the wire as the documented "0". **That is the present-but-empty
+//     case**, and it is the only one reachable through a public method: the other
+//     three cannot be empty, because a request that would send them empty is
+//     refused locally at zero cost. That half is asserted separately in
+//     TestFuturesMutationEmptyRequiredFieldNeverReachesTheWire.
+//  3. validTime is dropped when the time-in-force is not a specified date and
+//     present when it is. An omitempty rule asserted in one direction only is half
+//     a rule, and this is the other half.
+func TestFuturesMutationAlwaysSendsItsRequiredFields(t *testing.T) {
+	t.Run("Entrust carries every always-sent key", func(t *testing.T) {
+		rec := newWireRecorder(map[string]string{
+			string(client.RouteTradeFuturesEntrust): gatewaySuccess(futuresMutationBody),
+		})
+		req := futuresFixtureOrder()
+		if _, err := NewFuturesService(newWireExecutor(t, rec)).Entrust(
+			t.Context(), futuresFixtureAccount(), req); err != nil {
+			t.Fatalf("Entrust = %v, want nil", err)
+		}
+		params := futuresRecordedParams(t, rec, string(client.RouteTradeFuturesEntrust))
+		futuresRequireKeys(t, "Entrust body", params,
+			append(append([]string(nil), futuresEntrustAlwaysSentKeys...), "validTime")...)
+		for key, want := range map[string]string{
+			"stockCode":     "HSI2609.HK",
+			"entrustType":   "0",
+			"entrustPrice":  "25000",
+			"entrustAmount": "1",
+			"entrustBs":     "1",
+			"validTimeType": "0",
+			"orderOptions":  "0",
+			"validTime":     "20260930",
+		} {
+			futuresRequireString(t, params, key, want)
+		}
+	})
+
+	t.Run("CancelEntrust carries both of its keys", func(t *testing.T) {
+		rec := newWireRecorder(map[string]string{
+			string(client.RouteTradeFuturesCancelEntrust): gatewaySuccess(futuresMutationBody),
+		})
+		if err := NewFuturesService(newWireExecutor(t, rec)).CancelEntrust(
+			t.Context(), futuresFixtureAccount(), futuresFixtureEntrustID(),
+			futuresFixtureSymbol()); err != nil {
+			t.Fatalf("CancelEntrust = %v, want nil", err)
+		}
+		params := futuresRecordedParams(t, rec, string(client.RouteTradeFuturesCancelEntrust))
+		futuresRequireKeys(t, "CancelEntrust body", params, futuresCancelAlwaysSentKeys...)
+		futuresRequireString(t, params, "entrustId", "F20260921001")
+		futuresRequireString(t, params, "stockCode", "HSI2609.HK")
+	})
+
+	t.Run("ModifyEntrust carries every always-sent key and no entrustType", func(t *testing.T) {
+		rec := newWireRecorder(map[string]string{
+			string(client.RouteTradeFuturesModifyEntrust): gatewaySuccess(futuresMutationBody),
+		})
+		if err := NewFuturesService(newWireExecutor(t, rec)).ModifyEntrust(
+			t.Context(), futuresFixtureAccount(), futuresFixtureModify()); err != nil {
+			t.Fatalf("ModifyEntrust = %v, want nil", err)
+		}
+		params := futuresRecordedParams(t, rec, string(client.RouteTradeFuturesModifyEntrust))
+		futuresRequireKeys(t, "ModifyEntrust body", params,
+			append(append([]string(nil), futuresModifyAlwaysSentKeys...), "validTime")...)
+		for key, want := range map[string]string{
+			"entrustId":     "F20260921001",
+			"stockCode":     "HSI2609.HK",
+			"entrustPrice":  "25100",
+			"entrustAmount": "2",
+			"entrustBs":     "1",
+			"validTimeType": "4",
+			"orderOptions":  "1",
+			"validTime":     "20260930",
+		} {
+			futuresRequireString(t, params, key, want)
+		}
+		// The mirror-image row of the key set, restated at the method level: a
+		// modify must not retype an order, and the type of check is presence.
+		if _, ok := params["entrustType"]; ok {
+			t.Error("the modify body carries an entrustType key on the wire; the Gateway's " +
+				"modify body has no such field")
+		}
+	})
+
+	t.Run("an unset order option is sent, not dropped", func(t *testing.T) {
+		for _, name := range []string{"Entrust", "ModifyEntrust"} {
+			t.Run(name, func(t *testing.T) {
+				tc := futuresMutationCaseNamed(t, name)
+				rec := newWireRecorder(map[string]string{
+					string(tc.route): gatewaySuccess(string(tc.reply)),
+				})
+				order := futuresFixtureOrder()
+				order.OrderOptions = ""
+				modify := futuresFixtureModify()
+				modify.OrderOptions = ""
+
+				svc := NewFuturesService(newWireExecutor(t, rec))
+				var err error
+				if name == "Entrust" {
+					_, err = svc.Entrust(t.Context(), futuresFixtureAccount(), order)
+				} else {
+					err = svc.ModifyEntrust(t.Context(), futuresFixtureAccount(), modify)
+				}
+				if err != nil {
+					t.Fatalf("%s with an empty order option = %v, want nil: an empty order option "+
+						"is a caller who wants the Gateway's default, not a malformed request", name, err)
+				}
+				params := futuresRecordedParams(t, rec, string(tc.route))
+				raw, ok := params["orderOptions"]
+				if !ok {
+					t.Fatalf("the orderOptions key is absent: it carries no omitempty, so the key "+
+						"is emitted whatever the caller supplied. body: %s",
+						rec.lastBody(t, string(tc.route)))
+				}
+				if string(raw) != `"0"` {
+					t.Errorf("orderOptions on the wire = %s, want the quoted default \"0\"", raw)
+				}
+			})
+		}
+	})
+
+	t.Run("validTime is present or absent according to the time-in-force", func(t *testing.T) {
+		// Both mutation bodies, and both directions. The mirror-image omission here is
+		// real rather than theoretical: a driver that dropped omitempty from the
+		// *modify* validTime survived the entrust-only version of this row, because
+		// every assertion about a dropped date was made through Entrust. A rule
+		// asserted on one body is half a rule even when it is asserted on the right
+		// body.
+		for _, name := range []string{"Entrust", "ModifyEntrust"} {
+			tc := futuresMutationCaseNamed(t, name)
+			for _, row := range []struct {
+				name          string
+				validTimeType string
+				validTime     string
+				wantPresent   bool
+			}{
+				{"a day order drops the date", "0", "", false},
+				{"a specified-date order carries the date", "4", "20260930", true},
+				{"a non-specified code with a date still carries it", "0", "20260930", true},
+			} {
+				t.Run(name+": "+row.name, func(t *testing.T) {
+					rec := newWireRecorder(map[string]string{
+						string(tc.route): gatewaySuccess(string(tc.reply)),
+					})
+					order := futuresFixtureOrder()
+					order.ValidTimeType = row.validTimeType
+					order.ValidTime = row.validTime
+					mod := futuresFixtureModify()
+					mod.ValidTimeType = row.validTimeType
+					mod.ValidTime = row.validTime
+
+					svc := NewFuturesService(newWireExecutor(t, rec))
+					var err error
+					if name == "Entrust" {
+						_, err = svc.Entrust(t.Context(), futuresFixtureAccount(), order)
+					} else {
+						err = svc.ModifyEntrust(t.Context(), futuresFixtureAccount(), mod)
+					}
+					if err != nil {
+						t.Fatalf("%s = %v, want nil", name, err)
+					}
+
+					params := futuresRecordedParams(t, rec, string(tc.route))
+					_, present := params["validTime"]
+					if present != row.wantPresent {
+						t.Fatalf("validTime present = %v, want %v; body: %s", present, row.wantPresent,
+							rec.lastBody(t, string(tc.route)))
+					}
+					if row.wantPresent {
+						futuresRequireString(t, params, "validTime", row.validTime)
+						return
+					}
+					// Everything else is unaffected by the drop: an omitted key must not
+					// take a neighbour with it.
+					if name == "Entrust" {
+						futuresRequireKeys(t, "Entrust body", params, futuresEntrustAlwaysSentKeys...)
+					} else {
+						futuresRequireKeys(t, "ModifyEntrust body", params, futuresModifyAlwaysSentKeys...)
+					}
+				})
+			}
+		}
+	})
+}
+
+// TestFuturesMutationEmptyRequiredFieldNeverReachesTheWire is the other way to
+// state the omitempty rule on a mutation, and it is the stronger of the two.
+//
+// A present-but-empty required field is only ever *emitted* when a caller builds
+// one; through a public method the request is refused locally first, at zero HTTP
+// cost. So the reachable property is not "an empty required field is sent empty" -
+// it is "a request that would send one is never sent". Each row below is the
+// method-level counterpart of a key in futuresEntrustAlwaysSentKeys, and each
+// asserts zero requests, which is the property that makes local validation safe on
+// an order: a request this SDK refused provably had no side effect.
+//
+// The other direction is not lost. C3's struct-level
+// TestFuturesRequestOmitemptyInBothDirections still marshals an all-zero
+// futuresEntrustWireRequest and asserts the seven keys are present and empty,
+// which is the tag's behaviour; this is the method's.
+func TestFuturesMutationEmptyRequiredFieldNeverReachesTheWire(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		op   string
+		run  func(t *testing.T, ctx context.Context, svc *FuturesService) error
+	}{
+		{"an empty stockCode", opFuturesEntrust, func(t *testing.T, ctx context.Context, svc *FuturesService) error {
+			t.Helper()
+			req := futuresFixtureOrder()
+			req.Symbol = domain.Symbol{}
+			result, err := svc.Entrust(ctx, futuresFixtureAccount(), req)
+			requireZero(t, result)
+			return err
+		}},
+		{"an empty entrustType", opFuturesEntrust, func(t *testing.T, ctx context.Context, svc *FuturesService) error {
+			t.Helper()
+			req := futuresFixtureOrder()
+			req.OrderType = ""
+			result, err := svc.Entrust(ctx, futuresFixtureAccount(), req)
+			requireZero(t, result)
+			return err
+		}},
+		{"an empty validTimeType", opFuturesEntrust, func(t *testing.T, ctx context.Context, svc *FuturesService) error {
+			t.Helper()
+			req := futuresFixtureOrder()
+			req.ValidTimeType = ""
+			result, err := svc.Entrust(ctx, futuresFixtureAccount(), req)
+			requireZero(t, result)
+			return err
+		}},
+		{"an empty entrustBs", opFuturesEntrust, func(t *testing.T, ctx context.Context, svc *FuturesService) error {
+			t.Helper()
+			req := futuresFixtureOrder()
+			req.Side = ""
+			result, err := svc.Entrust(ctx, futuresFixtureAccount(), req)
+			requireZero(t, result)
+			return err
+		}},
+		{"a zero entrustAmount", opFuturesEntrust, func(t *testing.T, ctx context.Context, svc *FuturesService) error {
+			t.Helper()
+			req := futuresFixtureOrder()
+			req.Quantity = domain.MustNewQuantity("0")
+			result, err := svc.Entrust(ctx, futuresFixtureAccount(), req)
+			requireZero(t, result)
+			return err
+		}},
+		{"an empty entrustId on a modify", opFuturesModifyEntrust, func(t *testing.T, ctx context.Context, svc *FuturesService) error {
+			t.Helper()
+			req := futuresFixtureModify()
+			req.EntrustID = ""
+			return svc.ModifyEntrust(ctx, futuresFixtureAccount(), req)
+		}},
+		{"an empty entrustId on a cancel", opFuturesCancelEntrust, func(t *testing.T, ctx context.Context, svc *FuturesService) error {
+			t.Helper()
+			return svc.CancelEntrust(ctx, futuresFixtureAccount(), "", futuresFixtureSymbol())
+		}},
+		{"an empty stockCode on a cancel", opFuturesCancelEntrust, func(t *testing.T, ctx context.Context, svc *FuturesService) error {
+			t.Helper()
+			return svc.CancelEntrust(ctx, futuresFixtureAccount(), futuresFixtureEntrustID(), domain.Symbol{})
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			exec := newSequencedExecutor(t)
+			assertInvalidParam(t, tc.run(t, t.Context(), NewFuturesService(exec)), tc.op)
+			requireCalls(t, exec, 0)
+		})
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Money
+// ---------------------------------------------------------------------------
+
+// futuresMutationMoneyHost is one money-bearing field on one mutation.
+//
+// A mutation's money is a *write*, which is what makes the request side the side
+// that matters here: the C4 money hosts are all reads, where a lost digit is a
+// wrong number on a report. A lost digit on entrustPrice or entrustAmount is a
+// wrong order. So every host is driven over the real HTTP stack and the assertion
+// is on the recorded request body, with the exact literal required to appear there
+// quoted.
+type futuresMutationMoneyHost struct {
+	name   string
+	method string
+	field  string
+	route  client.Route
+	// price is true for a price-shaped field, which is driven with the price sets;
+	// the quantity hosts get the 27-digit integer instead, because 1e-330 is a
+	// price-shaped value and a contract count is not.
+	price bool
+	// invoke performs the mutation carrying literal in the targeted field.
+	invoke func(t *testing.T, ctx context.Context, svc *FuturesService, literal string) error
+}
+
+// futuresMutationMoneyHosts covers every money field on every mutation body: the
+// price and the quantity of the entrust, and the price and the quantity of the
+// modify. There are no money fields on the cancel body - entrustId and stockCode
+// are neither - which is why this table has four hosts and three methods.
+func futuresMutationMoneyHosts() []futuresMutationMoneyHost {
+	return []futuresMutationMoneyHost{
+		{
+			name: "Entrust/entrustPrice", method: "Entrust", field: "entrustPrice",
+			route: client.RouteTradeFuturesEntrust, price: true,
+			invoke: func(t *testing.T, ctx context.Context, svc *FuturesService, literal string) error {
+				t.Helper()
+				req := futuresFixtureOrder()
+				req.Price = domain.MustNewPrice(literal, "0")
+				_, err := svc.Entrust(ctx, futuresFixtureAccount(), req)
+				return err
+			},
+		},
+		{
+			name: "Entrust/entrustAmount", method: "Entrust", field: "entrustAmount",
+			route: client.RouteTradeFuturesEntrust,
+			invoke: func(t *testing.T, ctx context.Context, svc *FuturesService, literal string) error {
+				t.Helper()
+				req := futuresFixtureOrder()
+				req.Quantity = domain.MustNewQuantity(literal)
+				_, err := svc.Entrust(ctx, futuresFixtureAccount(), req)
+				return err
+			},
+		},
+		{
+			name: "ModifyEntrust/entrustPrice", method: "ModifyEntrust", field: "entrustPrice",
+			route: client.RouteTradeFuturesModifyEntrust, price: true,
+			invoke: func(t *testing.T, ctx context.Context, svc *FuturesService, literal string) error {
+				t.Helper()
+				req := futuresFixtureModify()
+				req.Price = domain.MustNewPrice(literal, "0")
+				return svc.ModifyEntrust(ctx, futuresFixtureAccount(), req)
+			},
+		},
+		{
+			name: "ModifyEntrust/entrustAmount", method: "ModifyEntrust", field: "entrustAmount",
+			route: client.RouteTradeFuturesModifyEntrust,
+			invoke: func(t *testing.T, ctx context.Context, svc *FuturesService, literal string) error {
+				t.Helper()
+				req := futuresFixtureModify()
+				req.Quantity = domain.MustNewQuantity(literal)
+				return svc.ModifyEntrust(ctx, futuresFixtureAccount(), req)
+			},
+		},
+	}
+}
+
+// futuresMutationMoneyCasesFor returns the value sets a host is driven with. A
+// quantity host gets the 27-digit integer, which is its float64-hostile analogue;
+// a price host gets both price sets, because a value that discriminates a float64
+// is often blind to a fixed-scale formatter and vice versa.
+func futuresMutationMoneyCasesFor(host futuresMutationMoneyHost) []futuresMoneySet {
+	if !host.price {
+		return []futuresMoneySet{
+			{"float64-hostile-quantity", float64HostileQuantities, requireFloat64Hostile},
+		}
+	}
+	return futuresMoneySets()
+}
+
+// futuresAssertQuotedInRequest is the mutation-side counterpart of
+// futuresAssertQuotedOnWire: it asserts the recorded *request* envelope carries
+// the value as a quoted JSON string and does not also carry it unquoted.
+//
+// It is the assertion that catches a wire field retyped from string to float64, and
+// it is the one that fails if a conversion reappears anywhere between the caller's
+// domain.Price and the envelope - a float64 round trip, or the removed
+// fmt.Sprintf("%.3f", …) that turned a 0.0005 tick into 0.001 with no error
+// anywhere.
+func futuresAssertQuotedInRequest(t *testing.T, body, field string, tc moneyCase) {
+	t.Helper()
+	quoted := `"` + field + `":"` + tc.want + `"`
+	if !strings.Contains(body, quoted) {
+		t.Errorf("the recorded request does not contain %s.\n"+
+			"  body:              %s\n"+
+			"  wanted substring:  %s\n"+
+			"  a float64 round trip would render %s\n"+
+			"  the removed %%.3f form would render %s",
+			quoted, body, quoted,
+			strconv.FormatFloat(mustFloat(t, tc.in), 'f', -1, 64),
+			legacyRounded(mustFloat(t, tc.in)))
+		return
+	}
+	if unquoted := `"` + field + `":` + tc.want; strings.Contains(body, unquoted) {
+		t.Errorf("the unquoted form %s is also present, so the field is a JSON number on the "+
+			"wire: a float64 in the request path would render this way, and a mutation's price "+
+			"would be a lossy write rather than a quoted decimal", unquoted)
+	}
+}
+
+// futuresAssertNotRenderedAs is the negative half: the two renderings the two
+// historical defects produce must both be absent from the request body.
+//
+// It is separated from the positive assertion because the positive one could pass
+// by accident if a future set were short enough that the two renderings coincided,
+// and these two sets are chosen so that they never do.
+func futuresAssertNotRenderedAs(t *testing.T, body, field string, tc moneyCase) {
+	t.Helper()
+	f := mustFloat(t, tc.in)
+	for label, rendered := range map[string]string{
+		"a float64 round trip":  strconv.FormatFloat(f, 'f', -1, 64),
+		"the removed %.3f form": legacyRounded(f),
+	} {
+		if rendered == tc.want {
+			continue
+		}
+		if strings.Contains(body, `"`+field+`":"`+rendered+`"`) ||
+			strings.Contains(body, `"`+field+`":`+rendered) {
+			t.Errorf("the request carries %s = %s, which is %s of the input %q rather than the "+
+				"exact decimal; a mutation writes this field, so a lost digit is a wrong order",
+				field, rendered, label, tc.in)
+		}
+	}
+}
+
+// TestFuturesMutationMoneyCrossesVerbatim drives every mutation money host over
+// every value set it is aimed at and asserts the exact decimal reaches the wire.
+//
+// The value sets are the frozen ones from testsupport_test.go: three
+// float64-hostile prices (19 significant digits, 25 significant digits, and
+// 1e-330, which is positive as a decimal and zero to every float64), four
+// scale-hostile prices (including 0.0005, the literal the shipped bug turned into
+// 0.001), and one float64-hostile quantity (a 27-digit integer binary64 cannot
+// represent). The guard on the guards - TestFuturesMoneyValueSetsAreStillHostile,
+// inherited from C4 - asserts each is still hostile, so a future edit that softened a
+// literal cannot quietly delete this net.
+func TestFuturesMutationMoneyCrossesVerbatim(t *testing.T) {
+	if got := len(futuresMutationMoneyHosts()); got != 4 {
+		t.Fatalf("the money host table has %d hosts, want the four money fields the two "+
+			"mutation bodies carry", got)
+	}
+	for _, host := range futuresMutationMoneyHosts() {
+		t.Run(host.name, func(t *testing.T) {
+			if host.method == "" || host.route == "" || host.field == "" {
+				t.Fatal("test bug: the host has no method, route or field, so the row proves nothing")
+			}
+			for _, set := range futuresMutationMoneyCasesFor(host) {
+				t.Run(set.label, func(t *testing.T) {
+					for _, tc := range set.cases {
+						t.Run(tc.name, func(t *testing.T) {
+							// The canonical form the wire must carry is the decimal's own
+							// String(), which for these inputs is tc.want. Assert that first,
+							// so a test bug in the set is visible before the method runs.
+							if host.price {
+								if got := domain.MustNewPrice(tc.want, "0").String(); got != tc.want {
+									t.Fatalf("test bug: the price constructor renders %q as %q, so the "+
+										"expected wire literal is not tc.want", tc.want, got)
+								}
+							} else if got := domain.MustNewQuantity(tc.want).String(); got != tc.want {
+								t.Fatalf("test bug: the quantity constructor renders %q as %q, so "+
+									"the expected wire literal is not tc.want", tc.want, got)
+							}
+
+							rec := newWireRecorder(map[string]string{
+								string(host.route): gatewaySuccess(futuresMutationBody),
+							})
+							if err := host.invoke(t, t.Context(),
+								NewFuturesService(newWireExecutor(t, rec)), tc.in); err != nil {
+								t.Fatalf("%s carrying %q = %v, want nil", host.name, tc.in, err)
+							}
+							if got := rec.count(string(host.route)); got != 1 {
+								t.Fatalf("requests to %s = %d, want exactly 1", host.route, got)
+							}
+
+							body := rec.lastBody(t, string(host.route))
+							futuresAssertQuotedInRequest(t, body, host.field, tc)
+							futuresAssertNotRenderedAs(t, body, host.field, tc)
+						})
+					}
+				})
+			}
+		})
+	}
+}
+
+// TestFuturesMutationMoneyIsReachedThroughTheTypedPath is the Level 1 counterpart:
+// the same literals, asserted on the request struct the method handed the executor
+// rather than on the marshalled bytes.
+//
+// The two levels are not redundant. The struct assertion pins that the mapping
+// boundary did not touch the digits, and the wire assertion pins that the
+// transport did not touch them either - a float64 wire *type* would fail the
+// second and a %.3f in the mapper would fail the first, and only running both says
+// which layer a regression landed in.
+func TestFuturesMutationMoneyIsReachedThroughTheTypedPath(t *testing.T) {
+	for _, host := range futuresMutationMoneyHosts() {
+		t.Run(host.name, func(t *testing.T) {
+			for _, set := range futuresMutationMoneyCasesFor(host) {
+				t.Run(set.label, func(t *testing.T) {
+					for _, tc := range set.cases {
+						t.Run(tc.name, func(t *testing.T) {
+							exec := newSequencedExecutor(t, sequencedReply{
+								reply: json.RawMessage(futuresMutationBody),
+							})
+							if err := host.invoke(t, t.Context(),
+								NewFuturesService(exec), tc.in); err != nil {
+								t.Fatalf("%s carrying %q = %v, want nil", host.name, tc.in, err)
+							}
+							requireCalls(t, exec, 1)
+
+							futuresAssertVerbatim(t, host.name,
+								futuresRecordedField(t, exec.lastParams(t), host.field), tc)
+						})
+					}
+				})
+			}
+		})
+	}
+}
+
+// futuresRecordedField reads one wire field out of whichever of the two mutation
+// request structs the executor recorded. An unrecognised struct is a test bug and
+// fails here rather than returning empty and being asserted against, so a third
+// body appearing in the table cannot pass by being skipped.
+func futuresRecordedField(t *testing.T, params any, field string) string {
+	t.Helper()
+	switch body := params.(type) {
+	case futuresEntrustWireRequest:
+		switch field {
+		case "entrustPrice":
+			return body.EntrustPrice
+		case "entrustAmount":
+			return body.EntrustAmount
+		}
+	case futuresModifyEntrustWireRequest:
+		switch field {
+		case "entrustPrice":
+			return body.EntrustPrice
+		case "entrustAmount":
+			return body.EntrustAmount
+		}
+	}
+	t.Fatalf("the recorded params are %T, which carries no %q field; the money host table and "+
+		"the wire structs have drifted apart", params, field)
+	return ""
+}
+
+// TestFuturesMutationTypesCarryNoFloat is the static half of hard rule 3 for the
+// two caller-facing mutation requests and the three wire bodies, on the same
+// reasoning as TestFuturesReadDomainTypesCarryNoFloat.
+//
+// scripts/check_money.py guards by field name and by wire key, which is the right
+// heuristic for the generated DTOs and blind to a decimal field given an innocuous
+// name. This walks the structs a caller fills in and asserts no field is a float at
+// all, whatever it is called: Price and Quantity are decimal values
+// (docs/DESIGN.md §7, hard rule 3), and the string fields on the two request
+// types are Gateway *codes*, never amounts.
+func TestFuturesMutationTypesCarryNoFloat(t *testing.T) {
+	for _, v := range []any{
+		FuturesOrderRequest{},
+		FuturesModifyRequest{},
+		futuresEntrustWireRequest{},
+		futuresCancelEntrustWireRequest{},
+		futuresModifyEntrustWireRequest{},
+	} {
+		rt := reflect.TypeOf(v)
+		t.Run(rt.Name(), func(t *testing.T) {
+			fields := 0
+			for i := 0; i < rt.NumField(); i++ {
+				f := rt.Field(i)
+				fields++
+				switch f.Type.Kind() {
+				case reflect.Float32, reflect.Float64:
+					t.Errorf("%s.%s is a %s: a futures price, quantity or amount crosses the wire "+
+						"as a quoted decimal string, and the two request types hold domain.Price "+
+						"and domain.Quantity (docs/DESIGN.md §7, hard rule 3)", rt.Name(), f.Name, f.Type)
+				}
+			}
+			if fields == 0 {
+				t.Errorf("%s has no fields, so this test would pass vacuously", rt.Name())
+			}
+		})
+	}
+}
+
+// TestFuturesMutationsAreSafeForConcurrentUse is the concurrency half of the
+// FuturesService contract, extended to the mutation path.
+//
+// It is worth having because a mutation is where a shared decoded envelope would
+// be expensive rather than merely wrong: two callers each believing they placed
+// their own order is a duplicate, which is the exact failure ADR 0003 exists to
+// prevent. The recorder's request count is the evidence that all N really went
+// out, and the per-worker quantities in the bodies are the evidence that the
+// requests were not confused with one another.
+func TestFuturesMutationsAreSafeForConcurrentUse(t *testing.T) {
+	const workers = 8
+
+	rec := newWireRecorder(map[string]string{
+		string(client.RouteTradeFuturesEntrust): gatewaySuccess(futuresMutationBody),
+	})
+	svc := NewFuturesService(newWireExecutor(t, rec))
+
+	results := make([]string, workers)
+	failures := make([]error, workers)
+	start := make(chan struct{})
+	done := make(chan struct{}, workers)
+	for i := range workers {
+		go func() {
+			defer func() { done <- struct{}{} }()
+			<-start
+			req := futuresFixtureOrder()
+			// A distinct quantity per worker, so a shared decoded envelope would be
+			// visible in the recorded bodies below.
+			req.Quantity = domain.MustNewQuantity(strconv.Itoa(i + 1))
+			result, err := svc.Entrust(t.Context(), futuresFixtureAccount(), req)
+			if err != nil {
+				failures[i] = err
+				return
+			}
+			results[i] = result.EntrustID.String()
+		}()
+	}
+	close(start)
+	for range workers {
+		<-done
+	}
+
+	for i := range workers {
+		if failures[i] != nil {
+			t.Errorf("worker %d = %v, want nil", i, failures[i])
+			continue
+		}
+		if results[i] != "F20260921001" {
+			t.Errorf("worker %d read entrustId %q, want the Gateway's own value: two callers "+
+				"shared one decoded reply", i, results[i])
+		}
+	}
+	if got := rec.count(string(client.RouteTradeFuturesEntrust)); got != workers {
+		t.Errorf("requests = %d, want %d: a call that returned a result must have gone out", got, workers)
+	}
+
+	// Every worker's own quantity reached the wire, so none of them was served a
+	// reply that belonged to another. The first and the last are checked because a
+	// shared body would show up as one of them being missing, not as a count.
+	saw := map[string]bool{}
+	for i := range rec.requests {
+		for _, want := range []string{`"entrustAmount":"1"`, `"entrustAmount":"8"`} {
+			if strings.Contains(rec.requests[i].body, want) {
+				saw[want] = true
+			}
+		}
+	}
+	for _, want := range []string{`"entrustAmount":"1"`, `"entrustAmount":"8"`} {
+		if !saw[want] {
+			t.Errorf("no request carried %s, so the concurrent calls did not each send their own "+
+				"body", want)
+		}
 	}
 }
