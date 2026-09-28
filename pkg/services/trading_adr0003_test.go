@@ -243,8 +243,9 @@ func TestD3AReadOnlyQueryDoesRetry(t *testing.T) {
 // sixth method on a mutation route would want the same treatment, and a read route
 // that had been misfiled into the mutation set would silently lose its retries —
 // the failure client/route_mutation_test.go guards by exhaustiveness. This table
-// states the same split behaviourally: nine read routes retry, four mutations do
-// not.
+// states the same split behaviourally: eleven read routes retry, four mutations do
+// not. Two of the eleven are the trade-push subscriptions C15 added, which are
+// read class for the reason given at the rows themselves.
 func TestD3CoversEveryReadOnlyTradingRoute(t *testing.T) {
 	const maxAttempts = 5
 	busy := gatewayFailure(types.StatusServiceBusy, "service busy, retry later")
@@ -300,6 +301,20 @@ func TestD3CoversEveryReadOnlyTradingRoute(t *testing.T) {
 			func(ctx context.Context, s *TradingService) error {
 				_, err := s.BeforeAndAfterSupport(ctx, tradingHKSymbol())
 				return err
+			}},
+		// The two push subscriptions are read-class routes and belong in this table
+		// for that reason, not for symmetry. A subscription is not an order mutation,
+		// so ADR 0003 does not reach it and a policy re-sends it; filing them here
+		// states the classification from the same behavioural evidence as the nine
+		// rows above, and the dedicated measurement in trading_push_test.go is what
+		// makes the disagreement with the released layer's own GoDoc visible.
+		{"SubscribeOrders", opTradeSubscribe, client.RouteTradeSubscribe,
+			func(ctx context.Context, s *TradingService) error {
+				return s.SubscribeOrders(ctx, tradingAccountID())
+			}},
+		{"UnsubscribeOrders", opTradeUnsubscribe, client.RouteTradeUnsubscribe,
+			func(ctx context.Context, s *TradingService) error {
+				return s.UnsubscribeOrders(ctx, tradingAccountID())
 			}},
 	}
 

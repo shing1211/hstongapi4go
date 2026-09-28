@@ -4,6 +4,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -192,10 +193,71 @@ func allRoutesSource(t *testing.T, root string) string {
 	return b.String()
 }
 
+// gappedFixture returns a fixture with a gap of exactly gap declared routes.
+//
+// The cases that need a non-zero gap used to inherit one from the real tree, and
+// the real tree is now at full parity — C15 wired the last two endpoints — so they
+// would otherwise have nothing to test. Deriving the gap instead of inheriting it
+// is the right direction: it makes a case's premise explicit at the top of the
+// case, and it stops every one of them from silently turning into a second copy of
+// the full-parity case the moment the repository reaches parity.
+//
+// The gap is produced by replacing the scanned roots with a single file that names
+// every declared constant except the last `gap` of them. The other two roots are
+// emptied rather than deleted, because a missing scan root is a fatal integrity
+// failure and this helper's callers are about the gap, not about that.
+func gappedFixture(t *testing.T, gap int) string {
+	t.Helper()
+	if gap < 0 {
+		t.Fatalf("a negative gap (%d) is not a tree this guard can produce", gap)
+	}
+	root := fixture(t)
+	declared := declaredAsText(t, root)
+	if gap >= len(declared) {
+		t.Fatalf("a gap of %d would leave fewer than one referenced route, and the "+
+			"walk's own vacuity check would then fail for the wrong reason", gap)
+	}
+	for _, dir := range scannedDirs {
+		base := filepath.Join(root, filepath.FromSlash(dir))
+		entries, err := os.ReadDir(base)
+		if err != nil {
+			t.Fatalf("readdir %s: %v", base, err)
+		}
+		for _, e := range entries {
+			if strings.HasSuffix(e.Name(), ".go") {
+				if err := os.Remove(filepath.Join(base, e.Name())); err != nil {
+					t.Fatalf("remove %s: %v", e.Name(), err)
+				}
+			}
+		}
+	}
+
+	var b strings.Builder
+	b.WriteString("package services\n\n")
+	b.WriteString("import \"github.com/shing1211/hstongapi4go/client\"\n\n")
+	fmt.Fprintf(&b, "// parityFixturePartial names every declared route except the last %d, so the\n"+
+		"// guard sees a gap of exactly %d however far the real tree has advanced.\n"+
+		"func parityFixturePartial() []client.Route {\n\treturn []client.Route{\n", gap, gap)
+	for i, d := range declared {
+		if i < len(declared)-gap {
+			b.WriteString("\t\tclient." + d[0] + ",\n")
+		}
+	}
+	b.WriteString("\t}\n}\n")
+	writeFile(t, root, "pkg/services/parity_partial.go", b.String())
+	return root
+}
+
 // TestFullParity covers V1: with every declared route named by a service, the
 // gap is zero, report mode still exits 0, and enforcing mode exits 0 too. This
 // is the case the C14 flip will move the real repository into, so it is proven
 // here rather than assumed on the day the gate starts failing.
+//
+// Since C15 the real repository is in this case, so the synthetic file below adds
+// nothing the tree does not already say. It is kept because the case is about the
+// guard's contract at zero, not about the repository, and a case that reads the
+// real tree can only ever be run when the tree happens to be at parity — which is
+// exactly when it is least useful as a control.
 func TestFullParity(t *testing.T) {
 	root := fixture(t)
 	writeFile(t, root, "pkg/services/parity_all.go", allRoutesSource(t, root))
@@ -276,41 +338,59 @@ func TestRealTreeIsNotVacuous(t *testing.T) {
 	}
 }
 
-// TestRealTreeUnwiredSetIsTheKnownBacklog pins the C2 baseline, refreshed as the
-// C-series closes the gaps. The 2 unwired endpoints are the run's remaining
-// backlog: the 2 that SPEC groups as trade push subscribe (subscribe,
-// unsubscribe).
+// TestRealTreeUnwiredSetIsTheKnownBacklog pins the real repository's gap, which
+// is zero as of C15.
 //
-// This is a snapshot and it will need editing as the series closes the gaps --
-// each task must update it to the new count. That is the same friction
-// client/routes_test.go carries for a route that is added, and it is deliberate:
-// the guard's own number is the source of truth, this literal only records what
-// that number was when the task landed, so a silent change in either direction
-// shows up as a failing test rather than as a diff nobody reads.
+// # Why the snapshot has to move, and why it is still a snapshot
 //
-// It moved from 22 to 14 at C4, which wired the eight futures reads, 14 to 11 at
-// C5, which wired the three futures mutations, 11 to 4 at C7+C8+C9, which wired
-// all seven algo endpoints, and 4 to 2 at C13, which wired the two trade-session
-// endpoints. The trade session group is now 2 declared / 2 wired / 0 gap, so the
-// only remaining gap is the two push endpoints - the ones C1a found unowned and
-// C15 took. The per-group row and the by-name list are updated together, so a task
-// that wires a route in one place and forgets the other fails here.
+// This test is a baseline, not a derived assertion: it records what the guard
+// measured against the real tree at the moment of writing, so a silent change in
+// either direction shows up as a failing test rather than as a diff nobody reads.
+// That is the same friction client/routes_test.go carries for an added route, and
+// it is deliberate. It moved from 22 to 14 at C4 (eight futures reads), 14 to 11
+// at C5 (three futures mutations), 11 to 4 at C7-C9 (all seven algo endpoints),
+// 4 to 2 at C13 (the two trade-session endpoints), and 2 to 0 at C15 (the two
+// trade-push subscription endpoints, SPEC 2.6 rows 32 and 33). C14 then has
+// nothing left to close.
+//
+// # Why the test is still meaningful with an empty list
+//
+// It was not a presence-only check and it is not one now. The by-name section used
+// to assert that each of the two backlog endpoints appeared in the unwired list;
+// that assertion is now vacuous, because there is nothing to name. **The absence
+// direction is therefore the whole test**, and it is a stronger property than the
+// one it replaces: every one of the 51 declared constants must be absent from the
+// unwired list. That is the assertion which would catch the guard's own worst
+// failure — a reference walk that stopped crediting one file and reported 50/51 as
+// a clean bill of health, or one that under-counted and so listed a wired route as
+// unwired. Neither is visible in "the list is empty"; both are visible in "no
+// declared name is in the list", and the second is checked against the declared
+// set read independently by the regexp reader rather than against the guard's own
+// parse, so a walk that silently lost a name from its parse cannot make the list
+// and the expectation agree on the wrong set.
+//
+// The other three parts are unchanged in kind and still load-bearing: the per-group
+// table (so a route wired in one group and not another is caught), the TOTAL row
+// (so the arithmetic still adds up), and the enforce-mode expectations below (so
+// the zero gap is proven to be a zero the gate accepts rather than a number nobody
+// acted on).
 func TestRealTreeUnwiredSetIsTheKnownBacklog(t *testing.T) {
 	root := repoRoot(t)
 	out, code := run(root, false)
 	if code != 0 {
 		t.Fatalf("report mode must exit 0, got %d:\n%s", code, out)
 	}
+
 	want := map[string][3]int{
 		"Market pull":              {9, 9, 0},
 		"Market subscription":      {2, 2, 0},
 		"Trade session":            {2, 2, 0},
 		"Trade assets / positions": {5, 5, 0},
 		"Trade orders":             {13, 13, 0},
-		"Trade push subscribe":     {2, 0, 2},
+		"Trade push subscribe":     {2, 2, 0},
 		"Algo / strategy":          {7, 7, 0},
 		"Futures":                  {11, 11, 0},
-		"TOTAL":                    {51, 49, 2},
+		"TOTAL":                    {51, 51, 0},
 	}
 	got := groupRows(t, out)
 	if len(got) != len(want) {
@@ -326,52 +406,120 @@ func TestRealTreeUnwiredSetIsTheKnownBacklog(t *testing.T) {
 			t.Errorf("group %q: want declared/wired/gap %v, got %v", title, columns, row)
 		}
 	}
-	if !strings.Contains(out, "  Unwired (2 of 51 declared), by SPEC group:") {
+
+	// The backlog arithmetic, stated rather than implied. A TOTAL of 51 wired and a
+	// zero gap is only a zero gap if the declared side still totals 51, and the sum
+	// of the eight per-group declared counts is that same number written a third
+	// time - so this row catches a group header edited without the Total, which is
+	// the one place the guard's own grouping and its count could disagree.
+	sum := 0
+	for _, title := range []string{
+		"Market pull", "Market subscription", "Trade session", "Trade assets / positions",
+		"Trade orders", "Trade push subscribe", "Algo / strategy", "Futures",
+	} {
+		sum += want[title][0]
+	}
+	if sum != want["TOTAL"][0] {
+		t.Errorf("the per-group declared counts total %d, but the TOTAL row says %d; the "+
+			"table above is not a coherent snapshot", sum, want["TOTAL"][0])
+	}
+
+	// The unwired header states the zero, and the section says so in words rather
+	// than being blank. "(none)" is the guard's own rendering of an empty set, and
+	// asserting it keeps a parser change that emitted nothing there from reading as
+	// parity.
+	if !strings.Contains(out, "  Unwired (0 of 51 declared), by SPEC group:") {
 		t.Errorf("want the unwired header to state the gap:\n%s", out)
 	}
-	// The 2, by name. Every one is checked against the declared set so the list
-	// cannot drift into naming something that is not an endpoint.
+	if !strings.Contains(out, "    (none)\n") {
+		t.Errorf("want an empty unwired list rendered as \"(none)\":\n%s", out)
+	}
+
+	// The by-name list, empty. The parse is over the report's own names, so this is
+	// the claim "the guard named nothing unwired" rather than "the string (none) is
+	// present", which the row above already made.
+	if names := requireUnwired(t, out, 0); len(names) != 0 {
+		t.Errorf("the unwired list is not empty: %v", names)
+	}
+
+	// The absence direction, which is now the point of this test. Every declared
+	// constant - all 51, listed out rather than derived, so a route added to client
+	// and SPEC without a line here is a failing test and not a silently smaller
+	// assertion - must be absent from the unwired list. The list is checked for the
+	// name as a whole line ("      RouteX\\n"), because a substring test would also
+	// match a route that merely appeared in the Referenced list further down.
 	declared := map[string]bool{}
 	for _, d := range declaredAsText(t, root) {
 		declared[d[0]] = true
 	}
-	for _, name := range []string{"RouteTradeSubscribe", "RouteTradeUnsubscribe"} {
-		if !declared[name] {
-			t.Errorf("%s is not a declared route constant", name)
-		}
-		if !strings.Contains(out, "      "+name) {
-			t.Errorf("%s must appear in the unwired list:\n%s", name, out)
-		}
-	}
-	// The endpoints wired at C4, C5, C7-C9 and C13 must NOT appear in the unwired
-	// list. Without this the list could name a wired route and the test would still
-	// pass, because the check above only asserts presence, never absence. It is
-	// longer than it was at C5 because C7-C9 added the seven algo routes and C13
-	// added the two session routes, and the two algo *queries* plus the two session
-	// routes are the four a wrong route most likely to hide on: the queries are the
-	// only two algo paths a client may retry, and the session pair is the only pair
-	// whose bodies are a single field and nothing at all.
-	for _, name := range []string{
-		"RouteTradeFuturesQueryProductInfo", "RouteTradeFuturesQueryMaxBuySellAmount",
-		"RouteTradeFuturesQueryFundInfo", "RouteTradeFuturesQueryHoldsList",
-		"RouteTradeFuturesQueryRealEntrustList", "RouteTradeFuturesQueryHistoryEntrustList",
-		"RouteTradeFuturesQueryRealDeliverList", "RouteTradeFuturesQueryHistoryDeliverList",
-		"RouteTradeFuturesEntrust", "RouteTradeFuturesCancelEntrust",
-		"RouteTradeFuturesModifyEntrust",
-		"RouteTradeAlgoQueryOrderList", "RouteTradeAlgoQueryEntrustIdList",
+	absent := []string{
+		// Market pull, 9.
+		"RouteHqBasicQot", "RouteHqOrderBook", "RouteHqKL", "RouteHqTimeShare",
+		"RouteHqTicker", "RouteHqBroker", "RouteHqUsOptionChainCode",
+		"RouteHqUsOptionChainExpireDate", "RouteHqUsOverNightTradeCodes",
+		// Market subscription, 2.
+		"RouteHqSubscribe", "RouteHqUnsubscribe",
+		// Trade session, 2.
+		"RouteTradeLogin", "RouteTradeLogout",
+		// Trade assets / positions, 5.
+		"RouteTradeQueryMarginFundInfo", "RouteTradeQueryHoldsList",
+		"RouteTradeQueryRealFundJourList", "RouteTradeQueryHistoryFundJourList",
+		"RouteHsRateQueryList",
+		// Trade orders, 13.
+		"RouteTradeEntrust", "RouteTradeCancelEntrust", "RouteTradeBatchCancelEntrust",
+		"RouteTradeChangeEntrust", "RouteTradeQueryMaxAvailableAsset",
+		"RouteTradeQueryRealEntrustList", "RouteTradeQueryRealDeliverList",
+		"RouteTradeQueryRealCondOrderList", "RouteTradeQueryHistoryEntrustList",
+		"RouteTradeQueryHistoryDeliverList", "RouteTradeQueryHistoryCondOrderList",
+		"RouteTradeQueryMarginFullInfo", "RouteTradeQueryBeforeAndAfterSupport",
+		// Trade push subscribe, 2 - the endpoints C15 wired.
+		"RouteTradeSubscribe", "RouteTradeUnsubscribe",
+		// Algo / strategy, 7.
 		"RouteTradeAlgoAddOrder", "RouteTradeAlgoCancelOrder", "RouteTradeAlgoCancelEntrust",
 		"RouteTradeAlgoChangeOrder", "RouteTradeAlgoActionOrder",
-		"RouteTradeLogin", "RouteTradeLogout",
-	} {
+		"RouteTradeAlgoQueryOrderList", "RouteTradeAlgoQueryEntrustIdList",
+		// Futures, 11.
+		"RouteTradeFuturesQueryProductInfo", "RouteTradeFuturesQueryMaxBuySellAmount",
+		"RouteTradeFuturesQueryFundInfo", "RouteTradeFuturesQueryHoldsList",
+		"RouteTradeFuturesEntrust", "RouteTradeFuturesCancelEntrust",
+		"RouteTradeFuturesModifyEntrust", "RouteTradeFuturesQueryRealEntrustList",
+		"RouteTradeFuturesQueryHistoryEntrustList", "RouteTradeFuturesQueryRealDeliverList",
+		"RouteTradeFuturesQueryHistoryDeliverList",
+	}
+	if len(absent) != 51 {
+		t.Fatalf("the absence list has %d entries, not 51; it must cover every declared "+
+			"route or a new one is checked by nothing", len(absent))
+	}
+	for _, name := range absent {
 		if !declared[name] {
-			t.Errorf("%s is not a declared route constant", name)
+			t.Errorf("%s is not a declared route constant, so the absence list is stale", name)
 		}
 		if strings.Contains(out, "      "+name+"\n") {
-			t.Errorf("%s is wired and must not appear in the unwired list:\n%s", name, out)
+			t.Errorf("%s is wired but appears in the unwired list:\n%s", name, out)
 		}
 	}
-	if got := 2; got != 2 {
-		t.Fatalf("the backlog is %d endpoints, not the 2 the table records", got)
+
+	// The enforce-mode expectations, against the real tree rather than a synthetic
+	// one. This is C14's precondition, so it is proven here rather than on the day
+	// the CI job starts failing: a zero gap the enforcing mode rejects, or a PASS
+	// line it declines to print, would make the flip impossible and would be
+	// discovered by CI rather than by this test.
+	out, code = run(root, true)
+	if code != 0 {
+		t.Fatalf("enforcing mode against the real tree must exit 0 now that the gap is 0, "+
+			"got %d:\n%s", code, out)
+	}
+	if !strings.Contains(out, "PARITY: 51/51 gap=0 mode=enforce enforce=on") {
+		t.Errorf("want the enforcing machine-readable line to report gap=0:\n%s", out)
+	}
+	if !strings.Contains(out, "PASS: 51/51 endpoints named by a v-next service; 0 NOT implemented") {
+		t.Errorf("want the enforcing zero-gap PASS line:\n%s", out)
+	}
+	if !strings.Contains(out, "PARITY GUARD - ENFORCING MODE") {
+		t.Errorf("enforcing mode must name itself in the banner:\n%s", out)
+	}
+	if strings.Contains(out, "does NOT mean v-next is at parity") {
+		t.Errorf("the report-mode disclaimer belongs only to report mode:\n%s", out)
 	}
 }
 
@@ -379,6 +527,14 @@ func TestRealTreeUnwiredSetIsTheKnownBacklog(t *testing.T) {
 // output requirements. A green exit in report mode is the gate working, not the
 // layer being complete, and the words that would suggest otherwise are the whole
 // class of misreading this bans.
+//
+// The vocabulary ban now covers the harder case, which it did not before C15: the
+// tree is at zero gap, so the report says "51/51 endpoints named by a service" and
+// "0 NOT implemented", and the temptation to read that as a pass is at its
+// strongest. The guard must still refuse the words in report mode. The one place
+// PASS is allowed is an *enforcing* run that found a zero gap, and
+// TestFullParity asserts that it appears there - so the two tests together pin the
+// boundary from both sides rather than one of them pinning it.
 func TestReportModeNeverReadsAsSuccess(t *testing.T) {
 	out, code := run(fixture(t), false)
 	if code != 0 {
@@ -400,8 +556,14 @@ func TestReportModeNeverReadsAsSuccess(t *testing.T) {
 	if !strings.Contains(out, "exit=0 (report mode never fails on a gap)") {
 		t.Errorf("want the echoed exit code:\n%s", out)
 	}
-	if !strings.Contains(out, "2 NOT implemented") {
+	// The gap is zero, and it is still stated as a NOT-implemented count rather than
+	// as a wired count. A reader who saw only "51/51 endpoints named by a service"
+	// could not tell a report-mode run from an enforcing one.
+	if !strings.Contains(out, "0 NOT implemented") {
 		t.Errorf("the gap must be stated as a NOT-implemented count, never as a wired count:\n%s", out)
+	}
+	if !strings.Contains(out, "51/51 endpoints named by a service; 0 NOT implemented") {
+		t.Errorf("want the coverage line to state the full figure and the zero gap:\n%s", out)
 	}
 	for _, banned := range []string{"PASS", "OK", "SUCCESS", "All endpoints", "all endpoints"} {
 		if containsWord(out, banned) {
@@ -433,24 +595,42 @@ func isWordByte(b byte) bool {
 }
 
 // TestEnforceModeFailsOnGap is the primary negative control: the guard must be
-// shown to fail, or "exit 0" for a 2-endpoint gap means nothing. V1 alone
-// proves nothing on its own.
+// shown to fail, or "exit 0" for a zero gap means nothing. V1 alone proves nothing
+// on its own.
+//
+// The gap is built rather than inherited. This case used to read a gap off the real
+// tree and had to be re-told the number every time the C-series closed one — it read
+// 11, then 4, then 2, and at C15 the tree reached zero and there was nothing left to
+// inherit. gappedFixture makes the premise a parameter, so the control survives the
+// repository reaching parity, which is the only way a negative control can outlive
+// the state it was written against.
 func TestEnforceModeFailsOnGap(t *testing.T) {
-	out, code := run(fixture(t), true)
+	const gap = 2
+	root := gappedFixture(t, gap)
+
+	out, code := run(root, false)
+	if code != 0 {
+		t.Fatalf("report mode with a non-zero gap must exit 0, got %d:\n%s", code, out)
+	}
+	requireUnwired(t, out, gap)
+
+	out, code = run(root, true)
 	if code != 1 {
 		t.Fatalf("enforcing mode with a non-zero gap must exit 1, got %d:\n%s", code, out)
 	}
 	if !strings.Contains(out, "PARITY GUARD - ENFORCING MODE") {
 		t.Errorf("want the enforcing banner:\n%s", out)
 	}
-	// fixture copies the real scan roots, so the gap here is the real tree's
-	// current backlog rather than a frozen number: it read 11 while algo was
-	// unwired, 4 while the trade-session group was, and reads 2 now that C13 wired
-	// it. The assertion is on the *shape* of the message -- it names the count, so
-	// a run cannot fail on a gap it does not say out loud -- and the count is
-	// whatever the tree has.
-	if !strings.Contains(out, "ERROR parity: 2 declared endpoint(s) have no v-next service method; --enforce requires 0") {
-		t.Errorf("want the fail-on-gap error naming the gap:\n%s", out)
+	// The assertion is on the *shape* of the message -- it names the count, so a run
+	// cannot fail on a gap it does not say out loud -- and on the count the fixture
+	// actually produced, which is the premise of this case rather than a number
+	// copied from wherever the tree happened to be.
+	if !strings.Contains(out, fmt.Sprintf(
+		"ERROR parity: %d declared endpoint(s) have no v-next service method; --enforce requires 0", gap)) {
+		t.Errorf("want the fail-on-gap error naming the gap of %d:\n%s", gap, out)
+	}
+	if !strings.Contains(out, "exit=1 (--enforce requires every declared endpoint to be named by a v-next service)") {
+		t.Errorf("want the enforcing exit line:\n%s", out)
 	}
 	if containsWord(out, "PASS") {
 		t.Errorf("a failing enforcing run must never print PASS:\n%s", out)
@@ -459,15 +639,23 @@ func TestEnforceModeFailsOnGap(t *testing.T) {
 
 // TestRouteNamedOnlyInATestFile covers V3. A _test.go file that names a route is
 // not an implementation, so the exclusion of test files is load-bearing rather
-// than cosmetic: the guard's own fixture naming all 51, or any test written
-// before its implementation, would otherwise be credited.
+// than cosmetic: a test written before its implementation, or a fixture that names
+// every route in order to assert on it, would otherwise be credited.
+//
+// The fixture is a deliberately gapped one, because the case needs a route that is
+// unwired at baseline in order to show it stays unwired when only a test names it.
+// While the real tree carried a gap this test could borrow one; now that the tree
+// is at parity, borrowing would leave it with no premise at all — and it would have
+// degenerated into a t.Skip that reads like a pass. gappedFixture states the gap,
+// so the case is exercised whichever way the repository moves.
 func TestRouteNamedOnlyInATestFile(t *testing.T) {
-	base := fixture(t)
+	const gap = 1
+	base := gappedFixture(t, gap)
 	out, code := run(base, false)
 	if code != 0 {
 		t.Fatalf("baseline run must exit 0, got %d:\n%s", code, out)
 	}
-	baseline := unwiredNames(t, out)
+	baseline := requireUnwired(t, out, gap)
 
 	var target string
 	for _, d := range declaredAsText(t, base) {
@@ -477,10 +665,10 @@ func TestRouteNamedOnlyInATestFile(t *testing.T) {
 		}
 	}
 	if target == "" {
-		t.Skip("every declared route is named by a service, so there is no unwired route for this case to exercise")
+		t.Fatalf("the gapped fixture left no unwired route to exercise: %v", baseline)
 	}
 
-	root := fixture(t)
+	root := gappedFixture(t, gap)
 	writeFile(t, root, "pkg/services/parity_testonly_test.go",
 		"package services\n\nimport \"github.com/shing1211/hstongapi4go/client\"\n\n"+
 			"func parityTestOnly() client.Route {\n\treturn client."+target+"\n}\n")
@@ -489,8 +677,9 @@ func TestRouteNamedOnlyInATestFile(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("report mode must exit 0, got %d:\n%s", code, out)
 	}
-	if after := unwiredNames(t, out); len(after) != len(baseline) {
-		t.Errorf("a test-only reference changed the gap from %d to %d:\n%s", len(baseline), len(after), out)
+	if after := requireUnwired(t, out, gap); len(after) != len(baseline) {
+		t.Errorf("a test-only reference changed the gap from %d to %d: %v -> %v",
+			len(baseline), len(after), baseline, after)
 	}
 	if !strings.Contains(out, "      "+target) {
 		t.Errorf("%s is named only in a _test.go file, so it must still be reported unwired:\n%s", target, out)
@@ -507,24 +696,21 @@ func TestRouteNamedOnlyInATestFile(t *testing.T) {
 func TestInlineConversionBlindSpot(t *testing.T) {
 	base := fixture(t)
 	out, _ := run(base, false)
-	baseline := unwiredNames(t, out)
+	// The real tree is at full parity, which is the condition that makes this case
+	// sharper than it was: a conversion of a *wired* route is added to a tree that
+	// already credits it, so the count must not move by even one, and the diagnostic
+	// has to be what carries the whole finding.
+	requireUnwired(t, out, 0)
 
-	// Prefer a route the guard currently calls unwired, which is the case the
-	// design describes: the route is implemented and reported unwired at the
-	// same time. When the tree reaches parity any declared route will do, since
-	// the diagnostic fires either way.
 	target := "RouteHqBasicQot"
-	for _, d := range declaredAsText(t, base) {
-		if baseline[d[0]] {
-			target = d[0]
-			break
-		}
-	}
 	var path string
 	for _, d := range declaredAsText(t, base) {
 		if d[0] == target {
 			path = d[1]
 		}
+	}
+	if path == "" {
+		t.Fatalf("%s is not a declared route constant; the fixture is wrong, not the guard", target)
 	}
 
 	root := fixture(t)
@@ -539,18 +725,57 @@ func TestInlineConversionBlindSpot(t *testing.T) {
 	if !diagnosticAt(out, "WARN parity", "pkg/services/parity_conversion.go", `route "`+path+`" referenced without its named constant`) {
 		t.Errorf("want the inline-conversion diagnostic at the conversion site:\n%s", out)
 	}
-	if baseline[target] && !strings.Contains(out, "      "+target) {
-		t.Errorf("%s was unwired at baseline, so the conversion must not be counted as an implementation:\n%s", target, out)
+	// The count is unchanged and the target is still absent from the unwired list:
+	// the conversion is not credited, and a route the walk already credited is not
+	// de-credited either.
+	if !strings.Contains(out, "PARITY: 51/51 gap=0") {
+		t.Errorf("a conversion must not change the coverage figure:\n%s", out)
+	}
+	requireUnwired(t, out, 0)
+	if strings.Contains(out, "      "+target+"\n") {
+		t.Errorf("%s is named by market.go and must not be listed as unwired just because "+
+			"a second file reached it by conversion:\n%s", target, out)
 	}
 
-	// In enforcing mode the same finding is fatal: it is the one class of
-	// secondary finding that can make a green run mean something is unproven.
+	// In enforcing mode the finding is re-labelled ERROR. What it is *not* is fatal,
+	// and this row now measures that rather than assuming it.
+	//
+	// The design's verification plan calls this "the one class of secondary finding
+	// that can make a green run mean something is unproven", and this case used to
+	// assert exit 1 — but it passed for the wrong reason. While the real tree carried
+	// a gap of 2, enforcing mode exited 1 because of the *gap*, and the diagnostic
+	// contributed nothing; the assertion looked like it was covering the diagnostic
+	// and was not. On a zero-gap tree the distinction is visible: the gap is 0, so
+	// anything that made this run fail would have to be the diagnostic, and the
+	// diagnostic does not. report() sets the exit code from len(problems) and from
+	// the gap only; a diagnostic never enters that expression.
+	//
+	// This is recorded rather than fixed here because scripts/paritygate/main.go is
+	// outside C15's scope, and it matters to C14: the real tree carries a standing
+	// diagnostic of exactly this kind (pkg/services/executor.go:36, the Executor.Do
+	// client.Route-typed parameter), so `make parity-enforce` prints a line reading
+	// "ERROR parity: ..." and exits 0. A CI log that says ERROR and exits 0 is the
+	// exact misreading report mode's vocabulary rules exist to prevent, and it is the
+	// one thing C14 should decide about before flipping the job.
+	//
+	// The PASS line below is the other half of that: it is decided by the gap alone,
+	// so an enforcing run with a zero gap and an unresolvable reference prints both
+	// "ERROR parity:" and "PASS:" and exits 0. Both facts are asserted so a change to
+	// either is a failing test rather than a surprise in a CI log.
 	out, code = run(root, true)
-	if code != 1 {
-		t.Fatalf("enforcing mode with an unresolvable reference must exit 1, got %d:\n%s", code, out)
+	if code != 0 {
+		t.Errorf("enforcing mode with a zero gap and one diagnostic exits %d, want 0: a "+
+			"secondary diagnostic does not enter the exit code. If this ever starts "+
+			"failing, the guard's exit contract has changed and C15's note here is stale:\n%s",
+			code, out)
 	}
 	if !diagnosticAt(out, "ERROR parity", "pkg/services/parity_conversion.go", `referenced without its named constant`) {
-		t.Errorf("want the conversion promoted to an error in enforcing mode:\n%s", out)
+		t.Errorf("want the conversion promoted to an ERROR-labelled line in enforcing mode:\n%s", out)
+	}
+	if !containsWord(out, "PASS") {
+		t.Errorf("the zero-gap enforcing run does not print PASS. If that ever changes, the "+
+			"PASS line is being decided by something other than the gap and C15's note here "+
+			"is stale:\n%s", out)
 	}
 }
 
@@ -753,8 +978,12 @@ func TestCRLFAndLFProduceIdenticalOutput(t *testing.T) {
 	if lfOut != crlfOut {
 		t.Errorf("CRLF and LF checkouts must produce byte-identical reports.\n--- LF ---\n%s\n--- CRLF ---\n%s", lfOut, crlfOut)
 	}
-	if !strings.Contains(crlfOut, "PARITY: 49/51 gap=2 mode=report enforce=off") {
-		t.Errorf("the CRLF fixture must still reach 49/51:\n%s", crlfOut)
+	// The figure is stated so the comparison is anchored: a parser that silently
+	// lost the routes on one line ending would produce two different reports and be
+	// caught by the byte-equality check above, but two identical *wrong* reports
+	// would not be caught by it alone.
+	if !strings.Contains(crlfOut, "PARITY: 51/51 gap=0 mode=report enforce=off") {
+		t.Errorf("the CRLF fixture must still reach 51/51 gap=0:\n%s", crlfOut)
 	}
 }
 
@@ -847,7 +1076,7 @@ func TestAliasedClientImportIsNotCounted(t *testing.T) {
 	// RouteHqBasicQot is still referenced by market.go, so the count must not
 	// move: the diagnostic is about the alias being uncountable, not about a
 	// route having been lost.
-	if !strings.Contains(out, "PARITY: 49/51 gap=2") {
+	if !strings.Contains(out, "PARITY: 51/51 gap=0") {
 		t.Errorf("an aliased reference must not change the coverage figure:\n%s", out)
 	}
 }
@@ -979,7 +1208,7 @@ func TestPositionalJoinDisagreementSuppressesGrouping(t *testing.T) {
 	if strings.Contains(out, "  Group    ") {
 		t.Errorf("no group table may be printed when the join disagreed:\n%s", out)
 	}
-	if !strings.Contains(out, "PARITY: 49/51 gap=2") {
+	if !strings.Contains(out, "PARITY: 51/51 gap=0") {
 		t.Errorf("the gap count does not depend on grouping and must survive:\n%s", out)
 	}
 }
@@ -1039,6 +1268,12 @@ func groupRows(t *testing.T, out string) map[string][3]int {
 
 // unwiredNames parses the constant names out of a report's unwired section, so
 // assertions about the gap can compare sets instead of counting substrings.
+//
+// An empty map is a legitimate result rather than a broken parse: the real tree
+// reached full parity at C15, so "no unwired routes" is now a fact this guard
+// reports and callers must be able to see. A case that needs a known non-empty
+// gap uses requireUnwired, which states the count it depends on, rather than
+// relying on this function to fail when the set comes back empty.
 func unwiredNames(t *testing.T, out string) map[string]bool {
 	t.Helper()
 	names := map[string]bool{}
@@ -1054,8 +1289,18 @@ func unwiredNames(t *testing.T, out string) map[string]bool {
 			names[strings.Fields(trimmed)[0]] = true
 		}
 	}
-	if len(names) == 0 {
-		t.Fatalf("no unwired names parsed from the report:\n%s", out)
+	return names
+}
+
+// requireUnwired asserts the report's unwired section names exactly want routes,
+// so a case that needs a known gap states it at the top rather than inheriting
+// whatever the repository happens to have. It returns the names so the caller can
+// assert which ones they are.
+func requireUnwired(t *testing.T, out string, want int) map[string]bool {
+	t.Helper()
+	names := unwiredNames(t, out)
+	if len(names) != want {
+		t.Fatalf("the report names %d unwired route(s), want %d: %v\n%s", len(names), want, names, out)
 	}
 	return names
 }

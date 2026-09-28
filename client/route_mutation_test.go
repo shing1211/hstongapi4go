@@ -105,17 +105,29 @@ func TestOrderMutationAliasesAreSingleAttempt(t *testing.T) {
 // TestQueriesAreNotClassifiedAsMutations guards the opposite failure: a query
 // misfiled as a mutation would silently lose retries, so both directions are
 // asserted rather than only the dangerous one.
+//
+// RouteTradeSubscribe was already here. RouteTradeUnsubscribe was not, although it
+// is the pair's exact twin: same Gateway, same session-wide push subscription,
+// same query classification, and — unlike the order endpoints — neither can place
+// or cancel an order, which is the only thing the mutation set is for. A route
+// that is missing from a list is not protected by it, so the absence of one route
+// from this table is not a statement that it is safe to misfile; it is a hole in
+// the assertion. C15 found it while pinning these two routes' retry class, and
+// filled it: /trade/TradeUnsubscribe now has a test that says it must keep its
+// retries, which is the same claim /trade/TradeSubscribe has had.
 func TestQueriesAreNotClassifiedAsMutations(t *testing.T) {
 	queries := []Route{
 		RouteHqBasicQot,
 		RouteHqSubscribe,
 		RouteTradeLogin,
+		RouteTradeLogout,
 		RouteTradeQueryHoldsList,
 		RouteTradeQueryRealEntrustList,
 		RouteTradeQueryMaxAvailableAsset,
 		RouteTradeAlgoQueryOrderList,
 		RouteTradeFuturesQueryFundInfo,
 		RouteTradeSubscribe,
+		RouteTradeUnsubscribe,
 	}
 	for _, r := range queries {
 		if resilience.IsMutation(r.Path()) {

@@ -15,6 +15,16 @@ import (
 	"github.com/shing1211/hstongapi4go/pkg/types"
 )
 
+// Operation labels used in errors raised by TradingService. Each is the canonical
+// Gateway route path, so a log line or an error points at the failing endpoint,
+// and none ever carries a request payload or a credential.
+//
+// The last two are the trade-push subscription labels. They are declared here
+// rather than beside the two trade-session labels in session.go because a
+// subscription is not a login — it is a change to the Gateway's push state, not
+// to the session that authorises it — and a label shared with a login would make
+// the two errors indistinguishable. The spellings are the released layer's,
+// from pkg/hstong/trade/push.go:14-17.
 const (
 	opEntrust               = "trade/TradeEntrust"
 	opCancelEntrust         = "trade/TradeCancelEntrust"
@@ -29,6 +39,8 @@ const (
 	opHistoryCondOrderList  = "trade/TradeQueryHistoryCondOrderList"
 	opMarginFullInfo        = "trade/TradeQueryMarginFullInfo"
 	opBeforeAndAfterSupport = "trade/TradeQueryBeforeAndAfterSupport"
+	opTradeSubscribe        = "trade/TradeSubscribe"
+	opTradeUnsubscribe      = "trade/TradeUnsubscribe"
 )
 
 const (
@@ -495,6 +507,118 @@ func (s *TradingService) BeforeAndAfterSupport(ctx context.Context, symbol domai
 		return nil, err
 	}
 	return domain.SessionSupportFromWire(symbol, out.Data), nil
+}
+
+// SubscribeOrders subscribes the trading session to order-status push on the
+// Gateway (POST /trade/TradeSubscribe) and reports whether the Gateway
+// accepted it.
+//
+// The request params are empty and the reply is discarded, so a nil error means
+// the subscription was accepted and there is nothing else to read out of it. The
+// notifications themselves arrive on the TCP push channel as
+// TradeStockDeliverNotify; receiving them is C10's PushOrchestration, built on
+// internal/push, and is not this method's business. The Gateway requires the
+// subscription to be asked for explicitly — the legacy direct protocol
+// auto-subscribed on connection, and the Gateway does not.
+//
+// The params are empty because order push is one session-wide subscription
+// rather than a per-security one, unlike the market push topics
+// pkg/services/market.go subscribes to over /hq/Subscribe. There is no topic, no
+// security list, and no filter, so there is nothing for a caller to get wrong and
+// nothing for a future maintainer to add.
+//
+// # accountID is a session key and never crosses the wire
+//
+// accountID names the session the caller means and is validated as a local
+// precondition — a zero one is refused with types.StatusInvalidParam under
+// opTradeSubscribe before any request is spent — and it is then placed in no
+// request body. That is the rule every method in this package follows, and
+// stating it here is load bearing rather than ceremonial: an account identifier
+// in this body would be an identifier the Gateway never asked for, because the
+// Gateway resolves the account from the authenticated session. It would also be
+// invisible on the mock, which answers by path and never inspects a body.
+// TestTradePushAccountIDNeverReachesTheWire is the assertion.
+//
+// # A trade session is required, and only the Gateway can enforce it
+//
+// Both push routes are refused without an authenticated session, and nothing in
+// pkg/services can check for one: this package reaches the Gateway through an
+// Executor and nothing else, holds no session store, and the session lives in
+// SessionService and in internal/auth behind it. The released layer can gate,
+// because its Manager holds a *SessionManager and calls EnsureLoggedIn first;
+// this layer deliberately has no such collaborator, and inventing a local
+// pre-check would mean adding the dependency this file's package does not have
+// in order to duplicate a check the Gateway already performs and reports with a
+// documented code. So the request is sent, and the Gateway refuses it — with
+// StatusNotLoggedIn or StatusKickedOffline, both of which errs.ReLoginRequired
+// reports, so a caller knows to log in and try again. Gating the whole v-next
+// surface on a session is C10's PushOrchestration decision, not this file's.
+//
+// # It is a query, and a retry policy will re-send it
+//
+// Neither /trade/TradeSubscribe nor /trade/TradeUnsubscribe is in
+// internal/resilience's closed mutation set, so client.IsQuery classifies both as
+// query class and a retry policy re-sends them on a retryable rejection. That is
+// correct rather than a gap: ADR 0003 is about order mutations — a retry of a
+// failed entrust can place an order the caller did not intend — and a
+// subscription is not one. Re-subscribing a subscription that was never
+// established and unsubscribing a subscription that is already gone are the same
+// no-op twice, which is the idempotence a retry needs. The service adds no retry
+// of its own, and neither path is added to the mutation set; doing that would be
+// a behaviour change to the released layer, which sends both through the same
+// client path and therefore classifies both the same way this one does.
+//
+// # The released layer's GoDoc disagrees with its own code here
+//
+// pkg/hstong/trade/push.go:31 says this call "issues exactly one HTTP request
+// and is never retried", and push.go:39 repeats it for the unsubscribe. The code
+// does not do that: the route is not in resilience.mutationPaths, so Manager.call
+// hands it to the same client whose execute consults the retry class, and a
+// policy re-sends it. The doc is stale rather than the code being wrong — the
+// sentence describes the *default* configuration, where no policy is installed
+// and every route is sent once, as an absolute. This method therefore follows
+// the code, which is the thing that was measured:
+// TestTradePushRequestsRetryAndOrderMutationsDoNot drives both routes and an
+// order mutation through one MaxAttempts-5 policy and a retryable 1011 and
+// records 5, 5, and 1. Correcting the released layer's GoDoc is out of scope
+// here and is recorded in the run tracker instead.
+func (s *TradingService) SubscribeOrders(ctx context.Context, accountID domain.AccountID) error {
+	if accountID.IsZero() {
+		return errs.New(types.StatusInvalidParam, opTradeSubscribe, "accountID must not be empty")
+	}
+	return s.client.Do(ctx, opTradeSubscribe, client.RouteTradeSubscribe, struct{}{}, s.client.JSON(), nil)
+}
+
+// UnsubscribeOrders cancels the session-wide order-status push subscription on
+// the Gateway (POST /trade/TradeUnsubscribe) and reports whether the Gateway
+// accepted it.
+//
+// It is SubscribeOrders' exact inverse and shares all of its properties, so each
+// of the four is stated only once on SubscribeOrders and named here rather than
+// repeated in a second place that could drift: struct{}{} params rather than nil,
+// because internal/transport drops a nil params from the envelope entirely
+// (request.Params carries omitempty) and the key would be absent rather than the
+// empty object both vendor SDKs send; a discarded reply, so a nil error is the
+// whole result; an accountID that is validated and then never placed in a wire
+// struct; a trade session that only the Gateway can require; and query retry
+// class, so a policy re-sends it — see TestTradePushRequestsRetryAndOrderMutationsDoNot,
+// which measures 5 requests for this route against 1 for an order mutation under
+// one policy.
+//
+// The one asymmetry is the failure's meaning. A rejected SubscribeOrders leaves
+// the caller with no order push at all, so it is a loss of a facility it was
+// trying to acquire. A rejected UnsubscribeOrders may mean the Gateway had
+// already forgotten the subscription — a login that displaced it, a restart — in
+// which case the caller has the outcome it asked for and will not hear about it
+// again. Neither is distinguishable here, and neither is retried by this method,
+// so the caller's next move is to reconcile against the push channel rather than
+// to call again. That is ADR 0003's reconciliation requirement applied to a
+// non-mutation: the answer is never guessed locally.
+func (s *TradingService) UnsubscribeOrders(ctx context.Context, accountID domain.AccountID) error {
+	if accountID.IsZero() {
+		return errs.New(types.StatusInvalidParam, opTradeUnsubscribe, "accountID must not be empty")
+	}
+	return s.client.Do(ctx, opTradeUnsubscribe, client.RouteTradeUnsubscribe, struct{}{}, s.client.JSON(), nil)
 }
 
 func validateOrderForHK(order domain.Order) error {

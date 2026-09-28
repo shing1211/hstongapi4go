@@ -16,7 +16,7 @@ import (
 )
 
 // This file covers the failure side of the trading surface: the branch each of
-// the thirteen methods takes once Executor.Do returns an error, and the argument
+// the fifteen methods takes once Executor.Do returns an error, and the argument
 // rejections that stop a call before the executor is consulted at all.
 //
 // It exists because that branch was the package's second-largest hole. A2
@@ -24,7 +24,12 @@ import (
 // pkg/hstong/trade, a fully covered happy path, and a `return ..., err`
 // statement no test had ever reached, with the symptom that four mutations all sat
 // at exactly 83.3%. Here thirteen methods carried the same unexercised statement,
-// and four of them are the ones ADR 0003 is about.
+// and four of them are the ones ADR 0003 is about. The two push-subscription
+// methods arrived later (C15) and are rows here on the same terms: their retry
+// class is asserted in trading_push_test.go, because theirs is the one route pair
+// whose own GoDoc describes the opposite, but which op label, route and error
+// shape each of them produces is this file's subject exactly as it is for the
+// other thirteen.
 //
 // Two levels, both required. Level 1 drives a sequencedExecutor returning a
 // sentinel: it proves the error reaches the caller unchanged, that the zero value
@@ -189,6 +194,25 @@ func tradingErrorCases() []tradingErrorCase {
 				got, err := svc.BeforeAndAfterSupport(ctx, tradingHKSymbol())
 				requireZero(t, got)
 				return err
+			},
+		},
+		// The two push-subscription rows carry no zero value to assert: both methods
+		// return only an error, which is what makes "the reply is discarded" and
+		// "the request is the whole result" expressible as a signature.
+		{
+			name:  "SubscribeOrders",
+			op:    opTradeSubscribe,
+			route: client.RouteTradeSubscribe,
+			invoke: func(_ *testing.T, ctx context.Context, svc *TradingService) error {
+				return svc.SubscribeOrders(ctx, account)
+			},
+		},
+		{
+			name:  "UnsubscribeOrders",
+			op:    opTradeUnsubscribe,
+			route: client.RouteTradeUnsubscribe,
+			invoke: func(_ *testing.T, ctx context.Context, svc *TradingService) error {
+				return svc.UnsubscribeOrders(ctx, account)
 			},
 		},
 	}
