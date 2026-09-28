@@ -21,7 +21,7 @@ import (
 // Two independent readers of the same tree keep the assertions honest. The guard
 // parses the const block and the scan roots with go/ast; the helpers below read
 // them as text with a regexp. A counting bug in one is very unlikely to be
-// mirrored in the other, so agreeing on 51 declared and 40 referenced is a
+// mirrored in the other, so agreeing on 51 declared and 47 referenced is a
 // cross-check rather than a restatement.
 
 const (
@@ -277,22 +277,23 @@ func TestRealTreeIsNotVacuous(t *testing.T) {
 }
 
 // TestRealTreeUnwiredSetIsTheKnownBacklog pins the C2 baseline, refreshed as the
-// C-series closes the gaps. The 11 unwired endpoints are the run's remaining
-// backlog: 7 algo, and the 4 that SPEC groups as trade session (login, logout) and
-// trade push subscribe (subscribe, unsubscribe).
+// C-series closes the gaps. The 4 unwired endpoints are the run's remaining
+// backlog: the 2 that SPEC groups as trade session (login, logout) and the 2 it
+// groups as trade push subscribe (subscribe, unsubscribe).
 //
-// This is a snapshot and it will need editing as C7-C15 close the gaps -- each of
+// This is a snapshot and it will need editing as C8-C15 close the gaps -- each of
 // them must update it to the new count. That is the same friction
 // client/routes_test.go carries for a route that is added, and it is deliberate:
 // the guard's own number is the source of truth, this literal only records what
 // that number was when the task landed, so a silent change in either direction
 // shows up as a failing test rather than as a diff nobody reads.
 //
-// It moved from 22 to 14 at C4, which wired the eight futures reads, and 14 to 11
-// at C5, which wired the three futures mutations - so futures is now 11/11/0 and
-// the only remaining gap is algo and the two session/push groups. The per-group row
-// and the by-name list are updated together, so a task that wires a route in one
-// place and forgets the other fails here.
+// It moved from 22 to 14 at C4, which wired the eight futures reads, 14 to 11 at
+// C5, which wired the three futures mutations, and 11 to 4 at C7+C8+C9, which wired
+// all seven algo endpoints -- so algo is now 7/7/0 and the only remaining gap is the
+// two session and two push groups. The per-group row and the by-name list are
+// updated together, so a task that wires a route in one place and forgets the
+// other fails here.
 func TestRealTreeUnwiredSetIsTheKnownBacklog(t *testing.T) {
 	root := repoRoot(t)
 	out, code := run(root, false)
@@ -306,9 +307,9 @@ func TestRealTreeUnwiredSetIsTheKnownBacklog(t *testing.T) {
 		"Trade assets / positions": {5, 5, 0},
 		"Trade orders":             {13, 13, 0},
 		"Trade push subscribe":     {2, 0, 2},
-		"Algo / strategy":          {7, 0, 7},
+		"Algo / strategy":          {7, 7, 0},
 		"Futures":                  {11, 11, 0},
-		"TOTAL":                    {51, 40, 11},
+		"TOTAL":                    {51, 47, 4},
 	}
 	got := groupRows(t, out)
 	if len(got) != len(want) {
@@ -324,23 +325,18 @@ func TestRealTreeUnwiredSetIsTheKnownBacklog(t *testing.T) {
 			t.Errorf("group %q: want declared/wired/gap %v, got %v", title, columns, row)
 		}
 	}
-	if !strings.Contains(out, "  Unwired (11 of 51 declared), by SPEC group:") {
+	if !strings.Contains(out, "  Unwired (4 of 51 declared), by SPEC group:") {
 		t.Errorf("want the unwired header to state the gap:\n%s", out)
 	}
-	// The 11, by name. Every one is checked against the declared set so the
-	// list cannot drift into naming something that is not an endpoint.
+	// The 4, by name. Every one is checked against the declared set so the list
+	// cannot drift into naming something that is not an endpoint.
 	declared := map[string]bool{}
 	for _, d := range declaredAsText(t, root) {
 		declared[d[0]] = true
 	}
-	algo := []string{
-		"RouteTradeAlgoAddOrder", "RouteTradeAlgoCancelOrder", "RouteTradeAlgoCancelEntrust",
-		"RouteTradeAlgoChangeOrder", "RouteTradeAlgoActionOrder",
-		"RouteTradeAlgoQueryOrderList", "RouteTradeAlgoQueryEntrustIdList",
-	}
 	session := []string{"RouteTradeLogin", "RouteTradeLogout"}
 	push := []string{"RouteTradeSubscribe", "RouteTradeUnsubscribe"}
-	for _, group := range [][]string{algo, session, push} {
+	for _, group := range [][]string{session, push} {
 		for _, name := range group {
 			if !declared[name] {
 				t.Errorf("%s is not a declared route constant", name)
@@ -350,11 +346,12 @@ func TestRealTreeUnwiredSetIsTheKnownBacklog(t *testing.T) {
 			}
 		}
 	}
-	// The eleven futures endpoints wired at C4 and C5 must NOT appear in the
+	// The eighteen endpoints wired at C4, C5 and C7-C9 must NOT appear in the
 	// unwired list. Without this the list could name a wired route and the test
 	// would still pass, because the check above only asserts presence, never
-	// absence. It is a longer list than it was at C4 because C5 added the three
-	// mutations, and those are the three a wrong route is most likely to hide on.
+	// absence. It is longer than it was at C5 because C7-C9 added the seven algo
+	// routes, and the two algo *queries* are the two a wrong route most likely to
+	// hide on, because they are the only two algo paths a client may retry.
 	for _, name := range []string{
 		"RouteTradeFuturesQueryProductInfo", "RouteTradeFuturesQueryMaxBuySellAmount",
 		"RouteTradeFuturesQueryFundInfo", "RouteTradeFuturesQueryHoldsList",
@@ -362,6 +359,9 @@ func TestRealTreeUnwiredSetIsTheKnownBacklog(t *testing.T) {
 		"RouteTradeFuturesQueryRealDeliverList", "RouteTradeFuturesQueryHistoryDeliverList",
 		"RouteTradeFuturesEntrust", "RouteTradeFuturesCancelEntrust",
 		"RouteTradeFuturesModifyEntrust",
+		"RouteTradeAlgoQueryOrderList", "RouteTradeAlgoQueryEntrustIdList",
+		"RouteTradeAlgoAddOrder", "RouteTradeAlgoCancelOrder", "RouteTradeAlgoCancelEntrust",
+		"RouteTradeAlgoChangeOrder", "RouteTradeAlgoActionOrder",
 	} {
 		if !declared[name] {
 			t.Errorf("%s is not a declared route constant", name)
@@ -370,8 +370,8 @@ func TestRealTreeUnwiredSetIsTheKnownBacklog(t *testing.T) {
 			t.Errorf("%s is wired and must not appear in the unwired list:\n%s", name, out)
 		}
 	}
-	if got := 7 + 2 + 2; got != 11 {
-		t.Fatalf("the backlog is %d endpoints, not the 11 the table records", got)
+	if got := 2 + 2; got != 4 {
+		t.Fatalf("the backlog is %d endpoints, not the 4 the table records", got)
 	}
 }
 
@@ -400,7 +400,7 @@ func TestReportModeNeverReadsAsSuccess(t *testing.T) {
 	if !strings.Contains(out, "exit=0 (report mode never fails on a gap)") {
 		t.Errorf("want the echoed exit code:\n%s", out)
 	}
-	if !strings.Contains(out, "11 NOT implemented") {
+	if !strings.Contains(out, "4 NOT implemented") {
 		t.Errorf("the gap must be stated as a NOT-implemented count, never as a wired count:\n%s", out)
 	}
 	for _, banned := range []string{"PASS", "OK", "SUCCESS", "All endpoints", "all endpoints"} {
@@ -433,7 +433,7 @@ func isWordByte(b byte) bool {
 }
 
 // TestEnforceModeFailsOnGap is the primary negative control: the guard must be
-// shown to fail, or "exit 0" for an 11-endpoint gap means nothing. V1 alone
+// shown to fail, or "exit 0" for a 4-endpoint gap means nothing. V1 alone
 // proves nothing on its own.
 func TestEnforceModeFailsOnGap(t *testing.T) {
 	out, code := run(fixture(t), true)
@@ -443,7 +443,12 @@ func TestEnforceModeFailsOnGap(t *testing.T) {
 	if !strings.Contains(out, "PARITY GUARD - ENFORCING MODE") {
 		t.Errorf("want the enforcing banner:\n%s", out)
 	}
-	if !strings.Contains(out, "ERROR parity: 11 declared endpoint(s) have no v-next service method; --enforce requires 0") {
+	// fixture copies the real scan roots, so the gap here is the real tree's
+	// current backlog rather than a frozen number: it read 11 while algo was
+	// unwired and reads 4 now that C7-C9 wired it. The assertion is on the
+	// *shape* of the message -- it names the count, so a run cannot fail on a
+	// gap it does not say out loud -- and the count is whatever the tree has.
+	if !strings.Contains(out, "ERROR parity: 4 declared endpoint(s) have no v-next service method; --enforce requires 0") {
 		t.Errorf("want the fail-on-gap error naming the gap:\n%s", out)
 	}
 	if containsWord(out, "PASS") {
@@ -747,8 +752,8 @@ func TestCRLFAndLFProduceIdenticalOutput(t *testing.T) {
 	if lfOut != crlfOut {
 		t.Errorf("CRLF and LF checkouts must produce byte-identical reports.\n--- LF ---\n%s\n--- CRLF ---\n%s", lfOut, crlfOut)
 	}
-	if !strings.Contains(crlfOut, "PARITY: 40/51 gap=11 mode=report enforce=off") {
-		t.Errorf("the CRLF fixture must still reach 40/51:\n%s", crlfOut)
+	if !strings.Contains(crlfOut, "PARITY: 47/51 gap=4 mode=report enforce=off") {
+		t.Errorf("the CRLF fixture must still reach 47/51:\n%s", crlfOut)
 	}
 }
 
@@ -841,7 +846,7 @@ func TestAliasedClientImportIsNotCounted(t *testing.T) {
 	// RouteHqBasicQot is still referenced by market.go, so the count must not
 	// move: the diagnostic is about the alias being uncountable, not about a
 	// route having been lost.
-	if !strings.Contains(out, "PARITY: 40/51 gap=11") {
+	if !strings.Contains(out, "PARITY: 47/51 gap=4") {
 		t.Errorf("an aliased reference must not change the coverage figure:\n%s", out)
 	}
 }
@@ -973,7 +978,7 @@ func TestPositionalJoinDisagreementSuppressesGrouping(t *testing.T) {
 	if strings.Contains(out, "  Group    ") {
 		t.Errorf("no group table may be printed when the join disagreed:\n%s", out)
 	}
-	if !strings.Contains(out, "PARITY: 40/51 gap=11") {
+	if !strings.Contains(out, "PARITY: 47/51 gap=4") {
 		t.Errorf("the gap count does not depend on grouping and must survive:\n%s", out)
 	}
 }
