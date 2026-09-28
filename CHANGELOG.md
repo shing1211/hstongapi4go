@@ -7,11 +7,89 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.22] - 2026-09-26
+
+**The current release.** The v-next service layer is complete: **all 51 documented
+Gateway endpoints now have a service method**, and a CI gate keeps it that way.
+
+**The released v0.x API is untouched.** Since 0.1.21 the only change under `client/`,
+`internal/` or `pkg/hstong/` is twelve added lines in one *test's* data table. Nothing
+a caller of `pkg/hstong` can observe has changed.
+
+### Added
+
+- **`FuturesService`** — 11 endpoints: product info, max buy/sell, account funds,
+  positions, entrust, cancel, modify, and the real and history entrust and deliver
+  lists. Cursor paging, the six always-sent fields proven present-and-empty, and
+  prices carried as exact decimals from a per-product `decInPrice`.
+
+- **`AlgoService`** — 7 endpoints: five order mutations and two order/entrust-id
+  queries. Seven dictionaries of its own, three of which share a *name* with a trade
+  or futures type meaning something different, so a test uses reflection to tell a
+  defined type from a type alias: `type AlgoStatus = types.EntrustStatus` compiles
+  silently and would make two value sets interchangeable.
+
+- **`SessionService`** — `Login` and `Logout`, composing the existing
+  `internal/auth`. Concurrent logins collapse to **one** HTTP request, proved
+  without sleeps by parking the leader inside the request and taking the gate's own
+  mutex from the test. A rejected credential discards the stored session while a rate
+  limit or timeout keeps it, which is what stops a three-hour lockout. The trade
+  password is a parameter rather than a field on any struct, so there is no struct
+  anywhere for a secret to be written into.
+
+- **Trade push `SubscribeOrders` / `UnsubscribeOrders`** — the last two endpoints.
+
+- **`make parity` and `make parity-enforce`.** The guard answers which documented
+  endpoint has no v-next service method. `make parity` reports and exits 0;
+  `make parity-enforce` exits 1 on any gap. **CI now runs the enforcing form**, so
+  the 51/51 result is held rather than merely reported.
+
+### Changed
+
+- **The parity guard is enforcing in CI.** Before this release it ran in report mode
+  by design, so the C-series could land without reddening the build. With every
+  endpoint wired there is nothing left for report mode to tolerate.
+
+- **The guard's blind-spot check was narrowed, not silenced.** It flagged any
+  `client.Route`-typed parameter or struct field. A *parameter* is a signature
+  declaring what an interface accepts and can never be a route reference, so it
+  produced a permanent false positive on `Executor.Do` — which would have made
+  enforcing mode fail forever, since that interface is correct and must not change.
+  A *stored route* in a struct field is still reported, and is now fatal: a route the
+  walk cannot follow is one it can neither credit nor withdraw by name. Note the
+  asymmetry this creates — naming an HTTP route must happen at a call site, never by
+  storing it.
+
+- **A `PASS` that could accompany a failure.** The guard keyed its pass line on the
+  open-gap count, which is also zero for a run that could not measure — so against a
+  corrupt spec it printed `PASS: 0/52 endpoints` while exiting 1. It is now keyed on
+  the exit code, and a log can no longer say `ERROR` and `PASS` in the same breath.
+
+### Fixed
+
+- **`gosec` G304 on the guard's spec read**, annotated with its reason rather than
+  worked around.
+
+- **Documentation that had drifted from the code**: the design note claimed no
+  identifier named `client` existed when three service structs had a `client Executor`
+  field, and a run tracker lost rows to an encoding round-trip that read UTF-8 as the
+  platform code page. Both are repaired, and the second is why the affected file's
+  bytes are now verified by codepoint count before every commit.
+
+### Notes
+
+- The guard's report is deliberately hard to misread: report mode prints, on its own
+  last line, that a green exit does **not** mean parity.
+- Two protocol questions are recorded as unresolved rather than answered, because
+  answering them would mean guessing: the futures buy/sell direction set (the vendor's
+  two SDKs at the same version disagree with the spec and the released layer), and one
+  algorithm order-type family. Both are fail-closed and both name the single request
+  that would settle them.
+
 ## [0.1.21] - 2026-09-26
 
-**The current release.** Ships the SPEC ↔ v-next parity guard. No production code
-changed: nothing under `client/`, `pkg/` or `internal/` was touched, and the SDK's
-behaviour is identical to 0.1.20.
+**Superseded by 0.1.22.** Shipped the parity guard in report mode, with no production
+code changed. `v0.1.22` is the tag to use.
 
 ### Added
 
@@ -1063,7 +1141,7 @@ canonical in [docs/SPEC.md](./docs/SPEC.md).
 - The plaintext trade password is held in memory only, encrypted before it
   leaves the process, and never logged or embedded in an error.
 
-[Unreleased]: https://github.com/shing1211/hstongapi4go/compare/v0.1.21...HEAD
+[Unreleased]: https://github.com/shing1211/hstongapi4go/compare/v0.1.22...HEAD
 [0.1.0]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.0
 [0.1.1]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.1
 [0.1.2]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.2
@@ -1086,3 +1164,4 @@ canonical in [docs/SPEC.md](./docs/SPEC.md).
 [0.1.19]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.19
 [0.1.20]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.20
 [0.1.21]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.21
+[0.1.22]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.22
