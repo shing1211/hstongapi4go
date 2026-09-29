@@ -355,7 +355,7 @@ type AlgoActionRequest struct {
 // ExchangeType is refused, because a security code is not unique across the books
 // and a code with no market is a filter the SDK cannot check.
 type AlgoOrderQuery struct {
-	// Page is the page-number pagination. It is not transport.Pagination: that
+	// Page is the page-number pagination. It is not domain.Pagination: that
 	// type is cursor-shaped and its Apply writes cursor/page_size keys the algo
 	// Gateway does not accept.
 	Page PageRequest

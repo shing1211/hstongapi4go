@@ -12,7 +12,6 @@ import (
 
 	"github.com/shing1211/hstongapi4go/client"
 	"github.com/shing1211/hstongapi4go/pkg/domain"
-	"github.com/shing1211/hstongapi4go/pkg/transport"
 )
 
 // This file is the money and quantity regression net for account.go, and it rests
@@ -527,7 +526,7 @@ func TestFundJourCarriesHostileAmountsVerbatim(t *testing.T) {
 									accountFundJourRow(tc.in, ""))},
 							)
 							entries, err := req.invoke(t, t.Context(), NewAccountService(exec),
-								FundJourFilter{}, transport.Pagination{PageSize: 1})
+								FundJourFilter{}, domain.Pagination{PageSize: 1})
 							if err != nil {
 								t.Fatalf("%s with businessBalance %s: %v", req.name, tc.in, err)
 							}
@@ -668,7 +667,7 @@ func TestAccountHostileValuesSurviveTheRealStack(t *testing.T) {
 							string(client.RouteTradeQueryRealFundJourList): gatewaySuccess(reply),
 						})
 						entries, err := NewAccountService(newWireExecutor(t, rec)).RealFundJourList(
-							t.Context(), accountFixtureID(), FundJourFilter{}, transport.Pagination{})
+							t.Context(), accountFixtureID(), FundJourFilter{}, domain.Pagination{})
 						if err != nil {
 							t.Fatalf("RealFundJourList over the wire with %s: %v", tc.in, err)
 						}

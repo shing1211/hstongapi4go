@@ -16,7 +16,6 @@ import (
 	"github.com/shing1211/hstongapi4go/client"
 	"github.com/shing1211/hstongapi4go/internal/errs"
 	"github.com/shing1211/hstongapi4go/pkg/domain"
-	"github.com/shing1211/hstongapi4go/pkg/transport"
 	"github.com/shing1211/hstongapi4go/pkg/types"
 )
 
@@ -108,7 +107,7 @@ func accountErrorCases() []accountErrorCase {
 			invoke: func(t *testing.T, ctx context.Context, svc *AccountService) error {
 				t.Helper()
 				entries, err := svc.RealFundJourList(ctx, accountFixtureID(),
-					FundJourFilter{}, transport.Pagination{})
+					FundJourFilter{}, domain.Pagination{})
 				requireZero(t, entries)
 				return err
 			},
@@ -119,7 +118,7 @@ func accountErrorCases() []accountErrorCase {
 			invoke: func(t *testing.T, ctx context.Context, svc *AccountService) error {
 				t.Helper()
 				entries, err := svc.HistoryFundJourList(ctx, accountFixtureID(),
-					FundJourFilter{}, transport.Pagination{})
+					FundJourFilter{}, domain.Pagination{})
 				requireZero(t, entries)
 				return err
 			},
@@ -184,7 +183,7 @@ func accountValidatedCases() []accountValidatedCase {
 				t.Helper()
 				entries, err := svc.RealFundJourList(ctx, zeroID, FundJourFilter{
 					ExchangeType: types.ExchangeHK, StartDate: "20260101", EndDate: "20260926",
-				}, transport.Pagination{PageSize: 10, Cursor: "resume-here"})
+				}, domain.Pagination{PageSize: 10, Cursor: "resume-here"})
 				assertInvalidParam(t, err, opRealFundJourList)
 				requireZero(t, entries)
 			},
@@ -195,7 +194,7 @@ func accountValidatedCases() []accountValidatedCase {
 				t.Helper()
 				entries, err := svc.HistoryFundJourList(ctx, zeroID, FundJourFilter{
 					ExchangeType: types.ExchangeHK, StartDate: "20260101", EndDate: "20260926",
-				}, transport.Pagination{PageSize: 10, Cursor: "resume-here"})
+				}, domain.Pagination{PageSize: 10, Cursor: "resume-here"})
 				assertInvalidParam(t, err, opHistoryFundJourList)
 				requireZero(t, entries)
 			},
@@ -246,12 +245,12 @@ func TestAccountMethodsAcceptANonZeroAccountID(t *testing.T) {
 				}
 			case "RealFundJourList":
 				if _, err := svc.RealFundJourList(t.Context(), accountFixtureID(),
-					FundJourFilter{}, transport.Pagination{}); err != nil {
+					FundJourFilter{}, domain.Pagination{}); err != nil {
 					t.Fatalf("RealFundJourList with a non-zero accountID = %v, want nil", err)
 				}
 			case "HistoryFundJourList":
 				if _, err := svc.HistoryFundJourList(t.Context(), accountFixtureID(),
-					FundJourFilter{}, transport.Pagination{}); err != nil {
+					FundJourFilter{}, domain.Pagination{}); err != nil {
 					t.Fatalf("HistoryFundJourList with a non-zero accountID = %v, want nil", err)
 				}
 			default:
@@ -500,7 +499,7 @@ func TestFundJourMidWalkFailureReturnsTheCompletedRows(t *testing.T) {
 			)
 
 			entries, err := req.invoke(t, t.Context(), NewAccountService(exec), FundJourFilter{},
-				transport.Pagination{PageSize: 2})
+				domain.Pagination{PageSize: 2})
 			if !errors.Is(err, errAccountExecutorDown) {
 				t.Fatalf("%s = %v, want the executor's own error from the second page", req.name, err)
 			}
@@ -532,7 +531,7 @@ func TestFundJourFirstPageFailureReturnsNothing(t *testing.T) {
 			exec := newSequencedExecutor(t, sequencedReply{err: errAccountExecutorDown})
 
 			entries, err := req.invoke(t, t.Context(), NewAccountService(exec), FundJourFilter{},
-				transport.Pagination{PageSize: 2})
+				domain.Pagination{PageSize: 2})
 			if !errors.Is(err, errAccountExecutorDown) {
 				t.Fatalf("%s = %v, want the executor's own error", req.name, err)
 			}
@@ -564,7 +563,7 @@ func TestFundJourMidWalkFailureOverTheWire(t *testing.T) {
 			})
 
 			entries, err := req.invoke(t, t.Context(), NewAccountService(exec), FundJourFilter{},
-				transport.Pagination{PageSize: 2})
+				domain.Pagination{PageSize: 2})
 			if err == nil {
 				t.Fatalf("%s = nil error, want the second page's Gateway rejection", req.name)
 			}
@@ -613,7 +612,7 @@ func TestFundJourMidWalkFailureRetriesOnlyTheFailingPage(t *testing.T) {
 				client.WithRetryPolicy(client.RetryPolicy{MaxAttempts: attempts}))
 
 			entries, err := req.invoke(t, t.Context(), NewAccountService(exec), FundJourFilter{},
-				transport.Pagination{PageSize: 1})
+				domain.Pagination{PageSize: 1})
 			if err == nil {
 				t.Fatalf("%s = nil error, want the second page's rejection", req.name)
 			}

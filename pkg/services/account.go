@@ -9,7 +9,6 @@ import (
 	"github.com/shing1211/hstongapi4go/client"
 	"github.com/shing1211/hstongapi4go/internal/errs"
 	"github.com/shing1211/hstongapi4go/pkg/domain"
-	"github.com/shing1211/hstongapi4go/pkg/transport"
 	"github.com/shing1211/hstongapi4go/pkg/types"
 )
 
@@ -162,7 +161,7 @@ type FundJourFilter struct {
 type RealFundJourListRequest struct {
 	AccountID  domain.AccountID
 	Filter     FundJourFilter
-	Pagination transport.Pagination
+	Pagination domain.Pagination
 }
 
 type realFundJourListWireRequest struct {
@@ -181,7 +180,7 @@ type RealFundJourListResponse struct {
 	Cursor  string
 }
 
-func (s *AccountService) RealFundJourList(ctx context.Context, accountID domain.AccountID, filter FundJourFilter, pagination transport.Pagination) ([]*domain.FundJournalEntry, error) {
+func (s *AccountService) RealFundJourList(ctx context.Context, accountID domain.AccountID, filter FundJourFilter, pagination domain.Pagination) ([]*domain.FundJournalEntry, error) {
 	if accountID.IsZero() {
 		return nil, errs.New(types.StatusInvalidParam, opRealFundJourList, "accountID must not be empty")
 	}
@@ -211,7 +210,7 @@ func (s *AccountService) RealFundJourList(ctx context.Context, accountID domain.
 type HistoryFundJourListRequest struct {
 	AccountID  domain.AccountID
 	Filter     FundJourFilter
-	Pagination transport.Pagination
+	Pagination domain.Pagination
 }
 
 type historyFundJourListWireRequest struct {
@@ -228,7 +227,7 @@ type HistoryFundJourListResponse struct {
 	Cursor  string
 }
 
-func (s *AccountService) HistoryFundJourList(ctx context.Context, accountID domain.AccountID, filter FundJourFilter, pagination transport.Pagination) ([]*domain.FundJournalEntry, error) {
+func (s *AccountService) HistoryFundJourList(ctx context.Context, accountID domain.AccountID, filter FundJourFilter, pagination domain.Pagination) ([]*domain.FundJournalEntry, error) {
 	if accountID.IsZero() {
 		return nil, errs.New(types.StatusInvalidParam, opHistoryFundJourList, "accountID must not be empty")
 	}

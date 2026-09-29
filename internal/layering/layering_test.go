@@ -175,6 +175,17 @@ var rules = []rule{
 			"would bypass all of them (docs/VNEXT.md 5.4)",
 	},
 	{
+		name:      "services does not import the transport adapters",
+		prefix:    "pkg/services",
+		forbidden: []string{"pkg/transport"},
+		why: "pkg/transport is the only package that may depend on internal/*, so this " +
+			"edge would give the services a concrete adapter and, transitively, the " +
+			"internal push client - the dependency C10 placed in pkg/transport precisely " +
+			"because pkg/services cannot hold it (the rule above forbids the direct form " +
+			"of the same thing). A service that needs a push transport takes a " +
+			"PushTransport interface, which is what services.PushOrchestration already does",
+	},
+	{
 		name:      "push does not call back up into the managers",
 		prefix:    "internal/push",
 		forbidden: []string{"pkg/hstong"},

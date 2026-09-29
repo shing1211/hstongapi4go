@@ -14,7 +14,6 @@ import (
 
 	"github.com/shing1211/hstongapi4go/client"
 	"github.com/shing1211/hstongapi4go/pkg/domain"
-	"github.com/shing1211/hstongapi4go/pkg/transport"
 	"github.com/shing1211/hstongapi4go/pkg/types"
 )
 
@@ -901,7 +900,7 @@ type accountJourRequest struct {
 	route    client.Route
 	hasDates bool
 	invoke   func(t *testing.T, ctx context.Context, svc *AccountService,
-		filter FundJourFilter, page transport.Pagination) ([]*domain.FundJournalEntry, error)
+		filter FundJourFilter, page domain.Pagination) ([]*domain.FundJournalEntry, error)
 }
 
 // accountJourRequests are the two cursor-walking methods.
@@ -911,7 +910,7 @@ func accountJourRequests() []accountJourRequest {
 			name: "RealFundJourList", op: opRealFundJourList,
 			route: client.RouteTradeQueryRealFundJourList,
 			invoke: func(t *testing.T, ctx context.Context, svc *AccountService,
-				filter FundJourFilter, page transport.Pagination,
+				filter FundJourFilter, page domain.Pagination,
 			) ([]*domain.FundJournalEntry, error) {
 				t.Helper()
 				return svc.RealFundJourList(ctx, accountFixtureID(), filter, page)
@@ -922,7 +921,7 @@ func accountJourRequests() []accountJourRequest {
 			route:    client.RouteTradeQueryHistoryFundJourList,
 			hasDates: true,
 			invoke: func(t *testing.T, ctx context.Context, svc *AccountService,
-				filter FundJourFilter, page transport.Pagination,
+				filter FundJourFilter, page domain.Pagination,
 			) ([]*domain.FundJournalEntry, error) {
 				t.Helper()
 				return svc.HistoryFundJourList(ctx, accountFixtureID(), filter, page)
@@ -967,7 +966,7 @@ func TestFundJourListChainsTheCursor(t *testing.T) {
 			)
 
 			entries, err := req.invoke(t, t.Context(), NewAccountService(exec), FundJourFilter{},
-				transport.Pagination{PageSize: 2})
+				domain.Pagination{PageSize: 2})
 			if err != nil {
 				t.Fatalf("%s: %v", req.name, err)
 			}
@@ -1024,7 +1023,7 @@ func TestFundJourNextCursorComesFromTheLastRow(t *testing.T) {
 			)
 
 			entries, err := req.invoke(t, t.Context(), NewAccountService(exec), FundJourFilter{},
-				transport.Pagination{PageSize: 3})
+				domain.Pagination{PageSize: 3})
 			if err != nil {
 				t.Fatalf("%s: %v", req.name, err)
 			}
@@ -1055,7 +1054,7 @@ func TestFundJourWalkStopsOnATerminalShortPage(t *testing.T) {
 			)
 
 			entries, err := req.invoke(t, t.Context(), NewAccountService(exec), FundJourFilter{},
-				transport.Pagination{PageSize: 50})
+				domain.Pagination{PageSize: 50})
 			if err != nil {
 				t.Fatalf("%s: %v", req.name, err)
 			}
@@ -1076,7 +1075,7 @@ func TestFundJourWalkStopsOnAnEmptyPage(t *testing.T) {
 			exec := newSequencedExecutor(t, sequencedReply{reply: fundJourPageBody()})
 
 			entries, err := req.invoke(t, t.Context(), NewAccountService(exec), FundJourFilter{},
-				transport.Pagination{PageSize: 10})
+				domain.Pagination{PageSize: 10})
 			if err != nil {
 				t.Fatalf("%s on an empty page = %v, want nil", req.name, err)
 			}
@@ -1106,7 +1105,7 @@ func TestFundJourWalkStopsOnAStalledCursor(t *testing.T) {
 			})
 
 			entries, err := req.invoke(t, t.Context(), NewAccountService(exec), FundJourFilter{},
-				transport.Pagination{Cursor: "cursor-A", PageSize: 10})
+				domain.Pagination{Cursor: "cursor-A", PageSize: 10})
 			if err != nil {
 				t.Fatalf("%s: %v", req.name, err)
 			}
@@ -1136,7 +1135,7 @@ func TestFundJourForwardsTheCallersCursor(t *testing.T) {
 			})
 
 			if _, err := req.invoke(t, t.Context(), NewAccountService(exec), FundJourFilter{},
-				transport.Pagination{Cursor: "resume-here", PageSize: 5}); err != nil {
+				domain.Pagination{Cursor: "resume-here", PageSize: 5}); err != nil {
 				t.Fatalf("%s: %v", req.name, err)
 			}
 			requireCalls(t, exec, 1)
@@ -1174,7 +1173,7 @@ func TestFundJourPageSizeIsClampedThroughTheWire(t *testing.T) {
 					svc := NewAccountService(newWireExecutor(t, rec))
 
 					if _, err := req.invoke(t, t.Context(), svc, FundJourFilter{},
-						transport.Pagination{PageSize: tc.in}); err != nil {
+						domain.Pagination{PageSize: tc.in}); err != nil {
 						t.Fatalf("%s with PageSize %d: %v", req.name, tc.in, err)
 					}
 					params := accountRecordedParams(t, rec, string(req.route))
@@ -1211,7 +1210,7 @@ func TestHistoryFundJourListSendsTheDateRangeOnEveryPage(t *testing.T) {
 
 	entries, err := svc.HistoryFundJourList(t.Context(), accountFixtureID(),
 		FundJourFilter{ExchangeType: types.ExchangeHK, StartDate: "20260101", EndDate: "20260926"},
-		transport.Pagination{PageSize: 1})
+		domain.Pagination{PageSize: 1})
 	if err != nil {
 		t.Fatalf("HistoryFundJourList: %v", err)
 	}
@@ -1254,7 +1253,7 @@ func TestTheFundJourRequestShapesDiffer(t *testing.T) {
 
 	realExec := newSequencedExecutor(t, sequencedReply{reply: fundJourPageBody()})
 	if _, err := NewAccountService(realExec).RealFundJourList(t.Context(), accountFixtureID(),
-		filter, transport.Pagination{PageSize: 5}); err != nil {
+		filter, domain.Pagination{PageSize: 5}); err != nil {
 		t.Fatalf("RealFundJourList: %v", err)
 	}
 	real := accountParamsAs[realFundJourListWireRequest](t, realExec)
@@ -1265,7 +1264,7 @@ func TestTheFundJourRequestShapesDiffer(t *testing.T) {
 
 	histExec := newSequencedExecutor(t, sequencedReply{reply: fundJourPageBody()})
 	if _, err := NewAccountService(histExec).HistoryFundJourList(t.Context(), accountFixtureID(),
-		filter, transport.Pagination{PageSize: 5}); err != nil {
+		filter, domain.Pagination{PageSize: 5}); err != nil {
 		t.Fatalf("HistoryFundJourList: %v", err)
 	}
 	hist := accountParamsAs[historyFundJourListWireRequest](t, histExec)
@@ -1282,7 +1281,7 @@ func TestTheFundJourRequestShapesDiffer(t *testing.T) {
 	// two empty strings, which is how the Gateway is told "no range".
 	emptyExec := newSequencedExecutor(t, sequencedReply{reply: fundJourPageBody()})
 	if _, err := NewAccountService(emptyExec).HistoryFundJourList(t.Context(), accountFixtureID(),
-		FundJourFilter{}, transport.Pagination{}); err != nil {
+		FundJourFilter{}, domain.Pagination{}); err != nil {
 		t.Fatalf("HistoryFundJourList with no filter: %v", err)
 	}
 	empty := accountParamsAs[historyFundJourListWireRequest](t, emptyExec)
@@ -1558,7 +1557,7 @@ func TestAccountMethodsUseTheirDocumentedOpAndRoute(t *testing.T) {
 			route: client.RouteTradeQueryRealFundJourList, reply: fundJourPageBody(),
 			run: func(t *testing.T, svc *AccountService) {
 				if _, err := svc.RealFundJourList(t.Context(), accountFixtureID(),
-					FundJourFilter{}, transport.Pagination{}); err != nil {
+					FundJourFilter{}, domain.Pagination{}); err != nil {
 					t.Fatalf("RealFundJourList: %v", err)
 				}
 			},
@@ -1568,7 +1567,7 @@ func TestAccountMethodsUseTheirDocumentedOpAndRoute(t *testing.T) {
 			route: client.RouteTradeQueryHistoryFundJourList, reply: fundJourPageBody(),
 			run: func(t *testing.T, svc *AccountService) {
 				if _, err := svc.HistoryFundJourList(t.Context(), accountFixtureID(),
-					FundJourFilter{}, transport.Pagination{}); err != nil {
+					FundJourFilter{}, domain.Pagination{}); err != nil {
 					t.Fatalf("HistoryFundJourList: %v", err)
 				}
 			},

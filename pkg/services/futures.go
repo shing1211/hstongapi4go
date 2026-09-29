@@ -156,7 +156,7 @@ var futuresOrderOptionCodes = map[string]struct{}{
 //   - **Futures pagination is page-numbered, not cursor-based.** The two
 //     history queries take pageNo/pageSize and the Gateway has no futures
 //     cursor, which is why this package uses PageRequest rather than
-//     transport.Pagination. The four unpaginated reads take no body at all.
+//     domain.Pagination. The four unpaginated reads take no body at all.
 //   - **Every futures price and quantity crosses the wire as a quoted string**,
 //     with the single exception of the two int64 contract counts in
 //     domain.FuturesCapacity. Nothing on the futures path is a float, and the
@@ -197,7 +197,7 @@ func NewFuturesService(c Executor, opts ...FuturesOption) *FuturesService {
 }
 
 // PageRequest is the page-number pagination the two futures history queries
-// take. It is deliberately not transport.Pagination: that type is cursor-shaped
+// take. It is deliberately not domain.Pagination: that type is cursor-shaped
 // and its Apply writes cursor/page_size keys the futures Gateway does not
 // accept, so a shared struct would carry two incompatible meanings.
 //

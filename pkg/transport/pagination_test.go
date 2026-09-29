@@ -5,10 +5,12 @@ package transport
 
 import (
 	"testing"
+
+	"github.com/shing1211/hstongapi4go/pkg/domain"
 )
 
 func TestPaginationApply(t *testing.T) {
-	p := &Pagination{
+	p := &domain.Pagination{
 		Cursor:   "abc123",
 		PageSize: 25,
 		HasMore:  true,
@@ -17,7 +19,7 @@ func TestPaginationApply(t *testing.T) {
 	params := map[string]any{
 		"filter": "active",
 	}
-	result := p.Apply(params)
+	result := ApplyPagination(p, params)
 
 	if len(result) != 3 {
 		t.Errorf("result length = %d, want 3", len(result))
@@ -34,7 +36,7 @@ func TestPaginationApply(t *testing.T) {
 }
 
 func TestPaginationApplyEmptyCursor(t *testing.T) {
-	p := &Pagination{
+	p := &domain.Pagination{
 		PageSize: 0,
 		HasMore:  true,
 	}
@@ -42,7 +44,7 @@ func TestPaginationApplyEmptyCursor(t *testing.T) {
 	params := map[string]any{
 		"filter": "all",
 	}
-	result := p.Apply(params)
+	result := ApplyPagination(p, params)
 
 	if _, ok := result["cursor"]; ok {
 		t.Error("cursor should not be in result when empty")
@@ -53,13 +55,13 @@ func TestPaginationApplyEmptyCursor(t *testing.T) {
 }
 
 func TestPaginationApplyNoPageSize(t *testing.T) {
-	p := &Pagination{
+	p := &domain.Pagination{
 		Cursor:   "cursor456",
 		PageSize: 0,
 	}
 
 	params := map[string]any{}
-	result := p.Apply(params)
+	result := ApplyPagination(p, params)
 
 	if result["cursor"] != "cursor456" {
 		t.Errorf("cursor = %v, want cursor456", result["cursor"])
@@ -70,13 +72,13 @@ func TestPaginationApplyNoPageSize(t *testing.T) {
 }
 
 func TestPaginationApplyWithPageSize(t *testing.T) {
-	p := &Pagination{
+	p := &domain.Pagination{
 		Cursor:   "",
 		PageSize: 100,
 	}
 
 	params := map[string]any{}
-	result := p.Apply(params)
+	result := ApplyPagination(p, params)
 
 	if result["page_size"] != 100 {
 		t.Errorf("page_size = %v, want 100", result["page_size"])
@@ -86,37 +88,31 @@ func TestPaginationApplyWithPageSize(t *testing.T) {
 	}
 }
 
-func TestNextPage(t *testing.T) {
-	p := &Pagination{}
+// TestApplyPaginationDoesNotMutateItsInput pins that the caller's map survives,
+// which a shared params map would not: the walk closures build one map per
+// request and a mutation would leak the previous page's cursor into the next.
+func TestApplyPaginationDoesNotMutateItsInput(t *testing.T) {
+	params := map[string]any{"filter": "active"}
+	ApplyPagination(&domain.Pagination{Cursor: "abc"}, params)
 
-	if p.NextPage("") {
-		t.Error("NextPage with empty cursor should return false")
+	if len(params) != 1 {
+		t.Errorf("the input map gained %d keys, want none", len(params)-1)
 	}
-	if p.Cursor != "" {
-		t.Errorf("cursor = %q, want empty", p.Cursor)
-	}
-
-	if !p.NextPage("newcursor") {
-		t.Error("NextPage with non-empty cursor should return true")
-	}
-	if p.Cursor != "newcursor" {
-		t.Errorf("cursor = %q, want newcursor", p.Cursor)
+	if _, ok := params["cursor"]; ok {
+		t.Error("the input map was mutated with a cursor key")
 	}
 }
 
-func TestNextPageReturnsFalseForEmptyCursor(t *testing.T) {
-	p := &Pagination{}
-	if p.NextPage("") {
-		t.Error("NextPage with empty cursor should return false")
-	}
-}
+// TestApplyPaginationToleratesANilPagination pins the nil case, because a caller
+// that has not finished building a request should get the default page size
+// rather than a panic.
+func TestApplyPaginationToleratesANilPagination(t *testing.T) {
+	result := ApplyPagination(nil, map[string]any{"filter": "all"})
 
-func TestNextPageSetsCursor(t *testing.T) {
-	p := &Pagination{}
-	if !p.NextPage("newcursor") {
-		t.Error("NextPage with non-empty cursor should return true")
+	if result["page_size"] != defaultPageSize {
+		t.Errorf("page_size = %v, want %d", result["page_size"], defaultPageSize)
 	}
-	if p.Cursor != "newcursor" {
-		t.Errorf("cursor = %q, want newcursor", p.Cursor)
+	if _, ok := result["cursor"]; ok {
+		t.Error("cursor should not be present for a nil pagination")
 	}
 }
