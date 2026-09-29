@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Documentation
+
+- **`ARCHITECTURE.md` §2 is regenerated from a fresh code graph.** The index had
+  drifted to **102 commits behind** (`eb00cbd` against `3b38e43`) and the section
+  was left stale rather than invented when E2 closed — the note explaining that
+  said regenerating it "needs `gitnexus analyze` to have run", which was a
+  follow-up, not a decision. It is now done: 408 files, 10,048 nodes, 35,458
+  edges, 297 clusters, 876 flows.
+
+  The rebuild changed a claim, not only counts. The section asserted that
+  `internal/errs.New` was the widest fan-in at 183 flows. With test files
+  indexed it is 160, behind `internal/metrics.RateLimitWait` at 306 and
+  `internal/metrics.Count` at 236. The old figure was measured on a smaller graph
+  that excluded the tests, so it was not wrong so much as incomplete.
+
+  It also surfaces a caveat the stale numbers hid: the index includes test files,
+  so test symbols outnumber production symbols in most areas — `push_test.go`
+  contributes 107 symbols in `pkg/services` against 66 for `push.go`. The totals
+  measure where logic and its verification live together, not production size.
+
+  Every current-tense citation of the old snapshot has been updated — the header,
+  §2, the flow-truncation limitations, `docs/VNEXT.md`, and the E2 tracker row.
+  Historical release notes are left as written.
+
+
 ### Fixed
 
 - **The futures `entrustBs` value set was wrong, and the SDK said so was

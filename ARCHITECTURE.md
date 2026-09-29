@@ -3,9 +3,12 @@
 How `hstongapi4go` is put together, derived from the GitNexus knowledge graph for
 this repository and then verified against the source.
 
-- **Graph:** 6,382 nodes · 17,083 edges · 219 clusters · 518 execution flows
-  (425 cross-community, 93 intra-community) across 311 indexed files
-- **Index point:** commit `eb00cbd` (2026-09-25)
+- **Graph:** 10,048 nodes · 35,458 edges · 297 clusters · 876 execution flows
+  across 408 indexed files
+- **Index point:** commit `3b38e43` (2026-09-29), rebuilt with
+  `gitnexus analyze --index-only`. The previous snapshot was `eb00cbd`, 102
+  commits behind; its figures were left stale rather than invented until this
+  rebuild.
 - **Method:** Leiden communities aggregated by label, execution flows joined
   through `STEP_IN_PROCESS`, package dependencies read from `IMPORTS` edges and
   rolled up to package level
@@ -42,42 +45,62 @@ enterprise run and is **not wired in** — see [§5](#5-the-v-next-layer-is-pres
 
 ## 2. Functional areas
 
-The graph's 219 Leiden communities collapse into 26 areas. Symbol counts are
-summed across every community carrying each label; packages are the four with
-the most members.
+Regenerated 2026-09-29 from a fresh `gitnexus analyze --index-only`, at commit
+`3b38e43`: **408 files, 10,048 nodes, 35,458 edges, 297 clusters, 876 flows.**
+The previous figures here came from an index built at `eb00cbd0`, **102 commits
+behind**, and were left stale rather than invented - see docs/VNEXT.md for why.
+The index is a local artifact and is not committed, so these numbers are
+reproducible by re-running the analyze.
 
-| Area | Symbols | Leading packages | Role |
-|------|--------:|------------------|------|
-| Push | 216 | `internal/push`, `test/integration`, `gen/common/msg`, `gen/hq/notify` | Framing, decode, reconnect, dispatch, fan-out |
-| Transport | 95 | `internal/transport`, `pkg/transport`, `client`, `internal/errs` | HTTP executor, envelope, codec dispatch, v-next adapter |
-| Domain | 83 | `pkg/domain`, `pkg/services`, `pkg/transport` | Wire DTOs and v-next value types |
-| Trade | 78 | `pkg/hstong`, `internal/errs` | Order lifecycle and asset queries |
-| Integration | 69 | `test/integration`, `pkg/hstong`, `examples`, `test/e2e` | Offline end-to-end and mock Gateway |
-| Services | 60 | `pkg/services`, `pkg/domain`, `internal/errs`, `pkg/hstong` | v-next use cases (market, account, trading) |
-| Notify | 58 | `gen/trade/notify`, `gen/hq/notify`, `pkg/hstong`, `internal/push` | Protobuf notification types and decoding |
-| Mockgateway | 57 | `test/mockgateway`, `test/e2e`, `cmd`, `gen/hq/dto` | 51-route offline Gateway and push server |
-| Dto | 53 | `gen/hq/dto`, `pkg/transport`, `gen/hq/notify`, `internal/push` | Generated market DTOs |
-| Resilience | 48 | `internal/resilience`, `client`, `internal/errs` | Retry policy, rate limit, circuit breakers |
-| Auth | 48 | `internal/auth` | Password crypto, token lifecycle (v-next) |
-| Algo | 45 | `pkg/hstong` | Algo-trading endpoints |
-| Stream | 43 | `pkg/hstong`, `client`, `internal/push`, `gen/trade/notify` | Subscription and push event API |
-| Metrics | 38 | `internal/metrics`, `client` | Counters, gauges, histograms |
-| Client | 32 | `client` | Construction, options, routes, hardening |
-| Logging | 28 | `internal/logging` | `slog` with secret redaction |
-| Future | 27 | `pkg/hstong` | Futures endpoints and delivery push |
-| Otel | 25 | `internal/otel`, `client` | Tracing and metrics behind the `otel` tag |
-| Market | 24 | `pkg/hstong` | Market pull endpoints and subscriptions |
-| Scripts | 20 | `scripts` | Money check, coverage gate, SBOM, doc checks |
-| Errs | 19 | `internal/errs`, `internal/transport`, `pkg/hstong` | Typed status errors |
-| Session | 15 | `internal/session`, `internal/auth`, `pkg/hstong` | Login state machine |
-| Hstong | 14 | `pkg/hstong` | Session manager surface |
-| Crypto | 8 | `internal/crypto`, `internal/auth` | AES-192-ECB/PKCS7 trade password |
-| Msg | 8 | `gen/common/msg` | Generated envelope and notify messages |
-| Constant | 4 | `gen/common/constant` | Generated shared constants |
+Symbol counts are summed across every cluster carrying each label. One caveat
+the fresh index makes visible and the old one hid: it now includes test files, so
+**test symbols outnumber production symbols in most areas.** `pkg/services` is
+the clearest case - `push_test.go` alone contributes 107 symbols against 66 for
+`push.go`. These totals therefore measure where the repository's logic and its
+verification live together, not production size alone.
 
-Two cross-cutting symbols dominate call-graph fan-in rather than belonging to
-any one feature: `internal/errs.New` participates in **183** distinct flows, the
-widest in the repository, and `internal/metrics.Count` in **34**.
+| Area | Symbols | Clusters | Leading packages | Role |
+|------|--------:|---------:|------------------|------|
+| Services | 990 | 45 | `pkg/services`, `pkg/domain`, `internal/errs`, `client` | v-next use cases: market, account, trading, algo, futures, push |
+| Push | 177 | 13 | `internal/push`, `test/mockgateway`, `gen/hq/notify`, `gen/common/msg` | Framing, decode, verification, freshness |
+| Domain | 130 | 25 | `pkg/domain`, `pkg/transport`, `internal/push`, `pkg/services` | Wire DTOs and v-next value types |
+| Trade | 127 | 10 | `pkg/hstong/trade`, `pkg/hstong` | Order lifecycle and asset queries |
+| Transport | 124 | 14 | `internal/transport`, `pkg/transport`, `client` | HTTP executor, envelope, codec dispatch, response cap |
+| Stream | 104 | 14 | `pkg/hstong/stream`, `client`, `internal/push` | Subscription and push event API |
+| Paritygate | 79 | 6 | `scripts/paritygate` | SPEC to v-next endpoint parity guard |
+| Algo | 77 | 3 | `pkg/hstong/algo`, `pkg/services` | Algo-trading endpoints |
+| Auth | 69 | 8 | `internal/auth`, `internal/crypto` | Password crypto, token lifecycle, login coalescing |
+| Client | 68 | 8 | `client` | Construction, options, routes, hardening |
+| Mockgateway | 63 | 9 | `test/mockgateway`, `cmd` | 51-route offline Gateway and push |
+| Integration | 62 | 2 | `test/integration` | Env-gated real-Gateway tests |
+| Dto | 62 | 16 | `gen/hq/dto`, `gen/trade` | Generated market and trade DTOs |
+| Notify | 57 | 13 | `gen/hq/notify`, `gen/trade/notify` | Protobuf notification types |
+| Scripts | 51 | 8 | `scripts` | Money check, coverage gate, SBOM, doc checks |
+| Resilience | 46 | 6 | `internal/resilience`, `client` | Retry policy, rate limit, circuit breaker |
+| Metrics | 34 | 2 | `internal/metrics` | Counters, gauges, histograms |
+| Logging | 28 | 5 | `internal/logging` | `slog` with secret redaction |
+| Future | 27 | 3 | `pkg/hstong/future` | Futures endpoints and delivery push |
+| Market | 25 | 4 | `pkg/hstong/market` | Market pull endpoints and subscriptions |
+| Otel | 25 | 4 | `internal/otel`, `client` | Tracing and metrics behind the `otel` tag |
+| Layering | 21 | 3 | `internal/layering` | Machine-checked import boundaries |
+| Hstong | 19 | 2 | `pkg/hstong` | Session manager surface |
+| Errs | 15 | 2 | `internal/errs` | Typed status errors |
+| Session | 15 | 2 | `pkg/hstong`, `internal/auth` | Login state machine |
+| Crypto | 11 | 1 | `internal/crypto` | AES-192-ECB/PKCS7 trade password |
+| Msg | 8 | 4 | `gen/common/msg` | Generated envelope and notify messages |
+| Migration | 7 | 1 | `internal/migration` | Compiled MIGRATION.md samples |
+| E2e | 5 | 1 | `test/e2e` | SDK-to-mock end-to-end tests |
+| Types | 4 | 1 | `pkg/types` | Enums and status codes |
+| Constant | 4 | 2 | `gen/common/constant` | Generated shared constants |
+
+Three cross-cutting symbols dominate call-graph fan-in rather than belonging to
+any one feature: `internal/metrics.RateLimitWait` participates in **306**
+distinct flows, `internal/metrics.Count` in **236**, and `internal/errs.New` in
+**160**. That ordering inverts the previous claim in this section that
+`errs.New` was the widest - with tests indexed, the rate-limit and metrics
+helpers sit on more flows than the error constructor. The old figures were not
+wrong so much as measured on a smaller graph that excluded the tests.
+
 
 ## 3. Diagram
 
@@ -366,12 +389,13 @@ decimals and typed IDs rather than wire strings.
 
 ## 8. Known limits of this document
 
-- **Flows are truncated.** The analyzer reported that 230 of 430 candidate entry
-  points never ranked into the 518 recorded flows, 473 callees were skipped at
-  the branching cap, and 7 walks were cut by the per-entry budget. An absent
-  flow does not mean the code path does not exist.
-- **Clusters are fine-grained.** The 219 Leiden communities are far smaller than
-  the 26 areas in §2, and labels repeat across communities, which is why the
+- **Flows are truncated.** The analyzer reported that 377 of 577 candidate entry
+  points never ranked into the 876 recorded flows, 2,188 callees were skipped at
+  the branching cap, 95 deduplicated flows were dropped at the process cap, and 70
+  walks were cut by the per-entry budget. An absent flow does not mean the code
+  path does not exist.
+- **Clusters are fine-grained.** The 297 Leiden communities are far smaller than
+  the 31 areas in §2, and labels repeat across communities, which is why the
   table sums them.
 - **File-level import edges do not prove symbol use.** `pkg/hstong/stream`
   imports the `internal/push` package, which the graph records as an edge to one
@@ -382,9 +406,12 @@ decimals and typed IDs rather than wire strings.
 - **Search was unavailable.** The LadybugDB FTS extension cannot load on this
   host, so every finding here comes from structural graph queries rather than
   keyword or semantic search.
-- **The index is a point-in-time snapshot** at commit `eb00cbd`, counting 6,382
-  nodes across 311 indexed files. Re-run `gitnexus analyze` after landing further
-  commits.
+- **The index is a point-in-time snapshot** at commit `3b38e43`, counting 10,048
+  nodes across 408 indexed files. Re-run `gitnexus analyze --index-only` after
+  landing further commits, and regenerate §2 and the flow figures below from it.
+  The gap between snapshot and HEAD is the single most likely reason a number
+  here is wrong: the previous snapshot was 102 commits behind before this
+  rebuild, and nothing in the build detects that.
 - **Structural claims were verified against source**, not taken from the graph
   alone. Every statement in §5 and §6 was confirmed by import and symbol search;
   the diagram's edges come from the graph, but the conclusions were checked by

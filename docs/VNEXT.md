@@ -356,12 +356,20 @@ halves of that decision: the notice must be present, and the marker must be
 absent.
 
 **Two things this table records as done that a reader should not over-read.**
-Step 9's "a full graph regeneration is due" was *not* performed: the GitNexus
-index is 78 commits stale, so the `ARCHITECTURE.md` community symbol counts
-cannot be regenerated honestly and were left stale rather than replaced with
-invented figures. E2 corrected the claims that were checkable against source and
-added a test that keeps them honest; the counts stay stale on purpose, and
-regenerating them is a follow-up that needs `gitnexus analyze` to have run.
+Step 9's "a full graph regeneration is due" was *not* performed when E2 closed:
+the GitNexus index was then 78 commits stale, so the `ARCHITECTURE.md` community
+symbol counts could not be regenerated honestly and were left stale rather than
+replaced with invented figures. E2 corrected the claims that were checkable
+against source and added a test that keeps them honest, while the counts stayed
+stale **on purpose**.
+
+**That follow-up is now done (2026-09-29).** The index was rebuilt with
+`gitnexus analyze --index-only` and had in fact drifted to 102 commits behind.
+`ARCHITECTURE.md` §2 and its flow figures are regenerated from the fresh graph:
+408 files, 10,048 nodes, 35,458 edges, 297 clusters, 876 flows. The rebuild
+changed a claim rather than only numbers - the section previously said
+`internal/errs.New` was the widest fan-in at 183 flows, and with test files
+indexed it is 160, behind `metrics.RateLimitWait` at 306.
 Separately, `pkg/services` being at 100% means its statements execute, not that
 its wire behaviour is verified against the real Gateway — that is G6, still
 deferred, and no coverage number stands in for it.
