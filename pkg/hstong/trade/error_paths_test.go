@@ -558,4 +558,64 @@ func TestManager_MutationRoutesIssueExactlyOneAttemptUnderARetryPolicy(t *testin
 				got, wantQueryAttempts)
 		}
 	})
+
+	// The two trade-push subscription routes are the reason this block exists.
+	//
+	// Neither is in internal/resilience.mutationPaths, so ClassForPath classifies
+	// both as query class and an installed retry policy re-sends them. push.go's
+	// GoDoc used to assert the opposite - "issues exactly one HTTP request and is
+	// never retried" - as an absolute, which is only true of the default
+	// configuration where no policy is installed. The GoDoc has been corrected to
+	// describe the code.
+	//
+	// What did not exist before this block is a measurement in *this* layer. The
+	// v-next package has an equivalent test
+	// (pkg/services.TestTradePushRequestsRetryAndOrderMutationsDoNot) that drives
+	// the same two routes through the same policy, but it exercises the service
+	// layer, not Manager.call, so it cannot be the evidence for a claim about this
+	// package. A claim about the released layer's behaviour belongs to a test in
+	// the released layer.
+	t.Run("trade push subscribe routes retry under the same policy", func(t *testing.T) {
+		for _, tc := range []struct {
+			name   string
+			op     string
+			route  client.Route
+			invoke func(*Manager) error
+		}{
+			{
+				name:  "SubscribeOrders",
+				op:    opTradeSubscribe,
+				route: client.RouteTradeSubscribe,
+				invoke: func(m *Manager) error {
+					return m.SubscribeOrders(context.Background())
+				},
+			},
+			{
+				name:  "UnsubscribeOrders",
+				op:    opTradeUnsubscribe,
+				route: client.RouteTradeUnsubscribe,
+				invoke: func(m *Manager) error {
+					return m.UnsubscribeOrders(context.Background())
+				},
+			},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				rec, m := newInstrumentedManager(t, map[string]string{
+					string(tc.route): busy,
+				}, retrying)
+
+				if err := tc.invoke(m); err == nil {
+					t.Fatalf("%s = nil error, want the %q rejection", tc.name, types.StatusServiceBusy)
+				} else {
+					errRejects(t, err, types.StatusServiceBusy, tc.op)
+				}
+
+				if got := rec.count(string(tc.route)); got != wantQueryAttempts {
+					t.Fatalf("requests to %s = %d, want %d: %s is query class, not a "+
+						"mutation, so a retry policy does re-send it", tc.route, got,
+						wantQueryAttempts, tc.route)
+				}
+			})
+		}
+	})
 }

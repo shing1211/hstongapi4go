@@ -28,15 +28,28 @@ const (
 // A trade session is required. The call is routed through Manager.call, which
 // first ensures the attached Session is logged in; with no Session attached the
 // request is still sent, and the Gateway rejects it when the connection is not
-// authenticated. The call issues exactly one HTTP request and is never retried.
+// authenticated.
+//
+// On retries: the call issues exactly one HTTP request per attempt, and it is
+// never retried when no retry policy is installed - which is the default
+// configuration, where every route is sent once. An earlier version of this
+// comment said "is never retried" as an absolute, and that was wrong: neither
+// route is in internal/resilience.mutationPaths, so ClassForPath returns query
+// class for both and an installed retry policy re-sends them. The code is
+// unchanged and is the thing that was measured: see
+// TestManager_MutationRoutesIssueExactlyOneAttemptUnderARetryPolicy in this
+// package, whose "trade push subscribe routes retry under the same policy"
+// subtest drives both routes through one MaxAttempts-5 policy and a retryable
+// rejection, recording 5 requests each against 1 for an order mutation.
 func (m *Manager) SubscribeOrders(ctx context.Context) error {
 	return m.call(ctx, opTradeSubscribe, client.RouteTradeSubscribe, struct{}{}, nil)
 }
 
 // UnsubscribeOrders cancels the session-wide order-status push subscription
 // (POST /trade/TradeUnsubscribe). It takes the same empty params and trade
-// session as SubscribeOrders, discards the Gateway response, issues exactly one
-// HTTP request, and is never retried.
+// session as SubscribeOrders and discards the Gateway response. Its retry
+// behaviour is SubscribeOrders' in every respect, stated there and not repeated
+// here so the two cannot drift.
 func (m *Manager) UnsubscribeOrders(ctx context.Context) error {
 	return m.call(ctx, opTradeUnsubscribe, client.RouteTradeUnsubscribe, struct{}{}, nil)
 }

@@ -135,6 +135,14 @@ go test -race -count=1 ./...
   reached when a dial attempt happened to fit inside a test deadline, swinging the
   package between 83.3% and 86.5%. Cover those paths with a substituted dialer, an
   explicit handshake, or a pre-cancelled context, never with a sleep.
+- **A mutation test that does not mutate reports `NOOP`; one that cannot run
+  reports `NOT PROVEN`.** Neither counts as a kill. A driver that reads "no
+  pattern matched" as "survived", or a build failure as a pass, converts its own
+  breakage into evidence. There is no committed mutation driver, so this is a
+  convention for the ad-hoc ones each task writes. Before believing a survivor,
+  confirm the suite reported the tests it is meant to run: a mutant applied to a
+  tree that is missing its own test files passes every check while testing
+  nothing, and `no tests to run` in the *baseline* is the tell.
 - `go test -race` needs a C toolchain, which this repository's dev host has:
   MinGW gcc at `C:\Users\Tchan\mingw64\bin\gcc.exe` with `CGO_ENABLED=1`, so
   `go test -race -count=1 ./...` runs locally and passes. Run it rather than
@@ -178,6 +186,15 @@ go test -race -count=1 ./...
   reconnect re-subscribes all active topics.
 - **Tests.** Prefer table-driven tests; add `_test.go` coverage for behavior changes;
   integration tests are env-gated and skipped by default.
+- **On Windows, verify file properties by bytes; the shell's own output is not
+  evidence.** `Get-Content` and `Out-String` pass UTF-8 through the platform code
+  page, which has destroyed a run tracker's non-ASCII rows, and `Out-String`
+  rewrites newlines so a CRLF count reports a pure-LF blob as CRLF. Read and write
+  with `[System.IO.File]::ReadAllText` / `WriteAllText` under an explicit
+  `UTF8Encoding($false)`, then assert the property directly: a strict decode that
+  throws, a `[char]0xFFFD` search, or a SHA-256 comparison. **PowerShell's `-eq` is
+  case-insensitive**, so a guard comparing two values returns `$true` for a
+  difference and silently discards the very edit it exists to catch.
 - **Comments.** Explain intent, invariants, and non-obvious decisions; do not restate
   the code.
 

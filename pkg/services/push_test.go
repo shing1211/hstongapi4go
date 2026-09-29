@@ -127,6 +127,16 @@ func (f *fakePushTransport) closeErrStream() {
 	f.streamOnce.Do(func() { close(f.errc) })
 }
 
+// isClosed reports whether Close has run. A Stack test asserts on it from inside
+// the executor's own Close, which is how the push-before-request-path order is
+// proved directly: if the order were reversed, the check fires during Close
+// rather than after it.
+func (f *fakePushTransport) isClosed() bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.closed
+}
+
 // Errors returns the recorded error stream.
 func (f *fakePushTransport) Errors() <-chan error { return f.errc }
 

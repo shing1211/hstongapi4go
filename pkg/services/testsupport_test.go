@@ -140,6 +140,13 @@ type sequencedExecutor struct {
 	t       *testing.T
 	replies []sequencedReply
 	calls   []sequencedCall
+
+	// closeCalls and closeErr make Close observable. The counter exists so a
+	// Stack test can assert that Close was actually invoked, rather than
+	// inferring it from the absence of a panic - which is the check this
+	// repository's own mutation discipline says is not evidence.
+	closeCalls int
+	closeErr   error
 }
 
 // newSequencedExecutor builds a sequencedExecutor over replies, which are
@@ -160,6 +167,26 @@ func newSequencedExecutor(t *testing.T, replies ...sequencedReply) *sequencedExe
 // it is deliberate: the services only pass it through, so returning a real
 // codec here would add a code path no assertion depends on.
 func (s *sequencedExecutor) JSON() client.Codec { return nil }
+
+// Close implements StackExecutor and records that it ran, returning the
+// configured closeErr. It is not idempotent in the sense of swallowing repeats -
+// the counter makes every call visible, which is what the Stack test needs to
+// prove Stack.Close is the thing calling it exactly once.
+func (s *sequencedExecutor) Close() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.closeCalls++
+	return s.closeErr
+}
+
+// closeCount reports how many times Close was called. Guarded because Stack.Close
+// is documented as concurrency-safe and a test may observe it from another
+// goroutine.
+func (s *sequencedExecutor) closeCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.closeCalls
+}
 
 // Do records the call and answers with the next scripted reply.
 func (s *sequencedExecutor) Do(_ context.Context, op string, route client.Route, params any, _ client.Codec, out any) error {

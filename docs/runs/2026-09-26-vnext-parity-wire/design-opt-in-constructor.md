@@ -104,16 +104,29 @@ type Stack struct {
     Push    *PushOrchestration // nil unless WithPushTransport is given
 }
 
-func NewStack(c Executor, opts ...StackOption) *Stack
+func NewStack(c StackExecutor, opts ...StackOption) *Stack
 func (s *Stack) Close() error
 ```
 
-`PushOrchestration` needs `TopicSubscriber` and `OrderPushSubscriber` as well as
-`PushTransport`, so it takes both halves explicitly, and the HTTP halves are the
-Stack's own `Market` and `Trading` services:
+`PushOrchestration` needs a `TopicSubscriber` and an `OrderPushSubscriber` as well
+as a `PushTransport`, so it takes both HTTP halves explicitly, and the HTTP halves
+are the Stack's own `Market` and `Trading` services.
+
+> **Correction, found while implementing D2.** This snippet was wrong twice when
+> first written, and both errors were silent. The real signature is
+> `NewPushOrchestration(sub TopicSubscriber, tr PushTransport, opts ...PushOption)`
+> — **two** required arguments — and the version below passed three, treating
+> `*TradingService` as the second parameter. That would not have compiled, which is
+> the lucky outcome: had the arity happened to line up, the trade HTTP half would
+> have been dropped and `SubscribeOrders` would have had no way to reach
+> `/trade/TradeSubscribe`. The trade half arrives as the `WithTradeSubscriber`
+> *option*, not as a parameter, and that is not obvious from the parameter list.
+> This is the tenth recorded instance of the run's recurring wrong-premise pattern
+> (`todos.md` P1, P4, A4, A6, C2a, C4, C10, C13, D1), and it landed in a design
+> note written specifically to prevent it.
 
 ```go
-func NewStack(c Executor, opts ...StackOption) *Stack {
+func NewStack(c StackExecutor, opts ...StackOption) *Stack {
     s := &Stack{
         Market:  NewMarketService(c),
         Account: NewAccountService(c),
@@ -127,8 +140,9 @@ func NewStack(c Executor, opts ...StackOption) *Stack {
             opt(s)
         }
     }
-    if s.Push != nil {
-        s.Push = NewPushOrchestration(s.Market, s.Trading, s.PushTransport)
+    if s.pushTransport != nil {
+        s.Push = NewPushOrchestration(s.Market, s.pushTransport,
+            WithTradeSubscriber(s.Trading))
     }
     return s
 }
@@ -166,7 +180,20 @@ type StackExecutor interface {
 ```
 
 `Executor` is embedded, so every existing `Executor` value that also has `Close`
-satisfies this, `*client.Client` among them. A test fake needs one extra method.
+satisfies this, `*client.Client` among them. A test fake needs one extra method —
+`sequencedExecutor`, the shared helper in `testsupport_test.go`, grows a three-line
+`Close` and a counter, so `Close`-was-called is asserted rather than assumed, and no
+other fake in the package has to change because the per-service constructors still
+take the narrower `Executor`.
+
+**This shape was chosen over a type assertion during D2, and the reason is
+specific.** With a type assertion in `Close`, "the Stack closes what it opened"
+would be a *documented* promise: pass a non-closable wrapper around your client and
+the Stack silently never closes it, with no compile error and no runtime signal.
+The whole reason the composition exists is coherent lifecycle, and an interface
+that makes the promise enforceable is worth one method on a test fake. The
+counter-argument — a faked client having to implement `Close` — was measured and is
+three lines in one shared helper.
 
 ### 5.2 `Close` ordering, and why the adapter is not closed separately
 
@@ -175,14 +202,13 @@ satisfies this, `*client.Client` among them. A test fake needs one extra method.
 are idempotent and return the same result on every call. So `Stack.Close` is:
 
 1. close push, if present — which closes the adapter with it
-2. close the executor, if it is a `io.Closer`
+2. close the executor
 3. return the first non-nil error, having attempted both
 
-Step 2 is a type assertion rather than a `StackExecutor` requirement, because
-`WithStackExecutor` may be given a non-closable fake and a Stack that refuses to
-be constructed over it would be a worse failure than one that reports it. A
-`Stack` that cannot close its request path is not a state the constructor should
-refuse to produce; it is a state it should document and expose.
+Step 2 is unconditional, because `NewStack` takes a `StackExecutor` and the
+compiler has already guaranteed there is something to call. The earlier draft made
+it a type assertion on the stored value; that was correct but weaker, and it is
+replaced for the reason given at the end of §5.1.
 
 The alternative — closing the adapter separately — would double-close a component
 that is already idempotent, which is harmless but implies an ownership the
@@ -196,6 +222,9 @@ duplicate:
 - `WithPushTransport(tr PushTransport)` — the opt-in. `tr == nil` means no push:
   no TCP dial, no `Push` field value, and `Close` skips step 1.
 - `WithStackExecutor(c StackExecutor)` — overrides the request path for testing.
+  Kept so a test can swap the executor after construction without rebuilding the
+  composition; it is the same shape as the constructor argument, so it cannot
+  introduce a value the constructor would have rejected.
 
 Per-service options are deliberately **not** re-exposed. `NewMarketService`
 already takes `MarketOption`; a `Stack` that forwarded them would need one option

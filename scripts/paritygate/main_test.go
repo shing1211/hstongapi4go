@@ -22,7 +22,7 @@ import (
 // Two independent readers of the same tree keep the assertions honest. The guard
 // parses the const block and the scan roots with go/ast; the helpers below read
 // them as text with a regexp. A counting bug in one is very unlikely to be
-// mirrored in the other, so agreeing on 51 declared and 49 referenced is a
+// mirrored in the other, so agreeing on 51 declared and 51 referenced is a
 // cross-check rather than a restatement.
 
 const (
