@@ -7,6 +7,95 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.24] - 2026-09-29
+
+**The v-next layer is wired.** `services.NewStack` is the first entry point a
+caller can construct for it, and this release is the first time the layer has been
+exercised end to end against a real socket.
+
+**The released v0.x API is still untouched.** The only change under
+`pkg/hstong/*` is **nineteen lines of comment**; no signature, wire shape, or
+runtime behaviour in the released surface changed, and `client/` and `pkg/types`
+are byte-identical. What follows is in the v-next layer, which no `pkg/hstong`
+caller can reach.
+
+### Added
+
+- **`services.Stack` and `services.NewStack`** — the opt-in constructor, composing
+  the six v-next services plus `PushOrchestration` over one request path, with a
+  single `Close` that releases both halves. It never dials and never issues a
+  request. Push is opt-in: a Stack with no push transport has `Push == nil` and
+  never opens the TCP socket, which the e2e test confirms by counting the mock's
+  connections rather than by asserting on a field.
+
+- **`services.StackExecutor`** — `Executor` plus `Close`. The widening is the
+  load-bearing part: `Executor` is exactly `Do` and `JSON` and has no `Close`, so
+  a composition built on it would own nothing it could release. A caller holding a
+  non-closable wrapper would have their client silently never closed — no compile
+  error, no runtime signal. This makes "one `Close`" compile-time enforced rather
+  than documented.
+
+- **A seventh boundary rule** — `pkg/services` may not import `pkg/transport`,
+  which is the only package permitted to depend on `internal/*`. The rule exists
+  because the tree was already violating it: `AccountService.RealFundJourList` and
+  `HistoryFundJourList` named a **wire-package type in their public signatures**,
+  as did two futures and one algo method. That leak is closed below.
+
+- **e2e coverage of the wired path** — the v-next layer driven against the
+  in-repo mock Gateway for the first time: a real HTTP request, a real TCP
+  connection, a real protobuf frame, and one `Close` releasing both. Everything
+  before this used a fake executor, which proves the services' logic but cannot
+  catch a composition wired to the wrong address or sending the wrong route.
+
+### Changed
+
+- **`transport.Pagination` → `domain.Pagination`**, and its `Apply` method →
+  `transport.ApplyPagination`. A breaking rename in a public package, and the one
+  breaking change in this release. `pkg/transport` is **not** in ADR 0011's
+  protected surface, is not referenced by the released layer, and was never named
+  in the documentation or the examples; the type is a cursor value the caller
+  supplies, and it was misfiled. `Apply` writes the Gateway key names
+  `cursor` and `page_size`, so it stays in `pkg/transport` as a function taking a
+  `*domain.Pagination` — moving the whole type would have put wire key literals
+  into `pkg/domain`, which the layering rules forbid.
+
+### Fixed
+
+- **A false claim in the released GoDoc.** `trade.Manager.SubscribeOrders` and
+  `UnsubscribeOrders` said they "issue exactly one HTTP request and are never
+  retried", as an absolute. Neither route is in
+  `internal/resilience.mutationPaths`, so they classify as query and an installed
+  retry policy re-sends them. The claim described the *default* configuration, not
+  the code. Retracted, and given the measurement it never had: a new subtest
+  drives both routes through one `MaxAttempts: 5` policy and records **5 requests
+  each against 1** for an order mutation.
+
+- **A push design note that did not compile.** The `NewStack` example passed three
+  required arguments to a two-argument `NewPushOrchestration` and put a service
+  where an option belonged. It would not have compiled, which was lucky: had the
+  arity lined up, the trade HTTP half would have been dropped and
+  `SubscribeOrders` would have had no route while still appearing to work. A test
+  now pins it by observing the real Gateway answer.
+
+### Notes
+
+- Parity is unchanged at **51/51** and the guard still runs in enforcing mode. The
+  `Stack` names no route, so it is invisible to it — and a scan root containing
+  zero routes would have made the guard *weaker*, not stronger.
+- Two of the three rules proposed for this work were already enforced and were
+  deliberately not duplicated: a second rule for an edge the first already covers
+  is maintenance that can disagree with it. Each was confirmed by planting the
+  violation, because a rule that has never been seen to fail is not evidence.
+- `AGENTS.md` gains two rules that had been prose in run documents and so survived
+  nothing: a mutation test that does not mutate reports `NOOP`, one that cannot
+  run reports `NOT PROVEN`, and on Windows file properties are verified by bytes —
+  `Get-Content` passes UTF-8 through the platform code page, and `-eq` is
+  case-insensitive.
+- Coverage from a clean checkout: `pkg/services` **100.0%**, `pkg/transport`
+  **100.0%**, `pkg/domain` 95.7%, `internal/push` 95.7%.
+- The v1.0 migration guide, the regenerated architecture document, and the v1.0.0
+  tag are the remaining work of this programme.
+
 ## [0.1.23] - 2026-09-29
 
 **The v-next layer gains a push orchestrator, and the released v0.x API is still
@@ -1235,3 +1324,4 @@ canonical in [docs/SPEC.md](./docs/SPEC.md).
 [0.1.21]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.21
 [0.1.22]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.22
 [0.1.23]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.23
+[0.1.24]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.24
