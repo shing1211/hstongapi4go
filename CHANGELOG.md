@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Hong Kong order price validation now uses the instrument's tick, not the
+  caller's.** `services.validatePriceForHK` consulted the tick schedule only to
+  decide whether a check ran, then called `Price.Validate(true)` — which tests a
+  price against the tick the caller attached to it. A caller could therefore
+  satisfy the check by choosing a tick that divides their own price, whatever the
+  instrument's real grid was, so the check could not fail for a reason they had not
+  already accepted.
+
+  **Behaviour change, v-next only.** An HK order whose `Price` declares a tick
+  inconsistent with the instrument's grid is now rejected as `StatusInvalidParam`
+  where it previously passed. Declaring a zero tick no longer exempts an order.
+  The released `pkg/hstong/*` surface is untouched: ADR 0011 guarantee 1 covers it,
+  and the defect is in the v-next `pkg/services` layer only.
+
+  `services.WithTickSchedule` injects a `domain.TickScheduleResolver` for callers
+  with a real instrument master. A caller who injects nothing gets exactly the
+  previous behaviour, which is what makes this shippable on its own. The default
+  table is still keyed on `DataType` and is an approximation: HKEX sets a stock's
+  tick by price band, and that table is **not** filled in, because the bands must
+  be sourced from the exchange document rather than from memory.
+
+### Added
+
+- **`domain.TickScheduleResolver`** — resolves an instrument's lot size and tick.
+  `ok false` means "no opinion", which callers must treat as unknown rather than
+  substituting a default; a fabricated grid is the defect this type exists to let
+  a caller replace.
+- **`domain.Price.ValidateOn(tick)`** — validates against a supplied tick.
+  `Price.Validate(step=true)` is unchanged and still tests against the price's own
+  tick, which is what `ChangeEntrust` and other caller-owned paths want.
+
 ### Fixed
 
 - **The register-citation guard no longer fails on a shallow clone.** The check

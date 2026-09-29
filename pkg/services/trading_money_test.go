@@ -79,16 +79,27 @@ func TestMaxAvailableAssetCarriesHostilePricesVerbatim(t *testing.T) {
 	}
 }
 
-// TestEntrustCarriesHostilePricesOnAZeroTick is the same guarantee on the mutation
-// path, where a validation gate does stand in the way.
+// TestEntrustCarriesHostilePricesWithNoGrid is the same guarantee on the
+// mutation path, where a validation gate does stand in the way.
 //
-// The host is a Price whose own tick is zero. validatePriceForHK runs
-// domain.Price.Validate(true), and Validate skips the step check when the price's
-// tick is zero — the read-path tick from design-tick-model.md §2.1. So the price
-// is checked for being non-negative and then left alone, which is the decision
-// working as designed rather than a workaround: nothing about the value is
-// softened on the way through.
-func TestEntrustCarriesHostilePricesOnAZeroTick(t *testing.T) {
+// The resolver reports no opinion, so the step check is skipped and the price is
+// checked for being non-negative and then left alone — the decision working as
+// designed rather than a workaround: nothing about the value is softened on the
+// way through.
+//
+// REWRITTEN by the TickSchedule work. This test used to get its pass by
+// declaring a zero tick on the Price itself, which design-tick-model.md §2.1
+// prescribed for read paths. That route is closed: the instrument's grid now
+// governs the step, and a 25-significant-digit value is off every real HK grid,
+// so declaring a zero tick no longer exempts an order. Reporting no opinion
+// through the resolver is the honest way to say "this instrument's grid is
+// unknown", and it keeps the test measuring what it was written to measure —
+// that the digits reach the wire verbatim.
+func TestEntrustCarriesHostilePricesWithNoGrid(t *testing.T) {
+	// No opinion, non-empty tick on both sides of the ok flag: a resolver that has
+	// genuinely not been told anything.
+	noGrid := &fixedSchedule{ok: false}
+
 	for _, set := range []struct {
 		label string
 		cases []moneyCase
@@ -103,8 +114,9 @@ func TestEntrustCarriesHostilePricesOnAZeroTick(t *testing.T) {
 					order.Price = domain.MustNewPrice(tc.in, "0")
 
 					exec := newSequencedExecutor(t, sequencedReply{reply: tradingEntrustBody("E-3001")})
-					if _, err := NewTradingService(exec).Entrust(t.Context(), tradingAccountID(), order); err != nil {
-						t.Fatalf("Entrust with a zero-tick price of %s: %v", tc.in, err)
+					svc := NewTradingService(exec, WithTickSchedule(noGrid))
+					if _, err := svc.Entrust(t.Context(), tradingAccountID(), order); err != nil {
+						t.Fatalf("Entrust with a no-grid price of %s: %v", tc.in, err)
 					}
 					tradingExpectCall(t, exec, opEntrust, client.RouteTradeEntrust)
 
@@ -168,7 +180,7 @@ func TestEntrustCarriesTheHostileQuantityVerbatim(t *testing.T) {
 			// The fixture is legal on both counts the helper checks, and saying so
 			// here means a failure below is a round-trip failure and not a
 			// validation one.
-			if err := validateOrderForHK(order); err != nil {
+			if err := validateOrderForHK(order, domain.TickSchedule{}); err != nil {
 				t.Fatalf("the hostile quantity %s is not a legal HK stock order: %v", tc.in, err)
 			}
 
@@ -190,7 +202,7 @@ func TestChangeEntrustCarriesHostileValuesVerbatim(t *testing.T) {
 	for _, tc := range float64HostilePrices {
 		t.Run("price/"+tc.name, func(t *testing.T) {
 			exec := newSequencedExecutor(t, sequencedReply{reply: json.RawMessage(`{"data":"1"}`)})
-			err := NewTradingService(exec).ChangeEntrust(t.Context(), tradingAccountID(), tradingEntrustID(),
+			err := NewTradingService(exec, WithTickSchedule(&fixedSchedule{ok: false})).ChangeEntrust(t.Context(), tradingAccountID(), tradingEntrustID(),
 				domain.MustNewPrice(tc.in, "0"), domain.MustNewQuantity("100"))
 			if err != nil {
 				t.Fatalf("ChangeEntrust with a zero-tick price of %s: %v", tc.in, err)
@@ -202,7 +214,7 @@ func TestChangeEntrustCarriesHostileValuesVerbatim(t *testing.T) {
 	for _, tc := range scaleHostilePrices {
 		t.Run("price/"+tc.name, func(t *testing.T) {
 			exec := newSequencedExecutor(t, sequencedReply{reply: json.RawMessage(`{"data":"1"}`)})
-			err := NewTradingService(exec).ChangeEntrust(t.Context(), tradingAccountID(), tradingEntrustID(),
+			err := NewTradingService(exec, WithTickSchedule(&fixedSchedule{ok: false})).ChangeEntrust(t.Context(), tradingAccountID(), tradingEntrustID(),
 				domain.MustNewPrice(tc.in, "0"), domain.MustNewQuantity("100"))
 			if err != nil {
 				t.Fatalf("ChangeEntrust with a zero-tick price of %s: %v", tc.in, err)
@@ -214,7 +226,7 @@ func TestChangeEntrustCarriesHostileValuesVerbatim(t *testing.T) {
 	for _, tc := range float64HostileQuantities {
 		t.Run("quantity/"+tc.name, func(t *testing.T) {
 			exec := newSequencedExecutor(t, sequencedReply{reply: json.RawMessage(`{"data":"1"}`)})
-			err := NewTradingService(exec).ChangeEntrust(t.Context(), tradingAccountID(), tradingEntrustID(),
+			err := NewTradingService(exec, WithTickSchedule(&fixedSchedule{ok: false})).ChangeEntrust(t.Context(), tradingAccountID(), tradingEntrustID(),
 				domain.MustNewPrice("387.05", "0.001"), domain.MustNewQuantity(tc.in))
 			if err != nil {
 				t.Fatalf("ChangeEntrust with quantity %s: %v", tc.in, err)
@@ -261,7 +273,7 @@ func TestHostilePricesSurviveTheRealStack(t *testing.T) {
 			rec := newWireRecorder(map[string]string{
 				string(client.RouteTradeQueryMaxAvailableAsset): gatewaySuccess(string(tradingMaxAvailableBody())),
 			})
-			svc := NewTradingService(newWireExecutor(t, rec))
+			svc := NewTradingService(newWireExecutor(t, rec), WithTickSchedule(&fixedSchedule{ok: false}))
 
 			_, err := svc.MaxAvailableAsset(t.Context(), tradingAccountID(), tradingHKSymbol(),
 				domain.MustNewPrice(tc.in, "0"), types.EntrustTypeLimit)
@@ -283,7 +295,7 @@ func TestHostilePricesSurviveTheRealStack(t *testing.T) {
 			rec := newWireRecorder(map[string]string{
 				string(client.RouteTradeEntrust): gatewaySuccess(`{"entrustId":"E-4001"}`),
 			})
-			svc := NewTradingService(newWireExecutor(t, rec))
+			svc := NewTradingService(newWireExecutor(t, rec), WithTickSchedule(&fixedSchedule{ok: false}))
 
 			if _, err := svc.Entrust(t.Context(), tradingAccountID(), order); err != nil {
 				t.Fatalf("Entrust over the wire with %s: %v", tc.in, err)
@@ -444,7 +456,7 @@ func TestFaithfulSubTickPriceFailsLoudlyInsteadOfBeingRounded(t *testing.T) {
 			name   string
 			mutate func(o *domain.Order)
 		}{
-			{"zero tick", func(o *domain.Order) { o.Price = domain.MustNewPrice("0.0005", "0") }},
+			{"no grid known", func(o *domain.Order) { o.Price = domain.MustNewPrice("0.0005", "0") }},
 			{"price-optional type", func(o *domain.Order) {
 				o.OrderType = types.EntrustTypeStopLossLimit // "33"
 				o.Price = domain.MustNewPrice("0.0005", "0.001")
@@ -459,8 +471,14 @@ func TestFaithfulSubTickPriceFailsLoudlyInsteadOfBeingRounded(t *testing.T) {
 				rec := newWireRecorder(map[string]string{
 					string(client.RouteTradeEntrust): gatewaySuccess(`{"entrustId":"E-5002"}`),
 				})
-				if _, err := NewTradingService(newWireExecutor(t, rec)).Entrust(
-					t.Context(), tradingAccountID(), order); err != nil {
+				// The "no grid known" row relies on the step check being skipped, which
+				// used to be reached by declaring a zero tick on the Price. That route
+				// is closed: the instrument's grid now governs. Injecting a resolver
+				// with no opinion is the honest way to say the grid is unknown, and it
+				// keeps this row measuring the thing it exists to measure — that 0.0005
+				// reaches the wire unrounded, which the removed %%.3f conversion broke.
+				svc := NewTradingService(newWireExecutor(t, rec), WithTickSchedule(&fixedSchedule{ok: false}))
+				if _, err := svc.Entrust(t.Context(), tradingAccountID(), order); err != nil {
 					t.Fatalf("Entrust: %v", err)
 				}
 				body := rec.lastBody(t, string(client.RouteTradeEntrust))

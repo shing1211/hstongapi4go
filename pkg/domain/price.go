@@ -45,6 +45,41 @@ func (p Price) Validate(step bool) error {
 	return nil
 }
 
+// ValidateOn checks p against an externally supplied tick rather than against the
+// one the Price carries.
+//
+// It exists because Validate(step=true) is satisfied by the caller's own tick,
+// which the caller chose and which therefore cannot reject anything the caller
+// did not already rule out. Order validation must compare the price against the
+// instrument's grid, and that grid belongs to the instrument, not to the order.
+// See TickSchedule and design-tick-model.md §2.2.
+//
+// The sign check always runs. An empty tick, or one decimal cannot parse, means
+// "unknown", and an unknown tick skips the step check rather than inventing a
+// grid: substituting a default here would reintroduce the defect ValidateOn
+// exists to remove. The returned error therefore means the price is invalid on
+// its own terms, or is on a grid the caller named.
+func (p Price) ValidateOn(tick string) error {
+	if p.dec.IsNegative() {
+		return fmt.Errorf("domain: Price: negative price %s", p.dec.String())
+	}
+	if tick == "" {
+		return nil
+	}
+	grid, err := decimal.NewFromString(tick)
+	if err != nil {
+		return fmt.Errorf("domain: Price: invalid tick %q: %w", tick, err)
+	}
+	if grid.IsZero() || grid.IsNegative() {
+		return nil
+	}
+	remainder := p.dec.Mod(grid)
+	if !remainder.IsZero() {
+		return fmt.Errorf("domain: Price: %s is not a multiple of tick %s", p.dec.String(), grid.String())
+	}
+	return nil
+}
+
 func (p Price) Round() Price {
 	if p.tick.IsZero() {
 		return p

@@ -85,7 +85,8 @@ func TestValidateQuantityForHKMatrix(t *testing.T) {
 					"this row claims lot %d tick %q", tc.dtype, schedule.Lot, schedule.TickSize, tc.lot, tc.tick)
 			}
 
-			err := validateQuantityForHK(domain.MustNewQuantity(tc.qty), tc.dtype)
+			err := validateQuantityForHK(domain.MustNewQuantity(tc.qty),
+				domain.TickSchedule{}, domain.Symbol{Market: domain.MarketHK, DataType: tc.dtype})
 			if tc.wantErr {
 				assertInvalidParam(t, err, opEntrust)
 				return
@@ -110,7 +111,9 @@ func TestValidateQuantityForHKMatrix(t *testing.T) {
 func TestValidateQuantityForHKDoesNotRejectNegativeOrders(t *testing.T) {
 	for _, qty := range []string{"-100", "-1", "-0.5"} {
 		t.Run(qty, func(t *testing.T) {
-			if err := validateQuantityForHK(domain.MustNewQuantity(qty), types.DataTypeHKStock); err != nil {
+			if err := validateQuantityForHK(domain.MustNewQuantity(qty),
+				domain.TickSchedule{},
+				domain.Symbol{Market: domain.MarketHK, DataType: types.DataTypeHKStock}); err != nil {
 				// If a later change adds the sign check, this row starts failing and
 				// the comment above becomes out of date, which is the point.
 				t.Logf("validateQuantityForHK(%s) now rejects a negative quantity: "+
@@ -145,8 +148,11 @@ func TestValidatePriceForHKMatrix(t *testing.T) {
 		{"stock negative zero", types.DataTypeHKStock, "-0.001", "0.001", true, "and it is a sign test, not a magnitude test"},
 		{"stock zero price", types.DataTypeHKStock, "0", "0.001", false, "zero is not negative and divides evenly"},
 
-		{"zero tick skips the step check", types.DataTypeHKStock, "0.0005", "0", false,
-			"the read-path tick from design-tick-model.md §2.1: Price.Validate skips the step test when its own tick is zero"},
+		{"read-path zero tick no longer exempts an order", types.DataTypeHKStock, "0.0005", "0", true,
+			"REWRITTEN by the TickSchedule work. This row used to pass: the caller's zero tick " +
+				"meant Price.Validate skipped the step test, so an off-grid order slipped through on " +
+				"the strength of a tick the caller had declared. The instrument's grid now decides, " +
+				"and 0.0005 is not a multiple of the stock tick 0.001. See the note above this table."},
 
 		{"bond on its tick", types.DataTypeHKBond, "92.2567", "0.0001", false, "an exact multiple of 0.0001"},
 		{"bond off its tick", types.DataTypeHKBond, "92.25675", "0.0001", true, "0.00005 remainder"},
@@ -158,7 +164,9 @@ func TestValidatePriceForHKMatrix(t *testing.T) {
 		{"unknown dtype is not checked", types.DataType(-1), "-1", "0.001", false, "no schedule, no check"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			err := validatePriceForHK(domain.MustNewPrice(tc.price, tc.tick), tc.dtype)
+			err := validatePriceForHK(domain.MustNewPrice(tc.price, tc.tick),
+				domain.TickSchedule{},
+				domain.Symbol{Market: domain.MarketHK, DataType: tc.dtype})
 			if tc.wantErr {
 				assertInvalidParam(t, err, opEntrust)
 				return
@@ -173,27 +181,63 @@ func TestValidatePriceForHKMatrix(t *testing.T) {
 // TestValidatePriceForHKSplitsGateFromStep separates the two roles the tick plays,
 // because they are different and only one of them is the schedule's.
 //
-// validatePriceForHK uses DefaultHKTickSchedule(dtype).TickSize purely to decide
-// whether to run a check at all. The step test itself belongs to
-// domain.Price.Validate and runs against the tick the caller handed the Price
-// constructor. So the HK stock schedule cannot make a price off the stock tick
-// fail if the caller declared a finer one — the gate is the schedule, the step is
-// the caller's.
+// validatePriceForHK asks the schedule whether to run a check at all, and the
+// step test itself runs against the tick that check was given. Before the
+// TickSchedule work, that tick was the one the caller handed the Price
+// constructor, so the HK stock schedule could not make an off-tick price fail if
+// the caller declared a finer one: the gate was the schedule, the step was the
+// caller's, and a caller could always satisfy the second by choosing it.
+//
+// That was the defect. The step now runs against the instrument's tick, so
+// TestValidatePriceForHKBelowRecordsTheOldBehaviour keeps the previous contract
+// as a dated record while this test states the current one.
 //
 // This matters to a reader of the money tests: the loud-failure behaviour for a
 // faithful 0.0005 is real, and it is real because the Price carries tick 0.001,
 // not because the schedule insisted on it.
 func TestValidatePriceForHKSplitsGateFromStep(t *testing.T) {
 	const offStockTick = "388.0501" // four decimal places, finer than the HK stock tick
+	stock := domain.Symbol{Market: domain.MarketHK, DataType: types.DataTypeHKStock}
 
-	accepted := domain.MustNewPrice(offStockTick, "0.0001")
-	if err := validatePriceForHK(accepted, types.DataTypeHKStock); err != nil {
-		t.Errorf("a price declaring its own 0.0001 tick was rejected for a stock: %v. "+
-			"The schedule gates whether a check runs; the price's own tick decides the step.", err)
+	// The instrument's tick governs, so a caller cannot widen the grid by
+	// declaring a finer one. This is the row that fails against the pre-rewrite
+	// code, which is what makes it the regression fence for the whole change.
+	declaredFiner := domain.MustNewPrice(offStockTick, "0.0001")
+	assertInvalidParam(t, validatePriceForHK(declaredFiner, domain.TickSchedule{}, stock), opEntrust)
+
+	// A price on the instrument's grid passes whichever tick it declares, because
+	// the declared tick is no longer consulted for the step.
+	declaredCoarser := domain.MustNewPrice("388.05", "0.01")
+	if err := validatePriceForHK(declaredCoarser, domain.TickSchedule{}, stock); err != nil {
+		t.Errorf("a price on the stock grid was rejected because it declared 0.01: %v. "+
+			"The instrument's tick decides the step, not the price's own.", err)
 	}
 
 	refused := domain.MustNewPrice(offStockTick, "0.001")
-	assertInvalidParam(t, validatePriceForHK(refused, types.DataTypeHKStock), opEntrust)
+	assertInvalidParam(t, validatePriceForHK(refused, domain.TickSchedule{}, stock), opEntrust)
+}
+
+// TestPriceValidateStillChecksAgainstItsOwnTick pins the old gate/step split at
+// the type it lived on, so the change above is legible rather than merely
+// different.
+//
+// Price.Validate(step=true) still tests a price against the tick the caller
+// attached to it. That is correct for what Validate means, and validatePriceForHK
+// simply stopped using it for the step: a caller can always satisfy a check
+// against a number they chose. If this test ever fails, Validate's contract moved
+// and the note in TestValidatePriceForHKSplitsGateFromStep is no longer
+// describing the code.
+func TestPriceValidateStillChecksAgainstItsOwnTick(t *testing.T) {
+	const offStockTick = "388.0501"
+
+	if err := domain.MustNewPrice(offStockTick, "0.0001").Validate(true); err != nil {
+		t.Errorf("Validate(true) against the price's own 0.0001 tick = %v, want nil: a price is "+
+			"always a multiple of its own tick, which is why the step cannot be taken from here", err)
+	}
+	if err := domain.MustNewPrice(offStockTick, "0.001").Validate(true); err == nil {
+		t.Error("Validate(true) against a 0.001 tick = nil, want an error: 0.0501 is not a " +
+			"multiple of 0.001")
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -852,11 +896,11 @@ func boolToInt(b bool) int {
 // and it is what makes every reject row below attributable. If this failed, every
 // rejection row would be suspect.
 func TestValidateOrderForHKAcceptsTheFixture(t *testing.T) {
-	if err := validateOrderForHK(tradingHKOrder()); err != nil {
+	if err := validateOrderForHK(tradingHKOrder(), domain.TickSchedule{}); err != nil {
 		t.Fatalf("the HK fixture is invalid: %v. Every reject row in this file is "+
 			"attributed to its single mutated field only if this passes", err)
 	}
-	if err := validateOrderForHK(tradingUSOrder()); err != nil {
+	if err := validateOrderForHK(tradingUSOrder(), domain.TickSchedule{}); err != nil {
 		t.Fatalf("the US fixture is invalid: %v", err)
 	}
 }
@@ -958,7 +1002,7 @@ func TestValidateOrderForHKRejectsOneFaultAtATime(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			order := tradingHKOrder()
 			tc.mutate(&order)
-			assertInvalidParam(t, validateOrderForHK(order), opEntrust)
+			assertInvalidParam(t, validateOrderForHK(order, domain.TickSchedule{}), opEntrust)
 		})
 	}
 }
@@ -1006,7 +1050,7 @@ func TestValidateOrderForHKAcceptsTheVariantsThatLookLikeRejections(t *testing.T
 		t.Run(tc.name, func(t *testing.T) {
 			order := tradingHKOrder()
 			tc.mutate(&order)
-			if err := validateOrderForHK(order); err != nil {
+			if err := validateOrderForHK(order, domain.TickSchedule{}); err != nil {
 				t.Errorf("validateOrderForHK = %v, want nil (%s)", err, tc.why)
 			}
 		})
@@ -1022,7 +1066,7 @@ func TestValidateOrderForHKPriceIsCheckedOnlyWhenItIsNotOptional(t *testing.T) {
 	// A limit order (price required) carrying a negative price.
 	checked := tradingHKOrder()
 	checked.Price = domain.MustNewPrice("-1", "0.001")
-	assertInvalidParam(t, validateOrderForHK(checked), opEntrust)
+	assertInvalidParam(t, validateOrderForHK(checked, domain.TickSchedule{}), opEntrust)
 
 	// The same negative price on a price-optional, HK-eligible conditional order.
 	// "33" is stop-loss limit: conditional, price-optional, and eligible.
@@ -1031,7 +1075,7 @@ func TestValidateOrderForHKPriceIsCheckedOnlyWhenItIsNotOptional(t *testing.T) {
 	skipped.Price = domain.MustNewPrice("-1", "0.001")
 	skipped.ValidDays = 7
 	skipped.CondValue = "380.000"
-	if err := validateOrderForHK(skipped); err != nil {
+	if err := validateOrderForHK(skipped, domain.TickSchedule{}); err != nil {
 		t.Errorf("a negative price on a price-optional order = %v, want nil: the price is "+
 			"never handed to validatePriceForHK when isPriceOptional is true", err)
 	}
@@ -1050,7 +1094,7 @@ func TestValidateOrderForHKSkipsEverythingForANonHKMarket(t *testing.T) {
 		order.TimeInForce = "XGTD"
 		order.Side = "9"
 		order.SessionType = "1"
-		if err := validateOrderForHK(order); err != nil {
+		if err := validateOrderForHK(order, domain.TickSchedule{}); err != nil {
 			t.Errorf("validateOrderForHK for market %q = %v, want nil: the helper returns on "+
 				"its first line for any market other than HK", market, err)
 		}
@@ -1084,7 +1128,7 @@ func TestValidateOrderForHKValidDaysBoundaries(t *testing.T) {
 			order.ValidDays = tc.days
 			order.CondValue = "380.000"
 
-			err := validateOrderForHK(order)
+			err := validateOrderForHK(order, domain.TickSchedule{})
 			if tc.wantErr {
 				assertInvalidParam(t, err, opEntrust)
 				return
@@ -1100,7 +1144,7 @@ func TestValidateOrderForHKValidDaysBoundaries(t *testing.T) {
 	// isConditionalOrder guard would be visible.
 	order := tradingHKOrder()
 	order.ValidDays = 9999
-	if err := validateOrderForHK(order); err != nil {
+	if err := validateOrderForHK(order, domain.TickSchedule{}); err != nil {
 		t.Errorf("a limit order with validDays 9999 = %v, want nil: the range check only "+
 			"applies to conditional orders", err)
 	}
@@ -1123,24 +1167,24 @@ func TestValidateOrderForHKDoesNotPinOrder(t *testing.T) {
 	both := tradingHKOrder()
 	both.Quantity = domain.MustNewQuantity("150") // fails validateQuantityForHK
 	both.TimeInForce = "XGTD"                     // fails validateTimeInForce
-	assertInvalidParam(t, validateOrderForHK(both), opEntrust)
+	assertInvalidParam(t, validateOrderForHK(both, domain.TickSchedule{}), opEntrust)
 
 	// The same two faults with only one of them present, which is what makes the
 	// pair above attributable at all.
 	onlyQuantity := tradingHKOrder()
 	onlyQuantity.Quantity = domain.MustNewQuantity("150")
-	assertInvalidParam(t, validateOrderForHK(onlyQuantity), opEntrust)
+	assertInvalidParam(t, validateOrderForHK(onlyQuantity, domain.TickSchedule{}), opEntrust)
 
 	onlyTIF := tradingHKOrder()
 	onlyTIF.TimeInForce = "XGTD"
-	assertInvalidParam(t, validateOrderForHK(onlyTIF), opEntrust)
+	assertInvalidParam(t, validateOrderForHK(onlyTIF, domain.TickSchedule{}), opEntrust)
 
 	// Neither present: the same call is accepted, so the two rejections above are
 	// not an artefact of the fixture.
 	clean := tradingHKOrder()
 	clean.Quantity = domain.MustNewQuantity("100")
 	clean.TimeInForce = "DAY"
-	if err := validateOrderForHK(clean); err != nil {
+	if err := validateOrderForHK(clean, domain.TickSchedule{}); err != nil {
 		t.Errorf("the clean order = %v, want nil: the rejections above are the two named "+
 			"faults and not something about the fixture", err)
 	}
@@ -1175,7 +1219,7 @@ func TestValidateOrderForHKPropagatesASessionRejection(t *testing.T) {
 
 		// Everything else on the order is valid, so the session check is the only
 		// one that can fire.
-		assertInvalidParam(t, validateOrderForHK(order("1")), opEntrust)
+		assertInvalidParam(t, validateOrderForHK(order("1"), domain.TickSchedule{}), opEntrust)
 	})
 
 	t.Run("accepted when the window covers the day", func(t *testing.T) {
@@ -1183,7 +1227,7 @@ func TestValidateOrderForHKPropagatesASessionRejection(t *testing.T) {
 		covering.preMarketStart, covering.preMarketEnd = "00:00", "23:59"
 		tradingReplaceSessionWindow(t, covering)
 
-		if err := validateOrderForHK(order("1")); err != nil {
+		if err := validateOrderForHK(order("1"), domain.TickSchedule{}); err != nil {
 			t.Errorf("session \"1\" inside a whole-day window = %v, want nil", err)
 		}
 	})
@@ -1193,7 +1237,7 @@ func TestValidateOrderForHKPropagatesASessionRejection(t *testing.T) {
 		moved.preMarketStart, moved.preMarketEnd = "25:00", "25:00"
 		tradingReplaceSessionWindow(t, moved)
 
-		if err := validateOrderForHK(order("7")); err != nil {
+		if err := validateOrderForHK(order("7"), domain.TickSchedule{}); err != nil {
 			t.Errorf("session \"7\" with an unreachable window = %v, want nil: the switch has no "+
 				"case for it and falls through to the helper's trailing return", err)
 		}

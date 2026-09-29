@@ -108,12 +108,50 @@ var hkZone = time.FixedZone("HKT", 8*60*60)
 
 type TradingService struct {
 	client Executor
+	// schedule resolves the instrument's lot size and tick for order validation.
+	// Nil means DefaultHKTickSchedule, so a caller that never injects one gets
+	// exactly the behaviour it had before the interface existed. See
+	// tickSchedule.
+	schedule domain.TickScheduleResolver
 }
 
 type TradingOption func(*TradingService)
 
 func WithTradingClient(c Executor) TradingOption {
 	return func(s *TradingService) { s.client = c }
+}
+
+// WithTickSchedule injects the resolver used to validate order prices and
+// quantities against the instrument's own grid.
+//
+// Without it, validation falls back to the default HK table, which is keyed on
+// DataType and is therefore a data-type-level approximation rather than a
+// per-instrument one. Supplying a real instrument master is what makes the
+// price check mean anything: the default table returns a grid, and a grid
+// invented by the SDK is the defect this option exists to let a caller replace.
+// See docs/runs/2026-09-26-vnext-parity-wire/design-tick-model.md §2.2.
+//
+// A nil resolver is ignored rather than stored, because a nil schedule must
+// mean "use the default" rather than a nil dereference on the first order.
+func WithTickSchedule(r domain.TickScheduleResolver) TradingOption {
+	return func(s *TradingService) {
+		if r != nil {
+			s.schedule = r
+		}
+	}
+}
+
+// tickSchedule returns the resolver to use, substituting the default table when
+// none was injected.
+//
+// The nil check is the whole guard. An option that stored an untyped nil would
+// leave a non-nil interface value holding no resolver, and the ScheduleFor call
+// below would panic on the first order rather than fall back.
+func (s *TradingService) tickSchedule() domain.TickScheduleResolver {
+	if s.schedule == nil {
+		return domain.TickSchedule{}
+	}
+	return s.schedule
 }
 
 func NewTradingService(c Executor, opts ...TradingOption) *TradingService {
@@ -153,7 +191,7 @@ func (s *TradingService) Entrust(ctx context.Context, accountID domain.AccountID
 	if accountID.IsZero() {
 		return nil, errs.New(types.StatusInvalidParam, opEntrust, "accountID must not be empty")
 	}
-	if err := validateOrderForHK(order); err != nil {
+	if err := validateOrderForHK(order, s.tickSchedule()); err != nil {
 		return nil, err
 	}
 
@@ -240,10 +278,29 @@ func (s *TradingService) ChangeEntrust(ctx context.Context, accountID domain.Acc
 		return errs.New(types.StatusInvalidParam, opChangeEntrust, "entrustID must not be empty")
 	}
 
-	if err := validatePriceForHK(newPrice, types.DataTypeHKStock); err != nil {
+	// The symbol below is a deliberate fiction, and the two defects it papers over
+	// are recorded rather than fixed here. ChangeEntrust takes no domain.Symbol, so
+	// the instrument's real DataType is unobtainable and a DataType-keyed schedule
+	// cannot be resolved for it either. Substituting an HK stock means every amend
+	// is validated against the HK-stock grid, whatever the order actually is.
+	//
+	// Fixing it needs a Symbol parameter, which is a public API change on the
+	// v-next layer, and it also intersects the second defect: the wire request
+	// below never sets StockCode even though docs/SPEC.md documents the field, so
+	// the instrument is not sent at all. Whether the Gateway requires stockCode is
+	// a question only a live request can answer, which is why it joins G6 rather
+	// than being settled by inspection.
+	//
+	// See next-phase.md and
+	// docs/runs/2026-09-26-vnext-parity-wire/todos.md for both findings.
+	changeEntrustSymbol := domain.Symbol{
+		Market:   domain.MarketHK,
+		DataType: types.DataTypeHKStock,
+	}
+	if err := validatePriceForHK(newPrice, s.tickSchedule(), changeEntrustSymbol); err != nil {
 		return err
 	}
-	if err := validateQuantityForHK(newQty, types.DataTypeHKStock); err != nil {
+	if err := validateQuantityForHK(newQty, s.tickSchedule(), changeEntrustSymbol); err != nil {
 		return err
 	}
 
@@ -621,17 +678,22 @@ func (s *TradingService) UnsubscribeOrders(ctx context.Context, accountID domain
 	return s.client.Do(ctx, opTradeUnsubscribe, client.RouteTradeUnsubscribe, struct{}{}, s.client.JSON(), nil)
 }
 
-func validateOrderForHK(order domain.Order) error {
+// validateOrderForHK runs the Hong Kong-specific checks on order.
+//
+// It takes the resolver as a parameter rather than reading it from the service
+// so the whole matrix can be driven against a fake without a TradingService, and
+// so the nil-means-default rule is applied in exactly one place.
+func validateOrderForHK(order domain.Order, schedule domain.TickScheduleResolver) error {
 	if order.Symbol.Market != domain.MarketHK {
 		return nil
 	}
 
-	if err := validateQuantityForHK(order.Quantity, order.Symbol.DataType); err != nil {
+	if err := validateQuantityForHK(order.Quantity, schedule, order.Symbol); err != nil {
 		return err
 	}
 
 	if !isPriceOptional(order.OrderType) {
-		if err := validatePriceForHK(order.Price, order.Symbol.DataType); err != nil {
+		if err := validatePriceForHK(order.Price, schedule, order.Symbol); err != nil {
 			return err
 		}
 	}
@@ -665,26 +727,48 @@ func validateOrderForHK(order domain.Order) error {
 	return nil
 }
 
-func validateQuantityForHK(qty domain.Quantity, dtype types.DataType) error {
-	schedule := domain.DefaultHKTickSchedule(dtype)
-	if schedule.Lot == 0 {
+// validateQuantityForHK checks qty against the lot size the resolver reports.
+//
+// ok false means the resolver has no opinion, and the check is skipped: an
+// absent lot size is unknown, not zero, and a zero lot would make ValidateLot's
+// remainder test pass for every quantity.
+func validateQuantityForHK(qty domain.Quantity, schedule domain.TickScheduleResolver, sym domain.Symbol) error {
+	lot, _, ok := schedule.ScheduleFor(sym)
+	if !ok {
 		return nil
 	}
 	if err := qty.ValidateInteger(); err != nil {
 		return errs.New(types.StatusInvalidParam, opEntrust, err.Error())
 	}
-	if err := qty.ValidateLot(schedule.Lot); err != nil {
+	if err := qty.ValidateLot(lot); err != nil {
 		return errs.New(types.StatusInvalidParam, opEntrust, err.Error())
 	}
 	return nil
 }
 
-func validatePriceForHK(price domain.Price, dtype types.DataType) error {
-	schedule := domain.DefaultHKTickSchedule(dtype)
-	if schedule.TickSize == "" {
+// validatePriceForHK checks price against the instrument's tick, not the one the
+// caller attached to it.
+//
+// The previous form asked the schedule only whether a tick existed and then
+// called price.Validate(true), which checks the price against its own tick — a
+// number the caller chose. The check could therefore not fail for a reason the
+// caller had not already ruled out, which made it a gate rather than a
+// validation. ValidateOn takes the instrument's grid, so the resolver's answer
+// is what decides.
+//
+// ok false skips the step check. The design's "reject an order whose tick is
+// unknown" is deliberately not implemented here: the default table still answers
+// 0.001 for an HK stock, so an unknown tick today means "the price-band table has
+// not been sourced yet" rather than "this instrument has no grid", and rejecting
+// on that basis would break orders the exchange accepts. The rejection lands
+// with the band table. See design-tick-model.md §2.3 and the deferred
+// price-band work in next-phase.md.
+func validatePriceForHK(price domain.Price, schedule domain.TickScheduleResolver, sym domain.Symbol) error {
+	_, tick, ok := schedule.ScheduleFor(sym)
+	if !ok {
 		return nil
 	}
-	if err := price.Validate(true); err != nil {
+	if err := price.ValidateOn(tick); err != nil {
 		return errs.New(types.StatusInvalidParam, opEntrust, err.Error())
 	}
 	return nil

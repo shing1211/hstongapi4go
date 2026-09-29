@@ -538,17 +538,35 @@ func TestChangeEntrustValidatesAsAnHKStock(t *testing.T) {
 		requireCalls(t, exec, 0)
 	})
 
-	t.Run("a caller-supplied finer tick is honoured, not the schedule's", func(t *testing.T) {
+	t.Run("a caller-supplied finer tick no longer widens the grid", func(t *testing.T) {
+		// INVERTED by the TickSchedule work. This row previously asserted that a
+		// caller declaring 0.0001 could place 388.0501 on an HK stock, and called
+		// that "the step check runs against the price's own tick, not the
+		// schedule's". That was the defect: the caller chose the number the check
+		// tested, so the check could not fail for a reason they had not already
+		// accepted. The instrument's grid now decides, and 388.0501 is not a
+		// multiple of 0.001.
 		exec := newSequencedExecutor(t, sequencedReply{reply: json.RawMessage(`{"data":"1"}`)})
 		err := NewTradingService(exec).ChangeEntrust(t.Context(), tradingAccountID(), tradingEntrustID(),
 			domain.MustNewPrice("388.0501", "0.0001"), domain.MustNewQuantity("100"))
+		assertInvalidParam(t, err, opEntrust)
+		requireCalls(t, exec, 0)
+	})
+
+	t.Run("a price on the schedule's grid is carried verbatim", func(t *testing.T) {
+		// The complement, so the row above cannot be satisfied by rejecting
+		// everything: a price that is on the instrument's grid must reach the wire
+		// exactly as given.
+		exec := newSequencedExecutor(t, sequencedReply{reply: json.RawMessage(`{"data":"1"}`)})
+		err := NewTradingService(exec).ChangeEntrust(t.Context(), tradingAccountID(), tradingEntrustID(),
+			domain.MustNewPrice("388.05", "0.01"), domain.MustNewQuantity("100"))
 		if err != nil {
-			t.Fatalf("ChangeEntrust with a 0.0001-tick price = %v, want nil: the step check "+
-				"runs against the price's own tick, not the schedule's", err)
+			t.Fatalf("ChangeEntrust with an on-grid price declaring 0.01 = %v, want nil: the "+
+				"declared tick is not consulted for the step", err)
 		}
 		req := tradingParamsAs[changeEntrustWireRequest](t, exec)
-		if req.EntrustPrice != "388.0501" {
-			t.Errorf("EntrustPrice = %q, want 388.0501 verbatim", req.EntrustPrice)
+		if req.EntrustPrice != "388.05" {
+			t.Errorf("EntrustPrice = %q, want 388.05 verbatim", req.EntrustPrice)
 		}
 	})
 
