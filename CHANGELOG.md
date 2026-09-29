@@ -7,9 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **The register-citation guard no longer fails on a shallow clone.** The check
+  added in `53b3a2e` used `git cat-file -e`, which cannot distinguish a citation
+  that names nothing from one that predates a shallow clone's history window, since
+  both exit non-zero. CI checks out at `actions/checkout`'s default depth, so the R2,
+  R7 and R14 citations were reported as nonexistent commits. All three are real. The
+  clone's own boundary now decides the case: a full clone stays authoritative and
+  reports absence as absence, a shallow one reports what it cannot resolve as
+  unresolved and says so in the log, so a run that verified less than it appears
+  stays visible rather than looking like a pass. A dead `symbolRE` left behind by an
+  earlier rewrite, which `golangci-lint` caught and the local build did not, is
+  removed in the same commit.
+
 ### Changed
 
-- **market.OrderBookResponse.TickSize is now `json.Number`, not `float64`.** This
+- **`market.OrderBookResponse.TickSize` is now `json.Number`, not `float64`.** This
   is a breaking change to an exported type in the released v0.1.x surface, and it
   lands after `v1.0.0` retired ADR 0011 guarantee 1, which is the only reason it
   is permitted at all. A tick is a decimal fraction the Gateway sends as a `double`;
