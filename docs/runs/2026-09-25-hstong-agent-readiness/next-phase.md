@@ -173,9 +173,19 @@ In summary, in order:
 ## 6. Housekeeping
 
 - Rotate the MiniMax API key held in plaintext at
-  `~/.config/opencode/opencode.json` if it has been synced anywhere. The key is
-  still present; that directory's own `.gitignore` now excludes the file, and it
-  is not a git repository.
+`~/.config/opencode/opencode.json` if it has been synced anywhere. The key is
+still present; that directory's own `.gitignore` now excludes the file, and it
+is not a git repository.
+**Re-verified 2026-09-26 (F2): no exposure found.** The key is not in this
+repository or in any commit of its history, and `C:\Users\Tchan\.config\opencode`
+is not a git repository and lists `opencode.json` in its own `.gitignore`. A
+`git log --all -S eyJ` sweep returns exactly one hit, and it is a `go.sum` module
+checksum (`...+yeyJt4xig9DEw9kuUFe5C3zLbVjV2PzT6qzbs=`) introduced by `c592072`,
+not a credential. This is therefore **housekeeping against a hypothetical copy,
+not an incident**, and it is recorded as such so a later reader does not infer a
+leak from the phrase "rotate the key". If that config file has never been copied,
+synced, or backed up anywhere, the rotation is optional hygiene and need not
+block a release.
 - Native-speaker pass on the three English package-tree comments in the five
   translations.
 - ~~Restart the four stale `gitnexus mcp` processes.~~ **Done** — they were
