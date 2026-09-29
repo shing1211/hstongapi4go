@@ -35,6 +35,12 @@ const MaxTickerLimit = 100
 // Manager issues the nine market-data pull calls against a shared
 // *client.Client. It holds no mutable state and is safe for concurrent use. A
 // Manager must not be copied after first use.
+//
+// Deprecated: use the v-next market service instead — see docs/MIGRATION.md.
+// MarketManager is reachable as services.Stack.Market after
+// services.NewStack(c). This type still works and is not scheduled for removal;
+// the marker is advisory, and it was added in v1.0.0 to mark the moment
+// docs/MIGRATION.md stopped being a draft.
 type Manager struct {
 	client *client.Client
 }

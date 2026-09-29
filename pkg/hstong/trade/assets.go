@@ -56,6 +56,13 @@ func WithSession(s Session) Option {
 // once with New and is safe for concurrent use. Every method takes a context and
 // honors its deadline. A Manager is immutable after New except for the state it
 // delegates to the client and session.
+//
+// Deprecated: use the v-next trading service instead — see docs/MIGRATION.md. It
+// is reachable as services.Stack.Trading after services.NewStack(c), and the
+// no-auto-retry guarantee for mutations (ADR 0003) carries across unchanged.
+// This type still works and is not scheduled for removal; the marker is advisory,
+// and it was added in v1.0.0 to mark the moment docs/MIGRATION.md stopped being
+// a draft.
 type Manager struct {
 	client  *client.Client
 	session Session

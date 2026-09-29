@@ -110,9 +110,24 @@ func WithBuffer(n int) Option {
 // A Client must be connected with Connect before subscribing. Close releases
 // the push connection and stops every goroutine; it does not close the
 // caller-owned *client.Client.
+//
+// Deprecated: use the v-next push service instead — see docs/MIGRATION.md. The
+// v-next path deliberately has no single shared-connection channel API of this
+// shape: the v-next Manager and Fanout that once provided TCP topic
+// subscription were removed on 2026-09-25, and a v-next caller uses
+// transport.PushAdapter. This type still works and is not scheduled for
+// removal; the marker is advisory, and it was added in v1.0.0 to mark the moment
+// docs/MIGRATION.md stopped being a draft.
 type Client struct {
 	client *client.Client
-	market *market.Manager
+	// market is the deprecated v0.1.x market manager, used only to drive HTTP
+	// subscribe/unsubscribe. The suppression is not a workaround: this package
+	// *is* the v0.1.x surface, so a deprecation marker placed on its dependency
+	// has to be acknowledged here or the package cannot compile cleanly against
+	// itself. Note that SA1019 only fires where a deprecated identifier is
+	// *named*, so a caller that writes market.New(c) and passes the result
+	// around without naming the type sees no warning at all.
+	market *market.Manager //nolint:staticcheck // see above
 	trade  TradePusher
 	opts   options
 	push   *push.Client

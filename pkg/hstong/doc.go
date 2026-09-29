@@ -42,9 +42,14 @@
 //
 // pkg/services reached feature parity on 2026-09-26, which is the condition
 // ADR 0011 sets for announcing a deprecation. Each sub-package carries a notice
-// saying so. The notice is prose rather than a // Deprecated: marker, because
-// staticcheck (SA1019) is enabled in this repository and a marker would make it
-// warn every existing consumer during a v0.1.x patch line, including this
-// repository's own examples and the migration samples that exist precisely to
-// show the old shape. The machine-readable marker ships with v1.0.0.
+// saying so, and the machine-readable // Deprecated: marker landed with v1.0.0 on
+// each sub-package's Manager type.
+//
+// The marker is quieter than a deprecation usually is: staticcheck's SA1019
+// fires only where a deprecated identifier is written out, so `market.New(c)` -
+// what most callers write - produces no warning at all. Nothing here is
+// scheduled for removal. This surface still works, is still the default, and the
+// marker is advisory; the machine-readable form was deferred to v1.0.0
+// specifically so that a v0.1.x patch release would not make every existing
+// consumer's build emit warnings they did not ask for.
 package hstong

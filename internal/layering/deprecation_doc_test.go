@@ -6,6 +6,7 @@ package layering
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -14,19 +15,26 @@ import (
 // carry a deprecation notice once v-next reaches feature parity.
 var v01xPackages = []string{"algo", "future", "market", "stream", "trade"}
 
-// TestV01xPackagesCarryTheDeprecationNotice checks the notice ADR 0011 promised
-// is actually present in each released manager package.
+// v01xManagers maps each released v0.1.x manager package to the file and
+// declaration that carries its deprecation marker. The marker belongs on the
+// manager type rather than the package comment, so that `go doc` surfaces it on
+// the identifier a caller actually writes.
+var v01xManagers = map[string]string{
+	"algo":   "Manager",
+	"future": "Manager",
+	"market": "Manager",
+	"stream": "Client",
+	"trade":  "Manager",
+}
+
+// TestV01xPackagesCarryTheDeprecationNotice checks the two things ADR 0011 asks
+// for: a notice in the package documentation pointing at pkg/services, and a
+// machine-readable marker on the manager type.
 //
-// The notice is prose, not a // Deprecated: marker, and that is a deliberate
-// decision rather than an omission: staticcheck is enabled in this repository,
-// so a marker would trip SA1019 on this repository's own examples and on
-// internal/migration/samples.go - the file whose whole job is showing the old
-// call shape. Adding one during a v0.1.x patch line would also make every
-// downstream consumer's build emit warnings they did not ask for. The marker
-// ships with v1.0.0.
-//
-// This test asserts the marker is absent, so that the day someone adds it in a
-// patch release, this fails and asks whether it was meant.
+// The marker was prose-only through v0.1.x and landed in v1.0.0. An earlier
+// version of this test asserted the marker was *absent*; it now asserts it is
+// present, so removing it is a deliberate act that fails the build rather than a
+// silent regression.
 func TestV01xPackagesCarryTheDeprecationNotice(t *testing.T) {
 	root := moduleRoot(t)
 
@@ -41,32 +49,65 @@ func TestV01xPackagesCarryTheDeprecationNotice(t *testing.T) {
 
 			if !strings.Contains(doc, "Relationship to pkg/services") {
 				t.Errorf("pkg/hstong/%s has no \"Relationship to pkg/services\" "+
-					"section; ADR 0011 requires a deprecation notice directing "+
-					"consumers to pkg/services", pkg)
+					"section; ADR 0011 requires a notice directing consumers to "+
+					"pkg/services", pkg)
 			}
 			if !strings.Contains(doc, "MIGRATION.md") {
 				t.Errorf("pkg/hstong/%s's notice does not point at docs/MIGRATION.md, "+
 					"so a reader has no next step", pkg)
 			}
-			// Asserted as the whole sentence, not as a bare "v1.0.0" substring.
-			// A bare substring check is satisfied by any incidental mention of the
-			// version anywhere in the file, which is exactly the kind of assertion
-			// that survives a mutation removing the sentence it was written for.
-			if !strings.Contains(doc, "machine-readable marker ships with v1.0.0") {
-				t.Errorf("pkg/hstong/%s's notice does not say that the "+
-					"machine-readable marker ships with v1.0.0. Without that the "+
-					"notice states a deprecation with no date, which is the one thing "+
-					"a reader needs to plan a migration", pkg)
-			}
-			if hasDeprecationMarker(doc) {
-				t.Errorf("pkg/hstong/%s carries a // Deprecated: marker. This test "+
-					"records the decision to keep the v0.1.x notice prose-only until "+
-					"v1.0.0; if the marker was added deliberately, update this test and "+
-					"the eight call sites it will break (six examples, "+
-					"internal/migration/samples.go, scripts/coverage_gate.go)", pkg)
+
+			decl := v01xManagers[pkg]
+			if !managerCarriesMarker(t, root, pkg, decl) {
+				t.Errorf("no // Deprecated: marker on %s in pkg/hstong/%s. v1.0.0 "+
+					"introduced the marker, so its removal is a change to the "+
+					"deprecation policy and should be a deliberate one", decl, pkg)
 			}
 		})
 	}
+}
+
+// managerCarriesMarker reports whether the named type declaration is preceded by
+// a // Deprecated: marker in the package's non-test sources.
+func managerCarriesMarker(t *testing.T, root, pkg, decl string) bool {
+	t.Helper()
+	dir := filepath.Join(root, "pkg", "hstong", pkg)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("reading %s: %v", dir, err)
+	}
+	declRe := regexp.MustCompile(`^type ` + regexp.QuoteMeta(decl) + ` struct`)
+	for _, e := range entries {
+		name := e.Name()
+		if e.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		raw, err := os.ReadFile(filepath.Join(dir, name))
+		if err != nil {
+			t.Fatalf("reading %s: %v", name, err)
+		}
+		lines := strings.Split(string(raw), "\n")
+		for i, line := range lines {
+			if !declRe.MatchString(line) {
+				continue
+			}
+			// Walk back over the doc comment, allowing for the blank comment
+			// line GoDoc convention.
+			for k := i - 1; k >= 0; k-- {
+				trimmed := strings.TrimSpace(lines[k])
+				if !strings.HasPrefix(trimmed, "//") {
+					return false
+				}
+				if hasDeprecationMarker(lines[k]) {
+					return true
+				}
+			}
+			return false
+		}
+	}
+	t.Fatalf("type %s not found in pkg/hstong/%s; the guard is not checking what "+
+		"it was written for", decl, pkg)
+	return false
 }
 
 // hasDeprecationMarker reports whether the file contains a real Go deprecation

@@ -87,6 +87,13 @@ func WithDefaultPageSize(size int) Option {
 
 // Manager exposes the eleven futures trading endpoints over a shared
 // *client.Client. It holds no per-request state and is safe for concurrent use.
+//
+// Deprecated: use the v-next futures service instead — see docs/MIGRATION.md.
+// It is reachable as services.Stack.Futures after services.NewStack(c). This
+// type still works and is not scheduled for removal; the marker is advisory, and
+// it was added in v1.0.0 to mark the moment docs/MIGRATION.md stopped being a
+// draft. Note that the entrustBs value set is unresolved on both surfaces
+// (tracker C1b), so migrating does not settle it.
 type Manager struct {
 	client          *client.Client
 	defaultPageSize int

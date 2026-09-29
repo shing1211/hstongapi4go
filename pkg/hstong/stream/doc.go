@@ -107,9 +107,16 @@
 // caller subscribing over TCP uses transport.PushAdapter; see ARCHITECTURE.md §5.
 //
 // pkg/services reached feature parity on 2026-09-26, which is the condition
-// ADR 0011 sets for announcing a deprecation. The notice is prose on purpose: a
-// // Deprecated: marker would make staticcheck (SA1019) warn every existing
-// consumer, including the examples and the migration samples in this repository,
-// during a v0.1.x patch line. The machine-readable marker ships with v1.0.0,
-// where the CHANGELOG announces it.
+// ADR 0011 sets for announcing a deprecation. The machine-readable
+// // Deprecated: marker landed with v1.0.0, on this package's Manager type
+// rather than here, so `go doc` shows it on the thing callers name.
+//
+// It is also quieter than a deprecation usually is. staticcheck's SA1019 fires
+// only where a deprecated identifier is written out, so the constructor call
+// most callers make produces no warning at all; only code that names the type
+// explicitly is nagged. Nothing here is scheduled for removal - this surface
+// still works, is still the default, and the marker is advisory. The
+// machine-readable marker was deliberately deferred to v1.0.0 so that a v0.1.x
+// patch release would not make every existing consumer's build emit warnings
+// they did not ask for.
 package stream

@@ -652,6 +652,12 @@ func WithDefaultExchangeType(exchange types.ExchangeType) Option {
 // Mutations (AddOrder, CancelOrder, CancelEntrust, ChangeOrder, ActionOrder)
 // issue exactly one HTTP attempt and are never retried (ADR 0003). Queries
 // (QueryOrderList, QueryEntrustIDList) are read-only.
+//
+// Deprecated: use the v-next algo service instead — see docs/MIGRATION.md. It is
+// reachable as services.Stack.Algo after services.NewStack(c), and the
+// no-auto-retry guarantee carries across unchanged. This type still works and is
+// not scheduled for removal; the marker is advisory, and it was added in v1.0.0
+// to mark the moment docs/MIGRATION.md stopped being a draft.
 type Manager struct {
 	client *client.Client
 	cfg    config

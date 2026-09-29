@@ -93,6 +93,13 @@ func WithKeepAliveRoute(route client.Route) SessionOption {
 //
 // All methods are safe for concurrent use. A SessionManager must not be copied
 // after first use.
+//
+// Deprecated: use the v-next session service instead — see docs/MIGRATION.md. It
+// is reachable as services.Stack.Session after services.NewStack(c); the
+// v-next service composes internal/auth, which adds the injectable clock the
+// trade-password crypto needs. This type still works and is not scheduled for
+// removal; the marker is advisory, and it was added in v1.0.0 to mark the moment
+// docs/MIGRATION.md stopped being a draft.
 type SessionManager struct {
 	client            *client.Client
 	keepAliveInterval time.Duration
