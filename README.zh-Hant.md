@@ -30,6 +30,7 @@
 - [狀態](#狀態)
 - [安裝](#安裝)
 - [快速開始](#快速開始)
+- [遷移到 v1.0](#遷移到-v10)
 - [功能矩陣](#功能矩陣)
 - [設定](#設定)
 - [套件結構](#套件結構)
@@ -59,7 +60,7 @@
 | 文件（README、MkDocs 網站、ADR、SPEC、LEGACY） | 已實作 |
 | 離線測試 + 全端點 SDK 對 mock 的端對端測試 | 已實作 |
 | 針對真實 Gateway 的整合測試 | 已撰寫並以環境變數閘控；待使用者實際執行確認 |
-| 發佈（GitHub + Gitee） | v0.1.25 ✓ |
+| 發佈（GitHub + Gitee） | v1.0.0 |
 
 全部 51 個 HTTP 端點和 11 個行情推送主題均已實作。計數以
 [docs/SPEC.md](./docs/SPEC.md) 為準；請勿在其他地方手動修改。
@@ -175,6 +176,36 @@ for {
 [`examples/`](./examples/README.md) 中提供涵蓋每個介面的、可執行且無需憑證即可編譯的程式：
 `quickstart`、`market-data`、`trading`、`futures`、`algo` 和 `streaming`。
 
+## 遷移到 v1.0
+
+v1.0.0 **不會**改變你正在呼叫的 API。`pkg/hstong/*`、`pkg/types/` 與 `client/`
+維持不變，仍是預設路徑，你不需要做任何事。v1.0.0 新增的是同一批 51 個端點的第二套
+分層實作，你可以在需要時選擇使用。
+
+```go
+// 仍是預設路徑，也依然正確：
+m := market.New(c)
+
+// 選擇 v-next 層：
+stack, err := services.NewStack(c)
+if err != nil {
+    return err
+}
+defer stack.Close()
+q, err := stack.Market.BasicQot(ctx, req)
+```
+
+遷移是漸進的，可以依呼叫逐一替換：依你自己的節奏把 `pkg/hstong` 的呼叫換成
+`pkg/services` 的呼叫，兩者可以並存。附可編譯範例的完整遷移指南見
+[docs/MIGRATION.md](./docs/MIGRATION.md)。
+
+開始之前請先了解兩點：
+
+- **委託變更永遠不會自動重試**，兩個介面皆然。交易、期貨或演算法的一次變更
+  只嘗試一次；出現語意不明確的失敗時需要你去對帳，而不是重試。這是
+  [ADR 0003](./docs/adr/0003-no-auto-retry-orders.md)，遷移不會改變這一點。
+- **金額與數量使用 `string` / `json.Number`，絕不使用 `float64`**，兩個介面皆然。
+
 ## 功能矩陣
 
 端點計數僅取自 [docs/SPEC.md](./docs/SPEC.md)。所有路由均為
@@ -237,8 +268,8 @@ hstongapi4go/
 ├── pkg/hstong/        # 公開管理器：工作階段 + market/trade/future/algo/stream
 ├── pkg/types/         # 列舉、狀態碼、平台公鑰
 ├── pkg/domain/        # v-next: decimal value types, typed IDs, DTO mappers
-├── pkg/services/      # v-next: market/account/trading use cases
-├── pkg/transport/     # v-next: HTTP adapter (deadlines, caps, retry)
+├── pkg/services/      # v-next: Stack + market/account/trading/algo/futures use cases
+├── pkg/transport/     # v-next: wire mappers, pagination encoding, PushAdapter
 ├── internal/          # 私有：transport、push、crypto、errs、resilience、logging、metrics
 ├── gen/               # 產生的 protobuf 程式碼（請勿編輯）
 ├── proto/             # 內建 .proto 來源 + 來源說明

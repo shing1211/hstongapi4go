@@ -56,6 +56,20 @@ LANGUAGES = [
 # Allowed absolute difference in heading count versus the canonical README.
 HEADING_TOLERANCE = 2
 
+# A released version named in prose, e.g. "v0.1.25" or "v1.0.0".
+VERSION_RE = re.compile(r"\bv(\d+\.\d+\.\d+)\b", re.IGNORECASE)
+
+# The "Release" row of the Status table, found by shape rather than by label,
+# because the label is translated in five of the six files and the row's last
+# cell is the only place a bare version stands alone. The label-free form
+# matters: a plain scan for "vN.N.N" also matches the Java and Python SDK
+# versions these READMEs cite (2.4.1, 2.2.0) and every version in prose, so it
+# cannot tell "this README advertises 1.0.0" from "this README mentions 1.0.0".
+RELEASE_ROW_RE = re.compile(
+    r"^\|[^\n|]*\|[^|\n]*v(\d+\.\d+\.\d+)[^|\n]*\|\s*$",
+    re.MULTILINE | re.IGNORECASE,
+)
+
 # locale -> (compiled native-content pattern, minimum matches in prose).
 # Counts are taken with fenced code blocks removed, so only translated prose is
 # measured. Thresholds are far below what any real translation produces; they
@@ -128,6 +142,7 @@ def main() -> int:
 
     base_headings: Optional[int] = None
     base_date: Optional[str] = None
+    version: Optional[str] = None
 
     # Pass 1: existence + switcher + banner, and record the canonical facts.
     texts: Dict[str, str] = {}
@@ -160,6 +175,9 @@ def main() -> int:
 
         if locale == "en":
             base_headings = heading_count(text)
+            rows = RELEASE_ROW_RE.findall(text)
+            if rows:
+                version = rows[0]
 
     if base_date is None and os.path.exists(os.path.join(ROOT, CANONICAL)):
         failures.append(f"{CANONICAL}: missing 'Last synced: <date>' banner")
@@ -186,6 +204,24 @@ def main() -> int:
                 failures.append(
                     f"{filename}: only {hits} native-content match(es) outside "
                     f"code blocks (need >= {minimum}); file may be untranslated"
+                )
+
+        if version is not None:
+            rows = RELEASE_ROW_RE.findall(text)
+            if not rows:
+                failures.append(
+                    f"{filename}: no Status-table release row naming a version; "
+                    f"the table should end a row with the released version"
+                )
+            elif len(rows) > 1:
+                failures.append(
+                    f"{filename}: {len(rows)} Status-table release rows "
+                    f"({', '.join(sorted(set(rows)))}); expected exactly one"
+                )
+            elif rows[0] != version:
+                failures.append(
+                    f"{filename}: release row says v{rows[0]}, canonical "
+                    f"{CANONICAL} says v{version}"
                 )
 
     if failures:

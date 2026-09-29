@@ -31,6 +31,7 @@
 - [상태](#상태)
 - [설치](#설치)
 - [빠른 시작](#빠른-시작)
+- [v1.0으로 마이그레이션](#v10으로-마이그레이션)
 - [기능 매트릭스](#기능-매트릭스)
 - [구성](#구성)
 - [패키지 구조](#패키지-구조)
@@ -60,7 +61,7 @@
 | 문서(README, MkDocs 사이트, ADR, SPEC, LEGACY) | 구현됨 |
 | 오프라인 테스트 + 전 엔드포인트 SDK 대 모의 e2e | 구현됨 |
 | 실제 Gateway 대상 통합 테스트 | 작성됨·환경 변수로 게이트됨. 실사용 확인은 사용자 실행 대기 |
-| 릴리스(GitHub + Gitee) | v0.1.25 ✓ |
+| 릴리스(GitHub + Gitee) | v1.0.0 |
 
 51개 HTTP 엔드포인트와 11개 시세 푸시 토픽이 모두 구현되었습니다. 수치는
 [docs/SPEC.md](./docs/SPEC.md)가 정본입니다. 다른 곳에서 수동으로 편집하지 마세요.
@@ -179,6 +180,39 @@ for {
 [`examples/`](./examples/README.md)에 있습니다: `quickstart`, `market-data`, `trading`,
 `futures`, `algo`, `streaming`.
 
+## v1.0으로 마이그레이션
+
+v1.0.0은 지금 사용 중인 API를 **변경하지 않습니다**. `pkg/hstong/*`, `pkg/types/`,
+`client/` 는 그대로이고 기본값으로 남습니다. 따로 할 일은 없습니다.
+v1.0.0이 추가하는 것은 동일한 51개 엔드포인트를 계층화하고 완성된 두 번째
+구현이며, 필요할 때 선택해 사용합니다.
+
+```go
+// 여전히 기본값이며, 여전히 올바르게 동작합니다:
+m := market.New(c)
+
+// v-next 계층을 선택합니다:
+stack, err := services.NewStack(c)
+if err != nil {
+    return err
+}
+defer stack.Close()
+q, err := stack.Market.BasicQot(ctx, req)
+```
+
+마이그레이션은 호출 단위로 점진적입니다. `pkg/hstong` 호출을 `pkg/services` 호출로
+자신 속도에 맞춰 바꾸면 되고, 둘은 공존합니다. 컴파일되는 샘플과 함께 있는 완전한
+가이드는 [docs/MIGRATION.md](./docs/MIGRATION.md)에 있습니다.
+
+시작하기 전에 알아둘 두 가지:
+
+- **주문 변경은 자동 재시도하지 않습니다.** 두 인터페이스 모두 마찬가지입니다.
+  trade·futures·algo 변경은 정확히 한 번만 시도하며, 모호한 실패는 재시도한다는
+  뜻이 아니라 호출자가 대조한다는 뜻입니다. 이는
+  [ADR 0003](./docs/adr/0003-no-auto-retry-orders.md)이며 마이그레이션해도
+  바뀌지 않습니다.
+- **금액과 수량은 `string` / `json.Number`이며 `float64`이 아닙니다.**
+
 ## 기능 매트릭스
 
 엔드포인트 수는 [docs/SPEC.md](./docs/SPEC.md)에서만 가져옵니다. 모든 라우트는
@@ -243,8 +277,8 @@ hstongapi4go/
 ├── pkg/hstong/        # 공개 관리자: 세션 + market/trade/future/algo/stream
 ├── pkg/types/         # 열거형, 상태 코드, 플랫폼 공개 키
 ├── pkg/domain/        # v-next: decimal value types, typed IDs, DTO mappers
-├── pkg/services/      # v-next: market/account/trading use cases
-├── pkg/transport/     # v-next: HTTP adapter (deadlines, caps, retry)
+├── pkg/services/      # v-next: Stack + market/account/trading/algo/futures use cases
+├── pkg/transport/     # v-next: wire mappers, pagination encoding, PushAdapter
 ├── internal/          # 내부: transport, push, crypto, errs, resilience, logging, metrics
 ├── gen/               # 생성된 protobuf 코드(편집 금지)
 ├── proto/             # 동봉 .proto 소스 + 출처

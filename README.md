@@ -54,6 +54,7 @@ Before writing your first call, understand these SDK abstractions:
 - [Feature Matrix](#feature-matrix)
 - [Configuration](#configuration)
 - [Package Layout](#package-layout)
+- [Migrating to v1.0](#migrating-to-v10)
 - [Documentation](#documentation)
 - [Build & Test](#build--test)
 - [Contributing](#contributing)
@@ -82,9 +83,9 @@ Before writing your first call, understand these SDK abstractions:
 | Integration tests against a real Gateway | Written and env-gated; live confirmation pending a user run |
 | OpenTelemetry traces and metrics | Implemented behind the `otel` build tag; stdlib-only without it |
 | Threat model and risk register | [docs/threat-model.md](./docs/threat-model.md); 7 adversarial defects found and fixed |
-| Enterprise CI (lint, security, coverage gate, SBOM, GoReleaser config) | 12 jobs green |
-| v-next layer (`pkg/domain`, `pkg/services`, `pkg/transport`, `internal/auth`) | Implemented and tested, **not yet reachable by a caller** — see [ARCHITECTURE.md](./ARCHITECTURE.md) |
-| Release (GitHub + Gitee) | v0.1.25 ✓ |
+| Enterprise CI (lint, security, coverage gate, SBOM, GoReleaser config) | 13 jobs green |
+| v-next layer (`pkg/domain`, `pkg/services`, `pkg/transport`, `internal/auth`) | Implemented, tested, and **feature-complete at 51/51 endpoints** — opt in via [`services.NewStack`](#migrating-to-v10); `pkg/hstong/*` stays the default |
+| Release (GitHub + Gitee) | v1.0.0 |
 
 All 51 HTTP endpoints and 11 market push topics are implemented. Counts are
 canonical in [docs/SPEC.md](./docs/SPEC.md); do not hand-edit them elsewhere.
@@ -267,8 +268,8 @@ hstongapi4go/
 ├── pkg/hstong/        # Public managers: session + market/trade/future/algo/stream
 ├── pkg/types/         # Enums, status codes, platform public keys
 ├── pkg/domain/        # v-next: decimal value types, typed IDs, DTO mappers
-├── pkg/services/      # v-next: market/account/trading use cases
-├── pkg/transport/     # v-next: HTTP adapter (deadlines, caps, retry)
+├── pkg/services/      # v-next: Stack + market/account/trading/algo/futures use cases
+├── pkg/transport/     # v-next: wire mappers, pagination encoding, PushAdapter
 ├── internal/          # Private: transport, push, crypto, errs, resilience, logging, metrics
 ├── gen/               # Generated protobuf code (DO NOT EDIT)
 ├── proto/             # Vendored .proto sources + provenance
@@ -280,6 +281,45 @@ hstongapi4go/
 ├── scripts/           # Build and verification scripts
 └── docs/              # MkDocs site, SPEC, ADRs, DESIGN, LEGACY
 ```
+
+## Migrating to v1.0
+
+v1.0.0 does **not** change the API you are already calling. `pkg/hstong/*`,
+`pkg/types/` and `client/` are unchanged, they remain the default, and you do not
+have to do anything. What v1.0.0 adds is a second, layered implementation of the
+same 51 endpoints that you opt into when you want it.
+
+```go
+// Still the default, and still correct:
+m := market.New(c)
+
+// Opt in to the v-next layer:
+stack, err := services.NewStack(c)
+if err != nil {
+    return err
+}
+defer stack.Close()
+q, err := stack.Market.BasicQot(ctx, req)
+```
+
+Migration is incremental and per-call: you replace `pkg/hstong` calls with
+`pkg/services` calls at your own pace, and the two coexist. The full
+before/after guide, with compiled samples, is
+[docs/MIGRATION.md](./docs/MIGRATION.md).
+
+Two things to know before you start:
+
+- **Order mutations are never auto-retried**, on either surface. A trade, futures
+  or algo mutation makes exactly one attempt; an ambiguous failure means you
+  reconcile, you do not retry. This is [ADR 0003](./docs/adr/0003-no-auto-retry-orders.md)
+  and migrating does not change it.
+- **Money and quantities are `string` / `json.Number`, never `float64`,** on both
+  surfaces.
+
+If you want the reasoning rather than the mechanics, `docs/VNEXT.md` records what
+was built and what was deliberately left undone, and the `v1.0.0` entry in
+[CHANGELOG.md](./CHANGELOG.md) lists what this release does **not** claim —
+including that it has never been run against a live Gateway.
 
 ## Documentation
 

@@ -31,6 +31,7 @@
 - [ステータス](#ステータス)
 - [インストール](#インストール)
 - [クイックスタート](#クイックスタート)
+- [v1.0 への移行](#v10-への移行)
 - [機能マトリクス](#機能マトリクス)
 - [設定](#設定)
 - [パッケージ構成](#パッケージ構成)
@@ -60,7 +61,7 @@
 | ドキュメント（README、MkDocs サイト、ADR、SPEC、LEGACY） | 実装済み |
 | オフラインテスト + 全エンドポイントの SDK 対モック e2e | 実装済み |
 | 実 Gateway に対する統合テスト | 作成済み・環境変数でゲート。実機確認はユーザー実行待ち |
-| リリース（GitHub + Gitee） | v0.1.25 ✓ |
+| リリース（GitHub + Gitee） | v1.0.0 |
 
 51 の HTTP エンドポイントと 11 の相場配信トピックがすべて実装済みです。件数は
 [docs/SPEC.md](./docs/SPEC.md) が正式です。他の場所で手動編集しないでください。
@@ -179,6 +180,38 @@ for {
 [`examples/`](./examples/README.md) にあります：`quickstart`、`market-data`、`trading`、
 `futures`、`algo`、`streaming`。
 
+## v1.0 への移行
+
+v1.0.0 は**いま使っている API を変更しません**。`pkg/hstong/*`、`pkg/types/`、
+`client/` はそのまま変更されておらず、既定のままです。何もする必要はありません。
+v1.0.0 が追加するのは、同じ 51 エンドポイントを階層化した完全な実装で、
+必要なときに選択して使うものです。
+
+```go
+// 引き続き既定のままで、正しく動きます:
+m := market.New(c)
+
+// v-next レイヤーを選択する:
+stack, err := services.NewStack(c)
+if err != nil {
+    return err
+}
+defer stack.Close()
+q, err := stack.Market.BasicQot(ctx, req)
+```
+
+移行は呼び出し単位で進めます。`pkg/hstong` の呼び出しを `pkg/services` の
+呼び出しに自分のペースで置き換えていきます。両者は併存します。コンパイルされる
+サンプル付きの完全な移行ガイドは [docs/MIGRATION.md](./docs/MIGRATION.md) にあります。
+
+始める前に知っておくべきことが 2 つあります:
+
+- **注文の操作は自動リトライしません**。どちらのインターフェースでも同じです。
+  trade・futures・algo の操作はそのとおり 1 回だけ試行し、曖昧な失敗は呼び出し側で
+  照合するという意味です。これは
+  [ADR 0003](./docs/adr/0003-no-auto-retry-orders.md) であり、移行しても変わりません。
+- **金額と数量は `string` / `json.Number` で、`float64` ではありません**。
+
 ## 機能マトリクス
 
 エンドポイント件数は [docs/SPEC.md](./docs/SPEC.md) のみから取得しています。すべての
@@ -243,8 +276,8 @@ hstongapi4go/
 ├── pkg/hstong/        # 公開マネージャ：セッション + market/trade/future/algo/stream
 ├── pkg/types/         # 列挙、ステータスコード、プラットフォーム公開鍵
 ├── pkg/domain/        # v-next: decimal value types, typed IDs, DTO mappers
-├── pkg/services/      # v-next: market/account/trading use cases
-├── pkg/transport/     # v-next: HTTP adapter (deadlines, caps, retry)
+├── pkg/services/      # v-next: Stack + market/account/trading/algo/futures use cases
+├── pkg/transport/     # v-next: wire mappers, pagination encoding, PushAdapter
 ├── internal/          # 内部：transport、push、crypto、errs、resilience、logging、metrics
 ├── gen/               # 生成された protobuf コード（編集禁止）
 ├── proto/             # 同梱 .proto ソース + 来歴

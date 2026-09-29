@@ -33,6 +33,7 @@
 - [Estado](#estado)
 - [Instalación](#instalación)
 - [Inicio rápido](#inicio-rápido)
+- [Migrar a v1.0](#migrar-a-v10)
 - [Matriz de funciones](#matriz-de-funciones)
 - [Configuración](#configuración)
 - [Estructura de paquetes](#estructura-de-paquetes)
@@ -62,7 +63,7 @@
 | Documentación (READMEs, sitio MkDocs, ADR, SPEC, LEGACY) | Implementado |
 | Pruebas offline + e2e SDK-a-mock de todos los endpoints | Implementado |
 | Pruebas de integración contra una pasarela real | Escritas y condicionadas por entorno; confirmación en vivo pendiente de ejecución del usuario |
-| Publicación (GitHub + Gitee) | v0.1.25 ✓ |
+| Publicación (GitHub + Gitee) | v1.0.0 |
 
 Los 51 endpoints HTTP y los 11 temas de push de mercado están implementados. Los
 recuentos son canónicos en [docs/SPEC.md](./docs/SPEC.md); no los edites a mano en
@@ -182,6 +183,40 @@ Hay programas ejecutables y compilables sin credenciales para cada superficie en
 [`examples/`](./examples/README.md): `quickstart`, `market-data`, `trading`,
 `futures`, `algo` y `streaming`.
 
+## Migrar a v1.0
+
+v1.0.0 **no** cambia la API que ya estás usando. `pkg/hstong/*`, `pkg/types/` y
+`client/` no cambian, siguen siendo la opción predeterminada y no tienes que hacer
+nada. Lo que añade v1.0.0 es una segunda implementación, por capas y probada, de
+los mismos 51 endpoints, a la que te apuntas cuando quieras.
+
+```go
+// Sigue siendo la opción predeterminada, y sigue siendo correcta:
+m := market.New(c)
+
+// Apuntarse a la capa v-next:
+stack, err := services.NewStack(c)
+if err != nil {
+    return err
+}
+defer stack.Close()
+q, err := stack.Market.BasicQot(ctx, req)
+```
+
+La migración es incremental y endpoint a endpoint: sustituyes las llamadas de
+`pkg/hstong` por llamadas de `pkg/services` a tu ritmo, y ambas conviven. La guía
+completa antes/después, con ejemplos compilados, está en
+[docs/MIGRATION.md](./docs/MIGRATION.md).
+
+Dos cosas que conviene saber antes de empezar:
+
+- **Las mutaciones de órdenes nunca se reintentan solas**, en ninguna de las dos
+  superficies. Una operación de trade, futuros o algo hace exactamente un intento;
+  un fallo ambiguo significa que reconcilias tú, no que reintentas. Esto es
+  [ADR 0003](./docs/adr/0003-no-auto-retry-orders.md) y migrar no lo cambia.
+- **El dinero y las cantidades son `string` / `json.Number`, nunca `float64`,** en
+  ambas superficies.
+
 ## Matriz de funciones
 
 Los recuentos de endpoints se toman solo de [docs/SPEC.md](./docs/SPEC.md). Todas las
@@ -247,8 +282,8 @@ hstongapi4go/
 ├── pkg/hstong/        # Gestores públicos: sesión + market/trade/future/algo/stream
 ├── pkg/types/         # Enumeraciones, códigos de estado, claves públicas de la plataforma
 ├── pkg/domain/        # v-next: decimal value types, typed IDs, DTO mappers
-├── pkg/services/      # v-next: market/account/trading use cases
-├── pkg/transport/     # v-next: HTTP adapter (deadlines, caps, retry)
+├── pkg/services/      # v-next: Stack + market/account/trading/algo/futures use cases
+├── pkg/transport/     # v-next: wire mappers, pagination encoding, PushAdapter
 ├── internal/          # Privado: transport, push, crypto, errs, resilience, logging, metrics
 ├── gen/               # Código protobuf generado (NO EDITAR)
 ├── proto/             # Fuentes .proto incluidas + procedencia

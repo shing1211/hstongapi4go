@@ -30,6 +30,7 @@
 - [状态](#状态)
 - [安装](#安装)
 - [快速开始](#快速开始)
+- [迁移到 v1.0](#迁移到-v10)
 - [功能矩阵](#功能矩阵)
 - [配置](#配置)
 - [包结构](#包结构)
@@ -59,7 +60,7 @@
 | 文档（README、MkDocs 站点、ADR、SPEC、LEGACY） | 已实现 |
 | 离线测试 + 全端点 SDK 对 mock 的端到端测试 | 已实现 |
 | 针对真实 Gateway 的集成测试 | 已编写并按环境变量门控；待用户实际运行确认 |
-| 发布（GitHub + Gitee） | v0.1.25 ✓ |
+| 发布（GitHub + Gitee） | v1.0.0 |
 
 全部 51 个 HTTP 端点和 11 个行情推送主题均已实现。计数以
 [docs/SPEC.md](./docs/SPEC.md) 为准；请勿在其他地方手动修改。
@@ -175,6 +176,36 @@ for {
 [`examples/`](./examples/README.md) 中提供覆盖每个接口的、可运行且无需凭据即可编译的程序：
 `quickstart`、`market-data`、`trading`、`futures`、`algo` 和 `streaming`。
 
+## 迁移到 v1.0
+
+v1.0.0 **不会**改变你正在调用的 API。`pkg/hstong/*`、`pkg/types/` 和 `client/`
+保持不变，仍是默认路径，你不需要做任何事。v1.0.0 新增的是同一批 51 个端点的第二套
+分层实现，你可以在需要时选择使用。
+
+```go
+// 仍是默认路径，也依然正确：
+m := market.New(c)
+
+// 选择 v-next 层：
+stack, err := services.NewStack(c)
+if err != nil {
+    return err
+}
+defer stack.Close()
+q, err := stack.Market.BasicQot(ctx, req)
+```
+
+迁移是渐进的，可以按调用逐个替换：按你自己的节奏把 `pkg/hstong` 的调用换成
+`pkg/services` 的调用，两者可以共存。带可编译示例的完整迁移指南见
+[docs/MIGRATION.md](./docs/MIGRATION.md)。
+
+开始之前请了解两点：
+
+- **订单变更永远不会自动重试**，两个接口都是如此。交易、期货或算法的一次变更
+  只尝试一次；出现含义不明确的失败时需要你去对账，而不是重试。这是
+  [ADR 0003](./docs/adr/0003-no-auto-retry-orders.md)，迁移不会改变这一点。
+- **金额和数量使用 `string` / `json.Number`，绝不使用 `float64`**，两个接口都是。
+
 ## 功能矩阵
 
 端点计数仅取自 [docs/SPEC.md](./docs/SPEC.md)。所有路由均为
@@ -237,8 +268,8 @@ hstongapi4go/
 ├── pkg/hstong/        # 公开管理器：会话 + market/trade/future/algo/stream
 ├── pkg/types/         # 枚举、状态码、平台公钥
 ├── pkg/domain/        # v-next: decimal value types, typed IDs, DTO mappers
-├── pkg/services/      # v-next: market/account/trading use cases
-├── pkg/transport/     # v-next: HTTP adapter (deadlines, caps, retry)
+├── pkg/services/      # v-next: Stack + market/account/trading/algo/futures use cases
+├── pkg/transport/     # v-next: wire mappers, pagination encoding, PushAdapter
 ├── internal/          # 私有：transport、push、crypto、errs、resilience、logging、metrics
 ├── gen/               # 生成的 protobuf 代码（请勿编辑）
 ├── proto/             # 内置 .proto 源 + 来源说明

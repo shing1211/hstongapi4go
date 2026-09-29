@@ -7,6 +7,110 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-09-29
+
+**The v-next layer is finished, and the v0.1.x surface is still the default.**
+Nothing under `pkg/hstong/*`, `pkg/types/`, `client/` or `internal/` changed shape
+in this release. What v1.0.0 adds is the *second* path: a layered, hardened,
+fully-tested implementation of the same 51 endpoints, reached through
+`services.NewStack`. Reaching it is opt-in and nothing about the default changes
+when you upgrade.
+
+**The v0.1.x API is not deprecated in this release.** v-next reached feature
+parity, which is the condition ADR 0011 sets for announcing a deprecation, so
+each `pkg/hstong` package now carries a notice pointing at
+[docs/MIGRATION.md](./docs/MIGRATION.md). The notice is prose rather than a
+`// Deprecated:` marker on purpose: `staticcheck` is enabled in this repository,
+so a marker would warn every existing consumer during a v0.1.x patch line —
+including this repository's own examples and the migration samples that exist
+precisely to show the old call shape. The machine-readable marker ships with
+this release's own tag, where the removal notice is a changelog line rather than
+a warning in everyone's build. `pkg/hstong/*` remains the supported default and
+its removal is **not** scheduled; it would need its own ADR.
+
+### Added
+
+- **`services.NewStack`** — the v-next entry point. Opt-in, and the reason v1.0.0
+  exists. `StackExecutor` embeds the executor and owns `Close`, closing the push
+  transport before the HTTP executor and exactly once.
+- **`services.PushTransport` / `transport.PushAdapter`** — a caller-declared
+  interface with one concrete adapter. This is the *opposite* direction to the
+  `pkg/transport.Adapter` the design originally assumed: interfaces live in the
+  dependent package, so `pkg/services` names what it needs and `pkg/transport`
+  supplies it.
+- **A supported migration guide** — [docs/MIGRATION.md](./docs/MIGRATION.md), with
+  before/after samples that are compiled and tied to the guide by test, so a
+  snippet cannot drift from the prose around it.
+- **Seven machine-checked layering boundaries** in `internal/layering`, which
+  parses the repository's own imports. The guard is verified by planting a
+  violating import, not by trusting that it would have failed.
+
+### Changed
+
+- **`domain.Tick`**, and `OrderBookResponse.TickSize` retyped from `Price`. A tick
+  is no longer a price: `domain.Price` now means "I observed this price and do
+  not know this instrument's tick schedule", and the zero tick says so
+  explicitly. 31 read-path prices that were constructed with a hardcoded `0.001`
+  tick — a plausible HK ETF or warrant grid, and wrong for HK stocks and for every
+  US instrument — now carry the zero tick.
+- **`transport.Pagination` split** into `domain.Pagination` (a value type) and
+  `transport.ApplyPagination` (the wire encoding). This is a breaking change to
+  an exported symbol and shipped in `v0.1.24`; it is not a violation of the
+  compatibility guarantee because `pkg/transport` is v-next code, which carries no
+  promise until v1.0. Migration is documented.
+
+### Removed
+
+- **`pkg/transport.Adapter`** — never adopted and never called from production.
+  Building it would have re-opened the wire leak: its `Do` would have dropped
+  rate limiting, circuit breaking, metrics and tracing from every v-next call.
+- **`internal/push.Manager` and `.Fanout`** — they implemented a *different*
+  protocol (TCP topic subscription) rather than a second version of the released
+  one, and no test had ever checked that assumption against a live Gateway. Their
+  removal leaves `internal/push` with a single connection lifecycle.
+
+### Fixed
+
+- **`ARCHITECTURE.md` §5 was false in two places** and no build or test could see
+  it: it claimed `pkg/transport` was imported by `pkg/services/account.go` (removed
+  when the wire leak closed) and that `internal/auth` had no production importer
+  (false once session began composing it). Both are now checked by
+  `TestVNextImportersInSection5AreAccurate`, which recomputes the claim from source.
+
+### Documentation
+
+- ADR 0010 rule 4 (`services` → `transport`) is **reversed** and the ADR is marked
+  *Amended*: `pkg/services` must not import `pkg/transport`. Both ADR 0010 and
+  ADR 0011 gained an *Implementation status* section recording what actually
+  shipped against what they decided.
+- `pkg/services` is at 100% of statements with every function at 100%, measured
+  from a clean `git clone`; it is now in the coverage gate.
+- `docs/VNEXT.md` steps 7 and 9 are closed.
+
+### What v1.0.0 does not claim
+
+Recorded here because a major version is exactly when a changelog starts
+overstating. None of these are fixed, and none are hidden:
+
+- **Not verified against a live Gateway.** Every test in this release runs
+  against the bundled mock Gateway. Integration tests exist and are env-gated, but
+  they have never been run against a real account (tracker G6). No amount of
+  mock coverage substitutes for that.
+- **The futures `entrustBs` value set is unresolved** (tracker C1b). The vendor's
+  enum documents two values and `docs/SPEC.md` §7.4 documents four. Both surfaces
+  accept `{1,2,3,4}` deliberately: narrowing on incomplete evidence is a
+  caller-visible behaviour change, and a rejected request is a better failure mode
+  than a misrouted order. One live request in a futures sandbox settles it.
+- **HK price-band tick schedules and `TickSchedule` rewiring are not done**
+  (tracker P5 steps 3–4). The bands must come from the exchange document.
+- **`ARCHITECTURE.md` §2's graph-derived symbol counts are stale.** The code index
+  is 78 commits behind, so regenerating them would have meant publishing figures
+  that cannot be reproduced. They were left stale on purpose and the index needs
+  re-analyzing.
+- **`internal/auth` silently discards a post-save read error** after a token
+  store. The current behaviour is deliberate and pinned by a test, and is a
+  v1.0-candidate to revisit.
+
 ## [0.1.25] - 2026-09-29
 
 **A read-path price no longer claims a grid the Gateway never promised, and a
@@ -1412,3 +1516,4 @@ canonical in [docs/SPEC.md](./docs/SPEC.md).
 [0.1.23]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.23
 [0.1.24]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.24
 [0.1.25]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.25
+[1.0.0]: https://github.com/shing1211/hstongapi4go/releases/tag/v1.0.0
