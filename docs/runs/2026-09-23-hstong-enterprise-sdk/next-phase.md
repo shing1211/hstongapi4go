@@ -117,6 +117,52 @@ executed, so the wire assumptions behind ADR 0007 — in particular whether mark
 the vendored Java and Python SDKs rather than observed. This needs a test
 account and is the highest-value item that cannot be done offline.
 
+#### Decision: deferred past v1.0.0, deliberately, and stated in public
+
+**Decision (F1, 2026-09-26):** v1.0.0 ships without a live Gateway run. This is
+a choice, not an oversight, and it is recorded here so that "we never checked"
+is a decision someone made rather than a gap nobody noticed.
+
+The reasoning is about what kind of claim v1.0.0 is making. It is making the claim
+that *two implementations of the same 51 endpoints* exist and agree with each
+other — the v0.1.x surface and the layered v-next surface, cross-checked against
+the same mock Gateway and the same 11 push topics. It is **not** making the claim
+that either one is correct, because that claim cannot be made without an account.
+`make parity-enforce` reporting 51/51 is a statement about the SDK being
+self-consistent, and reading it as a statement about the platform is the exact
+misreading this section exists to prevent.
+
+**The stated cost of deferring**, concretely — everything below is inferred, not
+observed:
+
+| Assumption | Inferred from | Settled by |
+|---|---|---|
+| Market `int64` fields arrive as JSON numbers, not quoted strings (ADR 0007) | Java + Python SDK sources | any one market call |
+| Futures `entrustBs` accepts 3 and 4, not just 1 and 2 (C1b) | `docs/SPEC.md` §7.4 vs the vendor enum | one `POST /trade/FuturesEntrust` with `entrustBs: "3"`, then cancel |
+| HK price-band tick schedules (P5 step 4) | not available offline | the exchange document |
+| Seven open questions in C2a | — | three risk-free calls that place no order: `FuturesQueryHistoryEntrustList` with no dates, `FuturesQueryProductInfo` for one code, one `TradeLogin` + `FuturesQueryFundInfo` |
+| The mock Gateway's response shapes | this repository | any real response |
+
+**The uncomfortable part, stated plainly:** a wrong wire assumption that the mock
+also gets wrong produces a fully green test suite and a broken production client.
+Mock-based e2e coverage cannot detect an error in the mock's own premise — it
+detects divergence between the SDK and the mock, and a shared misreading of the
+protocol is invisible to it by construction. That is the whole reason G6 is
+ranked as the highest-value offline-impossible item, and it is why this cost is
+written down instead of left as an asterisk.
+
+**What closing it would cost:** a Gateway account with funds available (order
+mutations are additionally gated on `HSTONG_PLACE_ORDERS=1`, and
+`HSTONG_TRADE_PASSWORD` in plaintext for session tests). The three C2a calls
+above place no orders and are the cheapest first step; the `entrustBs` question
+needs a real futures order and someone willing to cancel it.
+
+**Mitigation that does exist:** the codec dispatch in `internal/transport` is
+per-endpoint rather than global (ADR 0002), so a wrong answer for one endpoint is
+confined to that endpoint's codec and is a one-line change with a test, rather
+than a protocol-wide break. That is a partial answer, not a substitute.
+
+
 ### G7 — Open items in the security register (Medium)
 
 | Ref | Item | Why it is still open |
