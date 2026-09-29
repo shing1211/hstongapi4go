@@ -118,10 +118,12 @@ In summary, in order:
   repository's imports and asserts six boundary rules, and which also checks
   that no rule matches zero packages. Verified by planting a violating import.
   Evidence in `../../../docs/VNEXT.md` §5.6.
-- R14 — **done as a correction.** `doc.go` was already accurate; the register was
-  wrong to claim it advertised unimplemented behaviour. Re-scoped: the
-  single-flight and refresh primitives exist with no non-test caller, so they
-  are un-composed rather than undeclared. `doc.go` now says so explicitly.
+  - R14 — **done, then fixed.** Recorded here first as a correction on
+    2026-09-25: `doc.go` was accurate and the register was wrong to claim it
+    advertised unimplemented behaviour, so the entry was re-scoped to say the
+    primitives exist with no non-test caller. That was correct on 2026-09-25 and
+    is superseded: `3b38e43` then implemented the composition, and `53b3a2e`
+    closed the register entry and recorded the two-exclusion layering. See §5a.
 - Step 8 and step 1c — **done.** `pkg/transport` is at 100% and `internal/push`
   at 93.9%; both are gated. The gate now covers ten packages, and every package
   in the release path is covered. `internal/push` needed a second pass: the
@@ -190,12 +192,6 @@ block a release.
   translations.
 - ~~Restart the four stale `gitnexus mcp` processes.~~ **Done** — they were
   restarted and the MCP tools answer again.
-- ~~Fix the misleading `enabled: !ENV [CI, false]` in `mkdocs.yml`.~~ **Done** —
-  a comment at that line now explains the substitution resolves to `true`, so the
-  plugin is enabled on the runner and disabled locally.
-- ~~Reword `proto/PROVENANCE.md`'s byte-for-byte-upstream claim.~~ **Done** — its
-  "Line endings" section already states that git normalises CRLF to LF and that
-  the tree is not literally byte-identical.
 
 ## 7. Recommended order
 
@@ -236,3 +232,25 @@ covers every package in the release path.
 R8 (HTTP 5xx not retryable) is open but should stay that way: changing it would
 alter documented retry semantics, and the Gateway reports overload as `1011`
 inside a 200 envelope.
+
+## 9. Standing open items, re-derived 2026-09-29
+
+Sections 1 to 8 are written from the perspective of the session that produced
+them, and several items they still show as outstanding have since been closed.
+This section is the current list, re-derived from the tree rather than inherited
+from the prose above. An item is listed as blocked only when the blocker is
+named.
+
+| Ref | Item | Status | Blocker or note |
+|-----|------|--------|-----------------|
+| R14 | `internal/auth` single-flight and refresh un-composed | **Closed** (`3b38e43`, then `53b3a2e`) | Fixed, not merely disclosed. Two exclusions are kept deliberately: `SessionService.loginGate` owns production coalescing, `TokenManager.beginLogin`/`endLogin` is defence in depth that production traffic does not reach. `pkg/services/session_test.go` asserts the properties, and `TestAuthDocCallerClaimsAreAccurate` keeps the register and `doc.go` honest |
+| G8 | SHA-1 is platform-mandated and weak | **Closed** ([ADR 0013](../../adr/0013-sha1-push-verification.md)) | The Gateway signs with `SHA1WithRSA` and the SDK cannot choose otherwise. Previously recorded only as a residual-risk line in `P10-hardening.md:61`; promoted to a standing ADR. No behaviour change |
+| money-check | The `spreadLevel` waiver outlived v1.0.0 | **Closed** (`f28eccd`, v1.0.1) | The waiver's own terms said delete it rather than re-date it, so `OrderBookResponse.TickSize` is now `json.Number` and the `WAIVERS` table is empty. The table is kept so the next entry cannot be waved through |
+| N5 | Test debt: coverage, fuzz job, `otel` job, wider gate | **Closed** (`5a14c99`) | Both CI jobs exist: `ci.yml:232` fuzzes `FuzzReadFrame` for 30s and `ci.yml:211` builds, vets and tests with the `otel` tag. The gate covers eleven packages |
+| **G6** | **Live Gateway integration run** | **Blocked: needs a test account** | `test/integration` is env-gated and has never executed. The only item that can *retire* an assumption rather than tighten a guarantee: ADR 0007's "market `int64` arrives as a JSON number" is inferred solely from the vendored Java and Python SDKs |
+| **R3** | **Push read deadline stays off by default** | **Blocked behind G6** | `WithReadDeadline` is implemented and off. A non-zero default risks tearing down a healthy connection because the observed inter-frame gap is unknown, and measuring that gap is exactly what G6 would do |
+| **R8** | **HTTP 5xx not retryable** | **Open, and intended to stay** | Changing it would contradict documented retry semantics, and the Gateway reports overload as `1011` inside a 200 envelope. This is a disposition, not a defect |
+| **G4** | **Gitee release mirror** | **Blocked: needs `GITEE_TOKEN` and an ADR** | GoReleaser cannot target Gitee at all, because it supports GitHub, GitLab and Gitea, and a `gitee:` key fails validation. Mirroring artifacts means a hand-written workflow step calling the Gitee REST API, which is a supply-chain decision deserving its own ADR. `gh secret list` reports no Actions secrets |
+
+G6 and the Gitee mirror each need a credential this environment does not hold.
+Recording them as blocked is the honest state, not a deferral.

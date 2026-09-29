@@ -13,11 +13,12 @@ new ADR, not editing the old one.
 | [0005](./0005-key-model-and-push-verification.md) | Gateway key model and opt-in push verification | Accepted | RSA key handling lives in the Gateway, so the SDK does no signing; push `bodySHA1` verification is opt-in and off by default. |
 | [0006](./0006-test-dependencies.md) | Test-only dependencies | Accepted | `go.uber.org/goleak` is allowed as a test-only dependency for goroutine-leak verification. |
 | [0007](./0007-http-json-codec.md) | Gateway HTTP bodies are plain JSON | Accepted | Gateway HTTP bodies decode with `encoding/json` over typed structs (`int64` is a JSON number); `protojson` is a per-endpoint fallback only and TCP push stays binary protobuf. |
-| [0008](./0008-decimal-financial-types.md) | Decimal-backed financial types | Accepted (amended 2026-09-26) | `shopspring/decimal` at runtime in `pkg/domain/`; wire layer stays `string`/`json.Number`; `make money-check` rejects `float64` everywhere, with one dated, field-scoped exception for `market.OrderBookResponse.TickSize` that expires at v1.0.0. |
+| [0008](./0008-decimal-financial-types.md) | Decimal-backed financial types | Accepted (amended 2026-09-26) | `shopspring/decimal` at runtime in `pkg/domain/`; wire layer stays `string`/`json.Number`; `make money-check` rejects `float64` everywhere. The one field-scoped exception, `market.OrderBookResponse.TickSize`, was discharged at v1.0.0 and the waiver table is now empty. |
 | [0009](./0009-opentelemetry-observability.md) | OpenTelemetry observability | Accepted | OTel `otel` build tag; no-op default; tracer/meter injectable via `Client` options; full span + metric coverage of auth, HTTP, push, orders. |
 | [0010](./0010-vnext-layered-architecture.md) | Additive v-next layered architecture | Accepted | New `pkg/domain`, `pkg/services`, `pkg/transport`, `internal/auth` layer; v0.1.x surface stays stable. |
 | [0011](./0011-v01x-compatibility.md) | v0.1.x compatibility guarantees | Accepted | No breaking type or wire changes to `pkg/hstong/*`, `pkg/types`, `client/`, `internal/*`; mock Gateway and e2e tests unchanged. |
 | [0012](./0012-ci-secret-scanning.md) | CI-only secret scanning | Accepted | `gitleaks` runs as a pinned CI-only Action over the full history, with a path allowlist for the public platform keys, vendored protos, and the published AES test vector; `go.mod` is untouched. |
+| [0013](./0013-sha1-push-verification.md) | Accept SHA-1 for push frame verification | Accepted | The Gateway signs push frames with `SHA1WithRSA` and the algorithm is not the SDK's to choose; verification stays opt-in, the single `crypto/sha1` site is bounded by the localhost trust model, and the G505 suppression is reviewed rather than silent. |
 
 Template:
 
