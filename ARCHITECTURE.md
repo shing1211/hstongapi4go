@@ -115,9 +115,9 @@ flowchart TB
         GEN["gen/ generated<br/>protobuf types"]
     end
 
-    subgraph VNEXT["v-next layer — present, not wired in"]
-        SVC["pkg/services<br/>market · account · trading"]
-        ADP["pkg/transport<br/>Adapter"]
+    subgraph VNEXT["v-next layer — wired, reachable through services.NewStack"]
+        SVC["pkg/services<br/>Stack · market · account · trading<br/>algo · futures · session · push"]
+        PUA["pkg/transport<br/>PushAdapter"]
         AUT["internal/auth<br/>token lifecycle"]
     end
 
@@ -144,7 +144,9 @@ flowchart TB
 
     SVC --> CL
     SVC --> DOM
-    SVC --> ADP
+    SVC --> AUT
+    SVC --> PUA
+    PUA --> PSH
     AUT --> DOM
     FAN -.-> PSH
     DOM --> GEN
@@ -157,16 +159,17 @@ flowchart TB
     classDef forward fill:#5a4a8a,stroke:#33265c,color:#fff
     classDef ext fill:#3a3a4a,stroke:#22222e,color:#fff
     class CL,TRN,RES,ERR,LOG,MET,CRY,SES,PSH,DOM,GEN active
-    class SVC,ADP,AUT,FAN,OTL forward
+    class SVC,PUA,AUT,FAN,OTL forward
     class GW,PLAT ext
 ```
 
 Dashed edges are conditional: the `otel` packages compile only under the `otel`
-build tag, and the v-next push implementations have no production caller.
-`internal/push.Manager` and `.Fanout` were removed on 2026-09-25, so the `FAN`
-node in the diagram above no longer corresponds to source. The
-`pkg/domain → gen` edge is a real dependency that contradicts the declared
-boundary — see [§6](#6-layering-deviations).
+build tag. The `FAN` node stands for `internal/push`'s
+`normalizer.go`/`decode.go`/`freshness.go`, which do exist; the *types*
+`internal/push.Manager` and `.Fanout` were removed on 2026-09-25, and that
+retirement is why the node no longer names a manager. The `pkg/domain → gen`
+edge is a real dependency that contradicts the declared boundary — see
+[§6](#6-layering-deviations).
 
 ## 4. Key execution flows
 
@@ -275,31 +278,55 @@ payloads, and on a read error closes the connection and walks the reconnect
 ladder. This was the v-next `Manager`; the released stream API uses
 `internal/push.Client`, which has a separate lifecycle and is the survivor.
 
-## 5. The v-next layer is present but unreachable
+## 5. The v-next layer, and who can reach it
 
-Verified by import search over `IMPORTS` edges with test files excluded, then
-confirmed in source — not inferred.
+Verified by import search over non-test Go files, excluding `test/`, `cmd/`,
+`examples/`, `scripts/`, `docs/`, `site/` and `internal/migration` — confirmed in
+source, not inferred, and checked by
+`TestVNextImportersInSection5AreAccurate` so the table cannot go stale again.
+`internal/migration` is excluded because it is the compiled documentation-samples
+package that keeps MIGRATION.md honest; it is not SDK code and nothing depends on
+it.
 
-| Package | Imported by production code? |
-|---------|------------------------------|
-| `pkg/domain` | Only by v-next code: `internal/auth`, `internal/push`, `pkg/services`, `pkg/transport` |
-| `pkg/services` | **Nothing.** Zero production importers |
-| `pkg/transport` | Only `pkg/services/account.go`, itself unreachable |
-| `internal/auth` | **Nothing** — only `scripts/coverage_gate.go` |
-| `internal/push.Manager`, `.Fanout` | **Removed 2026-09-25.** Retired as part of the Option A decision (`docs/VNEXT.md` §5); `Client` and the shared framing, decoding, verification, and freshness helpers remain. |
+| Package | Imported by SDK production code? |
+|---------|----------------------------------|
+| `pkg/domain` | **Yes**, by v-next code only: `internal/auth`, `internal/push`, `pkg/services`, `pkg/transport` |
+| `pkg/services` | **No.** Nothing in the SDK imports it |
+| `pkg/transport` | **No.** Nothing in the SDK imports it |
+| `internal/auth` | **Yes** — `pkg/services/session.go` |
+| `internal/push.Manager`, `.Fanout` | **Removed 2026-09-25.** Retired as part of the Option A decision |
+| `pkg/transport.Adapter` | **Removed 2026-09-26.** See consequence 3 |
+
+**"Not imported" is not "unreachable", and the distinction is the point.** The two
+v-next entry points are *exported symbols* rather than importers: a caller writes
+`services.NewStack(c)` or `transport.NewPushAdapter()` and constructs the layer
+from outside. A repository-wide import search would never see that, which is why
+the table above reads "nothing imports it" and the layer is nonetheless usable —
+and is now exercised end to end against the mock Gateway.
+
+The one asymmetry worth stating: `internal/auth` and `internal/push` *are*
+imported by v-next code, so their hardening is reachable through the layer even
+though no released package imports it.
 
 Consequences worth stating plainly:
 
-1. `internal/push` now has a single connection lifecycle. The v-next
-   `Manager` and `Fanout` were removed because they implemented a *different
-   protocol* — TCP topic subscription — rather than a second version of the
-   released one, and no test had ever checked that assumption against a live
-   Gateway. The two behavioural differences the graph previously recorded here
-   no longer exist because there is nothing left to disagree with.
-2. The v-next auth hardening protects no caller today.
-3. `pkg/services` calls `client` directly instead of going through
-   `pkg/transport.Adapter`, so the adapter is bypassed even from the layer that
-   was meant to use it.
+1. `internal/push` has a single connection lifecycle. The v-next `Manager` and
+   `Fanout` were removed because they implemented a *different protocol* — TCP
+   topic subscription — rather than a second version of the released one, and no
+   test had ever checked that assumption against a live Gateway. The two
+   behavioural differences the graph previously recorded here no longer exist
+   because there is nothing left to disagree with.
+2. **The v-next auth hardening now protects a caller** (through
+   `SessionService`), where before this run it protected nobody.
+3. `pkg/services` calls `client` directly and reaches TCP push through the
+   `services.PushTransport` interface it declares, not through a
+   `pkg/transport` adapter. The `Adapter` that once sat between them was
+   **removed rather than adopted**: reading both `Do` implementations showed it
+   would have dropped rate limiting, circuit breaking, metrics and tracing from
+   every v-next call, and it had no production caller. The concrete push adapter
+   that exists today is `PushAdapter`, and it implements an interface the
+   services declare — the opposite direction, and the reason a new boundary rule
+   now forbids `pkg/services` importing `pkg/transport` at all.
 
 ## 6. Layering deviations
 
@@ -313,8 +340,8 @@ or in a package's own doc comment.
 | `pkg/domain` depends on stdlib and `decimal` only | It imports generated code | 18 non-test `IMPORTS` edges `pkg/domain → gen/hq/dto`; `pkg/domain/market.go:11`, `pkg/domain/symbol.go:7` |
 | Wire-to-domain conversion happens in the transport layer | `pkg/domain` performs it | `QuoteFromDTO`, `AccountBalanceFromDTO`, `EntrustFromWire` and peers live in `pkg/domain` |
 | `pkg/services` depends on `domain` plus service interfaces | It imports `client` (30 file edges) | `pkg/services/account.go:9`, `market.go:10`, `trading.go:12` |
-| `pkg/transport` implements the service interfaces | Nothing consumes it | no production importer of `Adapter` |
-| Import rules are "enforced by go build, review, and golangci-lint" | Only review enforces them | `.golangci.yml` enables no `depguard` or import-boundary rule |
+| `pkg/transport` implements the service interfaces | Nothing in the SDK imports it | no production importer outside the coverage gate — and this is now a **rule**, not an observation: `internal/layering` fails if `pkg/services` imports `pkg/transport` |
+| Import rules are "enforced by go build, review, and golangci-lint" | **Closed.** Seven boundaries are machine-checked by `internal/layering`, which parses the repository's own imports and is verified by planting a violating import | `internal/layering/layering_test.go` |
 
 These are recorded as candidates in
 [the next-phase plan](./docs/runs/2026-09-23-hstong-enterprise-sdk/next-phase.md)
