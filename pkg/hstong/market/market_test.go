@@ -210,8 +210,10 @@ func TestManager_Endpoints(t *testing.T) {
 			},
 			check: func(t *testing.T, got any) {
 				resp := got.(OrderBookResponse)
-				if resp.TickSize != 0.2 {
-					t.Errorf("TickSize = %v, want 0.2", resp.TickSize)
+				// The wire sent 0.2, and json.Number must carry those digits
+				// verbatim rather than round-tripping through a float.
+				if resp.TickSize.String() != "0.2" {
+					t.Errorf("TickSize = %q, want %q", resp.TickSize.String(), "0.2")
 				}
 				if len(resp.OrderBookAskList) != 1 || len(resp.OrderBookBidList) != 1 {
 					t.Fatalf("ask/bid lengths = %d/%d, want 1/1",
@@ -539,5 +541,59 @@ func TestOptionChain_RejectsEmptySecurityCode(t *testing.T) {
 	}
 	if n := len(rec.requests()); n != 0 {
 		t.Fatalf("recorded %d requests, want 0", n)
+	}
+}
+
+// TestOrderBookTickSizeKeepsTheWireDigits pins the reason OrderBookResponse.
+// TickSize is a json.Number and not a float64.
+//
+// The field shipped in v0.1.0 as float64 under a waiver in
+// scripts/check_money.py, because ADR 0011 guarantee 1 froze every exported v0.1.x
+// signature and float64 -> json.Number is a breaking change. v1.0.0 retired that
+// guarantee, so the waiver's own terms called for the change, and this is the test
+// that keeps the replacement honest.
+//
+// A tick is a decimal fraction the Gateway sends as a `double`. Reading it through
+// float64 would round 0.00000000001 to a value the wire never sent, and a caller
+// validating a price against the tick would then compute a wrong grid. The digits
+// must arrive exactly as transmitted, including trailing zeros and a bare integer,
+// because "0.2" and "0.200000" are the same tick but only one is what the Gateway
+// said.
+func TestOrderBookTickSizeKeepsTheWireDigits(t *testing.T) {
+	tests := []struct {
+		name string
+		wire string
+		want string
+	}{
+		{name: "shortest form", wire: `0.2`, want: "0.2"},
+		{name: "four decimal places", wire: `0.0005`, want: "0.0005"},
+		{name: "trailing zeros preserved", wire: `0.200000`, want: "0.200000"},
+		{name: "bare integer", wire: `1`, want: "1"},
+		{name: "leading zero", wire: `0.01`, want: "0.01"},
+		{name: "beyond float64 exactness", wire: `0.00000000001`, want: "0.00000000001"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			body := `{"ok":true,"err":"","data":{` +
+				`"security":{"dataType":10000,"code":"0700.HK"},` +
+				`"orderBookAskList":[],"orderBookBidList":[],` +
+				`"spreadLevel":` + tc.wire + `}}`
+			m, _ := newTestManager(t, map[string]string{"/hq/OrderBook": body})
+
+			resp, err := m.OrderBook(context.Background(), OrderBookRequest{
+				Security:      &dto.Security{DataType: 10000, Code: "0700.HK"},
+				MktTmType:     1,
+				DepthBookType: 3,
+			})
+			if err != nil {
+				t.Fatalf("OrderBook: %v", err)
+			}
+			if got := resp.TickSize.String(); got != tc.want {
+				t.Errorf("TickSize = %q, want %q: the digits the Gateway sent must "+
+					"survive verbatim, because a tick is the grid a price is validated "+
+					"against", got, tc.want)
+			}
+		})
 	}
 }

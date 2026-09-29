@@ -5,6 +5,7 @@ package market
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/shing1211/hstongapi4go/client"
@@ -106,9 +107,23 @@ type OrderBookResponse struct {
 	OrderBookAskList []*dto.OrderBook `json:"orderBookAskList"`
 	// OrderBookBidList is the bid (buy) side.
 	OrderBookBidList []*dto.OrderBook `json:"orderBookBidList"`
-	// TickSize is the minimum price step ("spreadLevel" on the wire). It is a
-	// price tick, so it stays a float64.
-	TickSize float64 `json:"spreadLevel"`
+	// TickSize is the minimum price step ("spreadLevel" on the wire).
+	//
+	// It was float64 until v1.0.0, under the waiver that
+	// scripts/check_money.py records: the field shipped in v0.1.0 and ADR 0011
+	// guarantee 1 froze it, so a breaking type change could not land during
+	// v0.1.x. v1.0.0 retired that guarantee, so the waiver's own terms call for
+	// this change, and the waiver has been deleted rather than re-dated.
+	//
+	// It is json.Number rather than float64 because a tick is a decimal fraction
+	// the Gateway sends as a `double`, and reading it through float64 discards
+	// digits the wire carried - the silent precision loss ADR 0008 exists to
+	// prevent. json.Number keeps them verbatim, which is the same reasoning
+	// already applied to TickSchedule.TickSize in this package. A tick is a grid,
+	// not a money amount and not a price, so it is not a domain.Tick either: the
+	// v-next OrderBookResponse.TickSize is that, and this released type stays a
+	// verbatim wire value.
+	TickSize json.Number `json:"spreadLevel"`
 }
 
 // OrderBook returns the real-time order book for a single security. A nil

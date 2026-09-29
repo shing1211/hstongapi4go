@@ -83,28 +83,34 @@ MONEY_TOKENS = {
 #
 #     TickSize float64 `json:"spreadLevel"`
 #
-#   Why it is excepted. The field shipped in v0.1.0, so ADR 0011 guarantee 1
-#   ("no existing exported type signature is modified") covers it and
-#   float64 -> json.Number is a breaking change for every v0.1.x consumer of
-#   pkg/hstong/market. The Gateway documents this wire value as a plain
-#   `double`, and the SDK only ever reads it: it is never re-emitted, never
-#   summed, and never rounded, so the silent precision loss ADR 0008 exists to
-#   prevent cannot be reached through it. The Go name was chosen for this field
-#   when the guard judged Go names only, specifically so it would not be
-#   flagged; the json-tag rule added 2026-09-26 closed that evasion, and this
-#   waiver replaces the hidden exception with a dated, reviewable one.
+#   Why it was excepted. The field shipped in v0.1.0, so ADR 0011 guarantee 1
+#   ("no existing exported type signature is modified") covered it and
+#   float64 -> json.Number was a breaking change for every v0.1.x consumer of
+#   pkg/hstong/market. The Go name was chosen for this field when the guard
+#   judged Go names only, specifically so it would not be flagged; the json-tag
+#   rule added 2026-09-26 closed that evasion, and the waiver replaced the
+#   hidden exception with a dated, reviewable one.
 #
-#   When it is removed. At v1.0.0 (run task G1), which retires ADR 0011
-#   guarantee 1 along with the v0.1.x deprecation path. The field becomes
-#   json.Number and this entry is deleted outright, with nothing replacing it —
-#   the waiver exists only to honour a compatibility promise that v1.0 retires,
-#   so it must not outlive the promise. If the field change is deferred past
-#   v1.0.0, the waiver stays and this entry must be re-dated, not left to rot.
+#   Why it is gone. v1.0.0 shipped on 2026-09-29, which retired ADR 0011
+#   guarantee 1, and the waiver's own terms said the field becomes json.Number
+#   at that point and this entry is deleted outright with nothing replacing it.
+#   The field did change, in v1.0.0's own release, so the waiver was not
+#   re-dated: TickSize is json.Number, pinned by
+#   TestOrderBookTickSizeKeepsTheWireDigits, and no waiver is outstanding.
+#
+#   A tick is a decimal fraction the Gateway sends as a `double`, so reading it
+#   through float64 would round digits the wire carried. That is the silent
+#   precision loss ADR 0008 exists to prevent, and it is reachable rather than
+#   theoretical: a caller validates a price against the tick, so a rounded tick
+#   yields a wrong grid.
+#
+#   The waiver mechanism is kept, deliberately empty. An empty table is the
+#   honest state after the last entry is honoured, and it keeps the code path
+#   that matches a declaration site intact for the next one, so adding a
+#   float money field cannot be waved through by accident.
 Waiver = namedtuple("Waiver", "path field key gotype")
 
-WAIVERS = (
-    Waiver("pkg/hstong/market/market.go", "TickSize", "spreadLevel", "float64"),
-)
+WAIVERS = ()
 
 
 def waiver_for(rel, field, key, gotype):

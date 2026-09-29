@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **market.OrderBookResponse.TickSize is now `json.Number`, not `float64`.** This
+  is a breaking change to an exported type in the released v0.1.x surface, and it
+  lands after `v1.0.0` retired ADR 0011 guarantee 1, which is the only reason it
+  is permitted at all. A tick is a decimal fraction the Gateway sends as a `double`;
+  reading it through `float64` rounds digits the wire carried, and the case is
+  reachable rather than theoretical because a caller validates a price against
+  the tick, so a rounded tick yields a wrong grid. `json.Number` carries the
+  transmitted form verbatim.
+
+  The field was waived from the money-check guard rather than silently
+  excepted, and its own terms said the waiver is deleted at v1.0.0 with nothing
+  replacing it. That is what happened: `scripts/check_money.py` now carries an empty
+  `WAIVERS` table, kept deliberately so the next float money field cannot be
+  waved through by accident, and the guard was re-proven to still fail on a
+  planted violation after the entry was removed.
+  `TestOrderBookTickSizeKeepsTheWireDigits` pins the wire digits, including
+  a value beyond `float64`'s exact range.
+
 ### Documentation
 
 - **`ARCHITECTURE.md` §2 is regenerated from a fresh code graph.** The index had

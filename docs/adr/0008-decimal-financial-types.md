@@ -215,9 +215,15 @@ is free to read it as an `int64` of ten-thousandths, a `float64`, or a string.
 - The Decision section above is left unedited. The exception is additive and
   expires; superseding the rule outright would delete the standard the waiver is
   measured against.
-- v1.0.0 carries a follow-on obligation, tracked as part of G1: change
+- v1.0.0 carried a follow-on obligation, tracked as part of G1: change
   `OrderBookResponse.TickSize` to `json.Number` and delete the `WAIVERS` entry.
-  If that does not happen, this ADR is wrong and the entry must be re-dated.
+  **Discharged.** v1.0.0 shipped 2026-09-29, retiring ADR 0011 guarantee 1, and the
+  field is `json.Number` with the `WAIVERS` table now empty. The entry was deleted
+  rather than re-dated, which is what the obligation required, so this ADR is not
+  wrong and no re-dating is needed. Pinned by
+  `TestOrderBookTickSizeKeepsTheWireDigits`, which asserts the transmitted digits
+  survive verbatim - including a value beyond float64's exact range, which is the
+  reachable case that motivated the waiver in the first place.
 
 ## References
 
