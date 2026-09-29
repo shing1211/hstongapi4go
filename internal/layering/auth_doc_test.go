@@ -43,17 +43,6 @@ var (
 
 // symbolRE pulls the method names out of a disclosure sentence.
 //
-// A lowerCamelCase name is only taken when it is governed by "no caller" or
-// "no non-test caller" - that phrase is what scopes the claim - and a qualified
-// name is only taken when its qualifier is one of the three types this package
-// documents. Both restrictions matter. Without the first, "Authenticator.Login
-// does hold it across the injected login function" contributes a bare Login that
-// is not being disclosed at all. Without the second, any incidental dotted
-// expression in the sentence is read as a claim.
-var symbolRE = regexp.MustCompile(
-	`(?:TokenManager|Session|Authenticator)\.([A-Z][A-Za-z0-9_]*)` +
-		`|(?:no caller outside tests|no non-test caller)[^.]*?\b([a-z][A-Za-z0-9_]*[A-Z][A-Za-z0-9_]*)\b`)
-
 // fixedCommitRE captures the hash a register row cites for its status. A row that
 // resolves by removal has no commit, because nothing changed in the code; a row
 // marked fixed has one, and a commit that exists without being cited is how a
@@ -242,10 +231,17 @@ func testFixedRowCommits(t *testing.T) {
 			"longer reads the register", registerFile, registerTable)
 	}
 
+	// A shallow clone cannot resolve a historical commit, and CI checks out
+	// with actions/checkout's default depth. Asking git whether an old hash
+	// exists would then fail on citations that are perfectly correct, so the
+	// check only applies where the object is actually reachable from HEAD.
+	shallow := repoIsShallow(root)
+
 	rows := 0
+	var skipped int
 	for _, row := range tableRows(section) {
-		// The header row and the separator carry no hash and are skipped by the
-		// status test below, so counting rows that cite a commit is enough.
+		// The header row and the separator carry no hash, so counting rows that
+		// cite a commit is enough.
 		hashes := fixedCommitRE.FindAllStringSubmatch(row, -1)
 		if len(hashes) == 0 {
 			continue
@@ -253,9 +249,18 @@ func testFixedRowCommits(t *testing.T) {
 		rows++
 		for _, h := range hashes {
 			hash := h[1]
-			if !commitExists(root, hash) {
+			switch commitReachability(root, hash) {
+			case commitPresent:
+			case commitAbsent:
 				t.Errorf("register row cites commit %s, which is not in this "+
 					"repository: %s", hash, truncate(row, 100))
+			case commitUnreachable:
+				// This clone is too shallow to resolve it, which says nothing about
+				// whether the citation is correct. Not a failure, and not silent
+				// either: the count is reported below so a run that verified less
+				// than it looks is visible rather than indistinguishable from a
+				// full pass.
+				skipped++
 			}
 		}
 	}
@@ -263,16 +268,66 @@ func testFixedRowCommits(t *testing.T) {
 		t.Fatalf("no register row cites a commit; either the citations were " +
 			"dropped or the table format changed, and this test is no longer checking anything")
 	}
+	if shallow && skipped > 0 {
+		t.Logf("shallow clone: %d of %d citations could not be resolved and were "+
+			"not checked; fetch full history to verify them", skipped, rows)
+	}
 }
 
-// commitExists reports whether hash resolves to a commit in the repository.
+// commitState is what a repository can say about a cited hash.
+type commitState int
+
+const (
+	// commitPresent means the object exists and is a commit.
+	commitPresent commitState = iota
+	// commitAbsent means the repository does not contain it at all, which is the
+	// case a citation error produces.
+	commitAbsent
+	// commitUnreachable means the object is not visible from this clone. A
+	// shallow clone reports this for any commit outside its depth window, and it
+	// is not evidence that the citation is wrong.
+	commitUnreachable
+)
+
+// commitReachability classifies a cited hash without treating "this clone cannot
+// see it" as "it does not exist".
 //
-// --verify keeps the check honest without needing the object to be present: an
-// unknown or malformed hash exits non-zero, which is exactly the case to catch.
-func commitExists(root, hash string) bool {
-	cmd := exec.Command("git", "cat-file", "-e", hash+"^{commit}")
+// The two failures are indistinguishable from git alone: in a shallow clone, a
+// citation that predates the fetched window and a citation that names nothing both
+// produce "fatal: Needed a single revision" and exit 128. So the clone's own
+// history boundary decides. A full clone is authoritative and reports absence
+// as absence; a shallow clone cannot be, and reports anything it cannot resolve as
+// unreachable instead of guessing.
+//
+// `^{commit}` is appended so a tag or a tree is not accepted where a commit is
+// required.
+func commitReachability(root, hash string) commitState {
+	if commitResolvable(root, hash) {
+		return commitPresent
+	}
+	if repoIsShallow(root) {
+		return commitUnreachable
+	}
+	return commitAbsent
+}
+
+// commitResolvable reports whether hash names a commit visible from this clone.
+func commitResolvable(root, hash string) bool {
+	cmd := exec.Command("git", "rev-parse", "--verify", "--quiet", hash+"^{commit}")
 	cmd.Dir = root
 	return cmd.Run() == nil
+}
+
+// repoIsShallow reports whether root is a shallow clone, where citations older
+// than the fetched window cannot be resolved.
+func repoIsShallow(root string) bool {
+	cmd := exec.Command("git", "rev-parse", "--is-shallow-repository")
+	cmd.Dir = root
+	out, err := cmd.Output()
+	if err != nil {
+		return false
+	}
+	return strings.TrimSpace(string(out)) == "true"
 }
 
 // truncate shortens a table row for a failure message.
