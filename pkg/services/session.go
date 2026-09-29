@@ -134,25 +134,41 @@ type loginAttempt struct {
 // loginGate coalesces concurrent logins for one account into a single HTTP
 // request, and it is the only lock on the login path.
 //
-// # Why this is not a second lock
+// # Why this gate, and not the one behind it
 //
-// internal/auth holds three locks, and none of them is this one. Its store
-// guards the session map, TokenManager's pending map is keyed by account, and
-// session.Machine guards the login state transitions - but Authenticator.Login
-// holds none of them across the call to the injected login function, so two
-// concurrent logins reach the Gateway as two requests. The primitives that
-// would close that gap (TokenManager.IsLoginInProgress, markLoginPending,
-// clearLoginPending, and the sessionManager built on session.Machine) are
-// unexported or write-only outside internal/auth, so the composition cannot reach
-// them from here; internal/auth's own doc.go records that they have no caller
-// outside its tests.
+// internal/auth coalesces logins too. TokenManager.beginLogin takes a
+// per-account flight for the same reason, and Authenticator.Login does hold it
+// across the injected login function. So there are two exclusions here, and the
+// honest reason this one still owns production traffic is reachability rather
+// than capability.
 //
-// This gate is therefore not a duplicate of an existing exclusion, it is the
-// exclusion that does not exist yet, and it is scoped as narrowly as the
-// problem: it is taken for a map lookup and for publishing a result, never
-// across an HTTP call, so a slow Gateway cannot block a login for a different
-// account or a Logout. The accounting is per account rather than global so two
-// accounts can authenticate in parallel.
+// NewSessionService builds exactly one Authenticator, and this gate is held for
+// the whole of the s.auth.Login call in establish. A caller that arrives while a
+// login is in flight joins here and never reaches Authenticator.Login at all, so
+// the inner flight only ever sees the single leader. Production traffic does not
+// currently contend there; the five tests that exercise it construct an
+// Authenticator directly, which no production path does.
+//
+// That is a reason to keep this gate and the documented status of the inner one,
+// not a reason to believe the inner one is load-bearing. It is defence in depth
+// for a direct internal/auth caller that does not exist yet, and it is
+// unexported and un-composed, so it cannot become a second source of truth about
+// who coalesces a login: this gate is the only place that decides, and the
+// properties are asserted here in session_test.go.
+//
+// # Why this one is scoped the way it is
+//
+// The gate is taken for a map lookup and for publishing a result, never across
+// an HTTP call, so a slow Gateway cannot block a login for a different account or
+// a Logout. The accounting is per account rather than global so two accounts can
+// authenticate in parallel. It also owns the store re-read in establish, which
+// the inner flight does not do: a leader that lost the race re-reads the session
+// rather than issuing a second request, and that logic needs the SessionStore,
+// which internal/auth has but cannot consult from here.
+//
+// The refresh window is the other half, and it is decided here too:
+// liveSession asks Session.ShouldRefresh, which is true from ten minutes before
+// expiry, where internal/auth's own check is IsExpired alone.
 //
 // A SessionService is safe for concurrent use once constructed and must not be
 // copied after first use.
