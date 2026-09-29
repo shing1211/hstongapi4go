@@ -98,6 +98,40 @@ HEADING_RE = re.compile(r"^(#{1,6})\s")
 SYNC_RE = re.compile(r"Last synced:\s*(\S+)")
 FENCE_RE = re.compile(r"^\s*(```|~~~)")
 
+# A fenced Go code block, and a table-of-contents entry with an in-page anchor.
+GO_BLOCK_RE = re.compile(r"^```(?:go|golang)[ \t]*\n(.*?)^```", re.M | re.S)
+TOC_ANCHOR_RE = re.compile(r"^\s*-\s*\[.*\]\(#([^)]+)\)\s*$", re.M)
+MD_HEADING_RE = re.compile(r"^(#{1,6})\s+(.*?)\s*$", re.M)
+
+
+def gh_anchor(heading: str) -> str:
+    """GitHub's slug for a heading: lowercase, drop punctuation, spaces to hyphens."""
+    out = []
+    for ch in heading.strip().lower():
+        if ch.isalnum() or ch in "-_":
+            out.append(ch)
+        elif ch.isspace():
+            out.append("-")
+    return "".join(out)
+
+
+def go_statements(block: str) -> str:
+    """The statements of a Go block, with comments and blank lines removed.
+
+    The translations deliberately translate the comments inside code samples -
+    that predates this check, and the Quickstart block has always done it - so a
+    byte comparison would fail on correct translations. What must not vary is the
+    code: a translated identifier, argument, or reordered line is something a
+    reader would try to compile. Comments are therefore stripped and what
+    remains has to match exactly.
+    """
+    return "\n".join(
+        line.rstrip()
+        for line in block.split("\n")
+        if line.strip() and not line.strip().startswith("//")
+    )
+
+
 
 def expected_switcher() -> str:
     """Return the canonical switcher line shared by all six READMEs."""
@@ -143,6 +177,7 @@ def main() -> int:
     base_headings: Optional[int] = None
     base_date: Optional[str] = None
     version: Optional[str] = None
+    base_go: Optional[list] = None
 
     # Pass 1: existence + switcher + banner, and record the canonical facts.
     texts: Dict[str, str] = {}
@@ -175,6 +210,7 @@ def main() -> int:
 
         if locale == "en":
             base_headings = heading_count(text)
+            base_go = GO_BLOCK_RE.findall(text)
             rows = RELEASE_ROW_RE.findall(text)
             if rows:
                 version = rows[0]
@@ -223,6 +259,34 @@ def main() -> int:
                     f"{filename}: release row says v{rows[0]}, canonical "
                     f"{CANONICAL} says v{version}"
                 )
+
+        if base_go is not None:
+            blocks = GO_BLOCK_RE.findall(text)
+            if len(blocks) != len(base_go):
+                failures.append(
+                    f"{filename}: {len(blocks)} Go code block(s), "
+                    f"{CANONICAL} has {len(base_go)}"
+                )
+            else:
+                drifted = [
+                    i
+                    for i, (a, b) in enumerate(zip(base_go, blocks))
+                    if go_statements(a) != go_statements(b)
+                ]
+                if drifted:
+                    failures.append(
+                        f"{filename}: Go code in block(s) {drifted} differs from "
+                        f"{CANONICAL} (comments may be translated; statements "
+                        f"may not)"
+                    )
+
+        have = {gh_anchor(m.group(2)) for m in MD_HEADING_RE.finditer(text)}
+        broken = [a for a in TOC_ANCHOR_RE.findall(text) if a not in have]
+        if broken:
+            failures.append(
+                f"{filename}: table-of-contents anchor(s) with no matching "
+                f"heading: {', '.join(broken)}"
+            )
 
     if failures:
         print("i18n check failed:", file=sys.stderr)

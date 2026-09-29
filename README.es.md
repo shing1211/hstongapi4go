@@ -217,6 +217,9 @@ Dos cosas que conviene saber antes de empezar:
 - **El dinero y las cantidades son `string` / `json.Number`, nunca `float64`,** en
   ambas superficies.
 
+Si te interesa el razonamiento y no la mecánica, `docs/VNEXT.md` registra lo que se construyó y lo que se dejó sin hacer deliberadamente, y la entrada `v1.0.0` del [CHANGELOG.md](./CHANGELOG.md) enumera lo que esta versión **no** afirma, incluido que nunca se ha ejecutado contra un Gateway real.
+
+
 ## Matriz de funciones
 
 Los recuentos de endpoints se toman solo de [docs/SPEC.md](./docs/SPEC.md). Todas las

@@ -212,6 +212,9 @@ q, err := stack.Market.BasicQot(ctx, req)
   [ADR 0003](./docs/adr/0003-no-auto-retry-orders.md) であり、移行しても変わりません。
 - **金額と数量は `string` / `json.Number` で、`float64` ではありません**。
 
+手順ではなく根拠を知りたい場合は、`docs/VNEXT.md` に何を作ったか、何を意図的に残したかが記録されています。また [CHANGELOG.md](./CHANGELOG.md) の `v1.0.0` の項には、このリリースが**主張しない**ことが列挙されており、実 Gateway に対して一度も実行されていないことも含みます。
+
+
 ## 機能マトリクス
 
 エンドポイント件数は [docs/SPEC.md](./docs/SPEC.md) のみから取得しています。すべての

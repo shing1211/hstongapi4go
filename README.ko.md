@@ -213,6 +213,9 @@ q, err := stack.Market.BasicQot(ctx, req)
   바뀌지 않습니다.
 - **금액과 수량은 `string` / `json.Number`이며 `float64`이 아닙니다.**
 
+절차보다 근거를 알고 싶다면 `docs/VNEXT.md`에 무엇을 만들었고 무엇을 의도적으로 남겨 두었는지 기록되어 있습니다. 그리고 [CHANGELOG.md](./CHANGELOG.md)의 `v1.0.0` 항목에는 이번 릴리스가 **주장하지 않는** 것이 나열되어 있으며, 실제 Gateway에 대해 한 번도 실행되지 않았다는 점도 포함됩니다.
+
+
 ## 기능 매트릭스
 
 엔드포인트 수는 [docs/SPEC.md](./docs/SPEC.md)에서만 가져옵니다. 모든 라우트는

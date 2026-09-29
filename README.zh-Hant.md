@@ -206,6 +206,9 @@ q, err := stack.Market.BasicQot(ctx, req)
   [ADR 0003](./docs/adr/0003-no-auto-retry-orders.md)，遷移不會改變這一點。
 - **金額與數量使用 `string` / `json.Number`，絕不使用 `float64`**，兩個介面皆然。
 
+如果你想了解的是理由而不是操作步驟，`docs/VNEXT.md` 記錄了建置了什麼、以及刻意沒有做什麼；而 [CHANGELOG.md](./CHANGELOG.md) 中的 `v1.0.0` 條目列出了本次發布**不**主張的內容，包括它從未針對真實 Gateway 執行過。
+
+
 ## 功能矩陣
 
 端點計數僅取自 [docs/SPEC.md](./docs/SPEC.md)。所有路由均為
