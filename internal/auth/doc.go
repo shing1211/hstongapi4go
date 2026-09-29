@@ -21,22 +21,31 @@
 //
 // Not yet implemented, and therefore not claimed here:
 //
-//   - Automatic re-login when a token expires mid-operation.
-//   - Re-login backoff. The public pkg/hstong.SessionManager has a
-//     single-flight EnsureLoggedIn; Authenticator has no equivalent yet.
-//   - A refresh action driven by Session.ShouldRefresh. Callers read RefreshAt
-//     and decide.
+//   - Automatic re-login when a token expires mid-operation. Authenticator
+//     detects an expired session in MustBeAuthenticated and reports
+//     errTokenExpired; deciding to re-login is the caller's call, not this
+//     package's.
+//   - A refresh action driven by Session.ShouldRefresh. The field and the
+//     method exist; nothing calls ShouldRefresh, so the refresh window is
+//     advisory. Callers read RefreshAt and decide.
 //
-// The primitives for the last two exist but nothing composes them:
-// Session.ShouldRefresh, TokenManager.IsLoginInProgress, markLoginPending, and
-// clearLoginPending have no caller outside tests. Concurrent logins are
-// therefore not coalesced, and the refresh window is never acted on.
-// Authenticator does check Session.IsExpired, so it re-logs-in on an expired
-// token; the single-flight wrapper and the refresh trigger are what is missing.
-// Do not read the presence of those methods as evidence that either behaviour
-// is active.
+// What this package does do, and previously only claimed to:
 //
-// This package is not yet wired into the released client. See
-// docs/threat-model.md for which controls are active and which are
-// forward-looking.
+//   - Concurrent logins for the same account are coalesced. The first caller
+//     performs the request and the rest wait for it and read the session it
+//     produced, so N callers do not become N login requests against the
+//     Gateway. Waiters honor context cancellation. A login that begins after
+//     the flight ends performs its own request rather than reading a session
+//     that may already be expiring.
+//
+// Do not read the presence of an unused method as evidence of an active
+// behaviour: Session.ShouldRefresh, TokenManager.IsLoginInProgress,
+// markLoginPending and clearLoginPending still have no caller outside tests, and
+// the coalescing above is implemented by the flight in
+// TokenManager.beginLogin/endLogin, not by those four.
+//
+// This package is the v-next session layer. It is composed by
+// pkg/services.SessionService, and nothing under pkg/hstong/* reaches it; the
+// released v0.1.x session path remains independent. See docs/threat-model.md
+// for which controls are active and which are forward-looking.
 package auth
