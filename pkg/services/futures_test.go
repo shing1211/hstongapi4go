@@ -3567,18 +3567,24 @@ func TestFuturesMutationsAcceptTheDocumentedBoundaries(t *testing.T) {
 // TestFuturesEntrustBSKeepsTheReleasedFour is the pin design-futures-requests
 // §9.3 asks for, in the spirit of A6's TestEveryDocumentedCodeIsAccepted.
 //
-// The set is disputed: the vendor's *futures* enum has two values and SPEC §7.4
-// plus the released pkg/hstong/future have four. §9.3 decides to keep four and
-// NOT to narrow, because narrowing is a caller-visible change on a
-// money-moving field decided on incomplete evidence, and because being
-// permissive fails as a clear Gateway rejection rather than a misroute. A test
-// that pinned {3,4} as accepted is what stops a future narrowing attempt
-// succeeding quietly on the strength of a plausible reading of the vendor enum.
-func TestFuturesEntrustBSKeepsTheReleasedFour(t *testing.T) {
-	for _, side := range []types.EntrustBS{
-		types.EntrustBuy, types.EntrustSell, types.EntrustCloseShort, types.EntrustOpenShort,
-		"3", "4",
-	} {
+// The set was disputed: the vendor's *futures* enum has two values and SPEC §7.4
+// plus the released pkg/hstong/future had four. §9.3 decided to keep four and NOT
+// to narrow, because narrowing is a caller-visible change on a money-moving field
+// decided on incomplete evidence, and because being permissive fails as a clear
+// Gateway rejection rather than a misroute. A test that pinned {3,4} as accepted
+// is what stops a future narrowing attempt succeeding quietly on the strength of a
+// plausible reading of the vendor enum.
+//
+// That pin has now done its job in the other direction. C1b was resolved on
+// 2026-09-29 from the vendor's own per-endpoint documentation, which shows the two
+// sets never conflicted because they govern *different endpoints*: the cash page
+// offers 3 and 4 as explicit input values, the futures page lists only
+// "1:买入,2:卖出". So this is renamed and inverted - the futures endpoint is
+// {1,2}, fail-closed, and 3/4 are asserted to be *refused* rather than accepted.
+// The pin is not deleted; it is pointed the other way, which is the whole reason
+// it was written as a test rather than a comment.
+func TestFuturesEntrustBSIsTheTwoValueFuturesSet(t *testing.T) {
+	for _, side := range []types.EntrustBS{types.EntrustBuy, types.EntrustSell} {
 		t.Run(string(side), func(t *testing.T) {
 			rec := newWireRecorder(map[string]string{
 				string(client.RouteTradeFuturesEntrust): gatewaySuccess(futuresMutationBody),
@@ -3590,15 +3596,47 @@ func TestFuturesEntrustBSKeepsTheReleasedFour(t *testing.T) {
 			req.Side = side
 			if _, err := NewFuturesService(newWireExecutor(t, rec)).Entrust(
 				t.Context(), futuresFixtureAccount(), req); err != nil {
-				t.Errorf("Entrust with side %q = %v, want nil: the released layer has accepted "+
-					"{1,2,3,4} since v0.1.0 and narrowing it is a separate, caller-visible task "+
-					"(design-futures-requests §9.3, tracked as C1b)", side, err)
+				t.Errorf("Entrust with side %q = %v, want nil: the vendor documents "+
+					"1:买入,2:卖出 for POST /trade/FuturesEntrust", side, err)
 			}
 			mod := futuresFixtureModify()
 			mod.Side = side
 			if err := NewFuturesService(newWireExecutor(t, recMod)).ModifyEntrust(
 				t.Context(), futuresFixtureAccount(), mod); err != nil {
 				t.Errorf("ModifyEntrust with side %q = %v, want nil, for the reason above", side, err)
+			}
+		})
+	}
+
+	// The 3/4 case, which is the half this change exists for. Both must be
+	// refused locally, with no request sent, and the message must say why
+	// rather than just "invalid".
+	for _, side := range []types.EntrustBS{types.EntrustCloseShort, types.EntrustOpenShort, "3", "4"} {
+		t.Run("rejects_"+string(side), func(t *testing.T) {
+			rec := newWireRecorder(nil)
+			req := futuresFixtureOrder()
+			req.Side = side
+			_, err := NewFuturesService(newWireExecutor(t, rec)).Entrust(
+				t.Context(), futuresFixtureAccount(), req)
+			if err == nil {
+				t.Fatalf("Entrust with side %q was accepted, but the futures endpoint "+
+					"documents only 1 and 2; 3 and 4 are cash values (docs/SPEC.md 7.4, C1b)", side)
+			}
+			if !strings.Contains(err.Error(), "cash-only") {
+				t.Errorf("rejection for side %q = %q, want a message naming the cash-only "+
+					"values so the caller knows the difference is the endpoint, not the code", side, err)
+			}
+			if got := rec.total(); got != 0 {
+				t.Errorf("a refused direction still sent %d request(s); it must fail closed "+
+					"before the wire", got)
+			}
+
+			recMod := newWireRecorder(nil)
+			mod := futuresFixtureModify()
+			mod.Side = side
+			if err := NewFuturesService(newWireExecutor(t, recMod)).ModifyEntrust(
+				t.Context(), futuresFixtureAccount(), mod); err == nil {
+				t.Errorf("ModifyEntrust with side %q was accepted, want refused", side)
 			}
 		})
 	}

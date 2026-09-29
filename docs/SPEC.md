@@ -786,12 +786,44 @@ Closed set as documented.
 
 ### 7.4 `entrustBs` — buy/sell direction
 
+**The admissible set depends on the endpoint, and until 2026-09-29 this section
+did not say so.** The vendor documents two different sets, and this table used to
+present the cash one as if it governed futures too.
+
+**Cash — `POST /trade/TradeEntrust` — four values.** The vendor states:
+
+> `'1'`-买入、`'2'`-卖出（在空仓情况下传入 `'2'` 则为卖空，也可使用 `3'`-空头平仓、
+> `4'`-空头开仓作为入参）
+
 | Value | Meaning |
 |-------|---------|
-| `1` | 多头开仓（买入） open long / buy |
-| `2` | 多头平仓（卖出） close long / sell |
+| `1` | 买入 buy |
+| `2` | 卖出 sell (a short sale when the position is flat) |
 | `3` | 空头平仓 close short |
 | `4` | 空头开仓 open short |
+
+**Futures — `POST /trade/FuturesEntrust` and `FuturesModifyEntrust` — two
+values.** The vendor states, on both pages, with no third option offered:
+
+> `"entrustBs": "string 1:买入,2:卖出"`
+
+| Value | Meaning |
+|-------|---------|
+| `1` | 买入 buy |
+| `2` | 卖出 sell |
+
+The futures endpoint has no open/close direction field, so the Gateway infers
+open versus close from the existing position — the same behaviour the cash page
+describes for `'2'` on a flat position. The vendor's own SDK agrees, and the
+apparent conflict between its two enums is not one: `FuturesEntrustBs` is
+`{1,2}` and the separate cash `trade/EntrustBs` is `{1,2,3,4}`.
+
+Source: <https://quant-open.hstong.com/api-docs/trade-interface/orders/place-orders.html>
+and <http://quant-open.hstong.com/api-docs/future-trade-interface/orders/future-place-order.html>,
+fetched 2026-09-29. This resolves tracker item C1b, which had been open since
+2026-09-26 on the belief that it needed a live futures order; the vendor's
+per-endpoint documentation answers it without one. See
+[run/design-futures-requests.md §9.3](./runs/2026-09-26-vnext-parity-wire/design-futures-requests.md).
 
 ### 7.5 `entrustType` — order type
 

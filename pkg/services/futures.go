@@ -247,10 +247,9 @@ type FuturesOrderRequest struct {
 	// select a book.
 	Symbol domain.Symbol
 	// Side is the direction, as types.EntrustBS: 1 opens a long, 2 closes a
-	// long, 3 closes a short, 4 opens a short. All four are accepted, which is
-	// the released surface's set and deliberately wider than the vendor's
-	// two-value futures enum; narrowing it would be a caller-visible change on
-	// a money-moving call made on incomplete evidence.
+	// and 2 sells. The futures endpoint documents no third value, and unlike the
+	// cash endpoint it has no open/close field at all: the Gateway infers that
+	// from the position. Values 3 and 4 are cash-only and are refused locally.
 	Side types.EntrustBS
 	// OrderType is the futures order type, as the Gateway's own code: 0 limit,
 	// 1 auction, 2 market, and a fourth option code the Java vendor SDK
@@ -307,7 +306,7 @@ type FuturesModifyRequest struct {
 	Price domain.Price
 	// Quantity is the new quantity and must be strictly positive.
 	Quantity domain.Quantity
-	// Side is the direction, with the same four accepted values as
+	// Side is the direction, with the same two accepted values (1, 2) as
 	// FuturesOrderRequest.Side.
 	Side types.EntrustBS
 	// ValidTimeType is the time-in-force code, as
@@ -739,30 +738,38 @@ func futuresValidateOrderType(op, orderType string) error {
 	return nil
 }
 
-// futuresValidateEntrustBS checks the direction against the four-value cash set.
+// futuresValidateEntrustBS checks the direction against the two-value **futures**
+// set.
 //
-// **The set is disputed and this method deliberately keeps the wider one.** The
-// vendor's *futures* enum has two values (1 buy, 2 sell), while SPEC §7.4, the
-// vendor's own shared cash enum, and the released pkg/hstong/future:158 all carry
-// four (3 close short, 4 open short). Narrowing here would be a caller-visible
-// behaviour change on a mutation, made on incomplete evidence, against a field
-// the v0.1.x SDK has accepted as 1-4 since v0.1.0 — a caller may be sending "4"
-// today and receiving whatever the Gateway does with it. The failure mode of
-// staying permissive is the good one: an out-of-set direction is refused by the
-// Gateway with a clear message and no side effect, where a fail-closed rejection
-// here would refuse a request the vendor's shared dictionary endorses
-// (design-futures-requests.md §9.3, tracked as C1b). One live order settles it;
-// until then the dispute is recorded rather than resolved.
+// **This was disputed, and the dispute was an artefact of the documentation.**
+// The vendor's *futures* enum has two values (1 buy, 2 sell) and the vendor's
+// cash `trade/EntrustBs` has four (3 close short, 4 open short), which read like
+// a contradiction - SPEC §7.4 listed the cash four under a generic `entrustBs`
+// heading, so both readings were defensible on paper. The vendor's own
+// per-endpoint documentation settles it, and the two sets never conflicted
+// because they govern *different endpoints*:
 //
-// Fail-closed within the four: a value outside them is refused locally, because
-// the Gateway's own rejection of a malformed direction is a worse outcome than
-// never sending it.
+//   - `POST /trade/TradeEntrust`      → '1'-买入、'2'-卖出（...也可使用 3'-空头平仓、4'-空头开仓作为入参）
+//   - `POST /trade/FuturesEntrust`    → "entrustBs": "string 1:买入,2:卖出"
+//
+// There is no futures open/close field, so the Gateway infers it from the
+// position, exactly as the cash page describes for '2' on a flat position. A
+// futures order carrying 3 or 4 was therefore never valid; the SDK accepted it
+// and let the Gateway refuse it. Failing closed here is strictly better - a
+// typed local error naming the field, with no request sent. ADR 0011 permits a
+// bug fix that changes runtime behaviour, since a bug is not specified
+// behaviour, and this also matches the vendor SDK's own `FuturesEntrustBs`.
+//
+// See docs/SPEC.md §7.4 for the citations, and tracker C1b, which was open from
+// 2026-09-26 on the assumption that it needed a live futures order and did not.
 func futuresValidateEntrustBS(op string, side types.EntrustBS) error {
 	switch side {
-	case types.EntrustBuy, types.EntrustSell, types.EntrustCloseShort, types.EntrustOpenShort:
+	case types.EntrustBuy, types.EntrustSell:
 		return nil
 	default:
-		return errs.New(types.StatusInvalidParam, op, "entrustBs must be 1, 2, 3 or 4")
+		return errs.New(types.StatusInvalidParam, op,
+			"entrustBs must be 1 (buy) or 2 (sell) on the futures endpoint; "+
+				"3 and 4 are cash-only values - see docs/SPEC.md 7.4")
 	}
 }
 

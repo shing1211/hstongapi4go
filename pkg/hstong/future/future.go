@@ -93,7 +93,7 @@ func WithDefaultPageSize(size int) Option {
 // type still works and is not scheduled for removal; the marker is advisory, and
 // it was added in v1.0.0 to mark the moment docs/MIGRATION.md stopped being a
 // draft. Note that the entrustBs value set is unresolved on both surfaces
-// (tracker C1b), so migrating does not settle it.
+// (resolved in v1.0.1: the futures endpoint takes 1 and 2 only, per the vendor)
 type Manager struct {
 	client          *client.Client
 	defaultPageSize int
@@ -162,14 +162,30 @@ func validatePrice(op, field, price string, required bool) error {
 	return nil
 }
 
-// validateEntrustBS reports whether bs is one of the four documented futures
-// buy/sell directions (1 open long, 2 close long, 3 close short, 4 open short).
+// validateEntrustBS reports whether bs is one of the two futures buy/sell
+// directions (1 buy, 2 sell).
+//
+// Futures takes **two** values, not the four the cash endpoint takes. The vendor
+// documents `POST /trade/FuturesEntrust` as `"entrustBs": "string 1:买入,2:卖出"`
+// and `FuturesModifyEntrust` identically, while `POST /trade/TradeEntrust`
+// separately offers `'3'`-空头平仓 and `'4'`-空头开仓. There is no futures
+// open/close field, so the Gateway infers it from the position.
+//
+// This accepted 1-4 until v1.0.1, on the belief that the two sources disagreed
+// and that staying permissive was the safe side. They did not disagree: they
+// govern different endpoints, and 3/4 on a futures order was always going to be
+// refused by the Gateway. ADR 0011 lists "bug fixes that change runtime
+// behaviour" as explicitly permitted, since a bug is not specified behaviour,
+// so this is a fix rather than a compatibility break - and it fails *closed*,
+// which is the safer direction: a typed local error instead of a request the
+// Gateway rejects. See docs/SPEC.md §7.4 and tracker C1b.
 func validateEntrustBS(op, bs string) error {
 	switch types.EntrustBS(bs) {
-	case types.EntrustBuy, types.EntrustSell, types.EntrustCloseShort, types.EntrustOpenShort:
+	case types.EntrustBuy, types.EntrustSell:
 		return nil
 	default:
-		return invalidParam(op, "entrustBs must be one of 1, 2, 3, 4")
+		return invalidParam(op, "entrustBs must be 1 (buy) or 2 (sell) on the futures endpoint; "+
+			"3 and 4 are cash-only values - see docs/SPEC.md 7.4")
 	}
 }
 
@@ -432,8 +448,9 @@ type EntrustRequest struct {
 	EntrustPrice string `json:"entrustPrice,omitempty"`
 	// EntrustAmount is the order quantity; it must be a positive decimal.
 	EntrustAmount string `json:"entrustAmount"`
-	// EntrustBS is the direction: 1 open long, 2 close long, 3 close short,
-	// 4 open short.
+	// EntrustBS is the direction: 1 buy, 2 sell. Futures takes only these two;
+	// 3 and 4 are cash values. The Gateway infers open versus close from the
+	// existing position, since the futures body has no direction field.
 	EntrustBS string `json:"entrustBs"`
 	// ValidTimeType is the time-in-force: 0 day, 1 immediate-or-cancel,
 	// 2 fill-or-kill, 3 good-till-date, 4 good-till-specified-date.
@@ -454,8 +471,9 @@ type ModifyEntrustRequest struct {
 	EntrustPrice string `json:"entrustPrice"`
 	// EntrustAmount is the new quantity; it must be a positive decimal.
 	EntrustAmount string `json:"entrustAmount"`
-	// EntrustBS is the direction: 1 open long, 2 close long, 3 close short,
-	// 4 open short.
+	// EntrustBS is the direction: 1 buy, 2 sell. Futures takes only these two;
+	// 3 and 4 are cash values. The Gateway infers open versus close from the
+	// existing position, since the futures body has no direction field.
 	EntrustBS string `json:"entrustBs"`
 	// ValidTimeType is the time-in-force, as in EntrustRequest.
 	ValidTimeType string `json:"validTimeType,omitempty"`
@@ -487,7 +505,7 @@ type EntrustResponse struct {
 // (docs/adr/0003-no-auto-retry-orders.md).
 //
 // The request is rejected with a typed "1016" error before any request is sent
-// when StockCode is empty, EntrustBS is not 1-4, EntrustAmount is not a positive
+// when StockCode is empty, EntrustBS is not 1 or 2, EntrustAmount is not a positive
 // decimal, the price is required but missing or malformed, or ValidTimeType is 4
 // without a valid yyyyMMdd ValidTime.
 func (m *Manager) Entrust(ctx context.Context, req EntrustRequest) (*EntrustResponse, error) {
@@ -540,7 +558,7 @@ func (m *Manager) CancelEntrust(ctx context.Context, req CancelEntrustRequest) (
 // (docs/adr/0003-no-auto-retry-orders.md).
 //
 // An empty EntrustID, empty/whitespace StockCode, non-positive EntrustAmount,
-// malformed EntrustPrice, or EntrustBS outside 1-4 is rejected with a typed
+// malformed EntrustPrice, or EntrustBS outside 1-2 is rejected with a typed
 // "1016" error before any request is sent.
 func (m *Manager) ModifyEntrust(ctx context.Context, req ModifyEntrustRequest) (*EntrustResponse, error) {
 	if strings.TrimSpace(req.EntrustID) == "" {

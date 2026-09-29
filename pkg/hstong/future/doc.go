@@ -35,15 +35,16 @@
 // for the compatibility guarantee. Migration is opt-in and incremental — the two
 // surfaces coexist and nothing here changes behaviour.
 //
-// The entrustBs value set is an open question on both surfaces, not a v-next
-// difference. This package accepts the four directions documented in
-// docs/SPEC.md §7.4, and pkg/services deliberately accepts the same four rather
-// than narrowing to the two values in the vendor's enum: narrowing would be a
-// caller-visible behaviour change on incomplete evidence, and a rejected request
-// is a better failure mode than a misrouted order. Whether the Gateway honors
-// 3 and 4 is unresolved (tracker item C1b) and can only be settled by one live
-// request in a futures sandbox, which is blocked on having an account. A
-// v-next caller inherits the same ambiguity as a caller here, not a new one.
+// The entrustBs value set differs by endpoint, and this is a futures-only
+// restriction. The vendor documents POST /trade/FuturesEntrust as
+// "entrustBs": "string 1:买入,2:卖出" - two values - while the cash
+// POST /trade/TradeEntrust separately offers 3 and 4 as explicit input values.
+// Futures has no open/close field, so the Gateway infers that from the position.
+// This package therefore accepts only 1 and 2 on a futures mutation, and refuses
+// 3 and 4 locally with a typed error rather than sending a request the Gateway
+// will reject. It accepted 1-4 until v1.0.1, when the vendor's per-endpoint
+// documentation resolved what had been an open question on both surfaces
+// (tracker C1b). See docs/SPEC.md §7.4.
 //
 // pkg/services reached feature parity on 2026-09-26, which is the condition
 // ADR 0011 sets for announcing a deprecation. The machine-readable

@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **The futures `entrustBs` value set was wrong, and the SDK said so was
+  unknown.** The vendor's two-value futures enum and the four-value set were
+  recorded as a genuine conflict requiring a live futures order to settle
+  (tracker C1b, open 2026-09-26). They were never in conflict — they govern
+  **different endpoints**, and the vendor documents both:
+  - `POST /trade/TradeEntrust` (cash): `'1'`-买入、`'2'`-卖出, "也可使用
+    `3'`-空头平仓、`4'`-空头开仓作为入参"
+  - `POST /trade/FuturesEntrust`: `"entrustBs": "string 1:买入,2:卖出"`
+
+  `docs/SPEC.md` §7.4 was the actual defect: it presented the cash four under a
+  generic `entrustBs` heading, which made both readings defensible on paper. The
+  vendor SDK had it right from the start — `FuturesEntrustBs` is `{1,2}` and the
+  separate cash `trade/EntrustBs` is `{1,2,3,4}`.
+
+  Both the released `pkg/hstong/future` layer and `pkg/services` now accept
+  **1 and 2 only** on a futures mutation, and refuse 3 and 4 locally with a
+  typed error naming them as cash-only, before any request is sent. Futures has
+  no open/close field, so the Gateway infers it from the position.
+
+  **Why this is a fix and not a breaking change.** ADR 0011 lists "bug fixes
+  that change runtime behaviour" as explicitly permitted, since a bug is not
+  specified behaviour. The previous range advertised a field range the platform
+  does not have: a futures order carrying 3 or 4 was always going to be refused
+  by the Gateway. The change fails *closed* — toward not sending — which is the
+  safer direction, and it turns a remote rejection into a local typed error.
+  A caller that was sending 3 or 4 to a futures endpoint was getting an error
+  either way; it now arrives sooner and says which field and why.
+
+  `TestFuturesEntrustBSKeepsTheReleasedFour` existed specifically to stop a
+  narrowing attempt from succeeding quietly. It is **inverted, not deleted**, and
+  now asserts that 3 and 4 are refused with nothing sent on the wire.
+
+
 ## [1.0.0] - 2026-09-29
 
 **The v-next layer is finished, and the v0.1.x surface is still the default.**
