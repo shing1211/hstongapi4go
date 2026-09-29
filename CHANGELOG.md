@@ -7,6 +7,92 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.25] - 2026-09-29
+
+**A read-path price no longer claims a grid the Gateway never promised, and a
+tick is no longer a price.** This is the tick-model follow-on
+(`docs/runs/2026-09-26-vnext-parity-wire/design-tick-model.md`), steps 1 and 2 of
+5.
+
+**The released v0.x API is untouched — not even a comment.** Nothing under
+`pkg/hstong/*`, `pkg/types/`, `client/` or `internal/` changed. Every edit is in
+the v-next layer, which no `pkg/hstong` caller can reach. There is **no breaking
+change** in this release.
+
+### Fixed
+
+- **31 read-path prices were constructed with a hardcoded tick of `0.001`** — a
+  plausible HKEX ETF or warrant tick, and wrong for HK stocks (whose grid is set
+  by a price band) and for every US instrument, where it is `$0.01` for most names
+  and `$0.0001` for sub-dollar ones. They now carry the **zero tick**, which is
+  how `domain.Price` already says *"I observed this price; I do not know this
+  instrument's tick schedule"* — `Validate` skips its modulus check and `Round`
+  returns the value unchanged when the tick is zero.
+
+  The hazard was not that today's numbers were wrong. It was that `Price.Round()`
+  **floors to a multiple of the tick**, so a `0.0005` read from the wire with a
+  `0.001` tick would have been silently corrupted to `0.000` — one caller away,
+  with the type making the mistake look correct. The trap is now disarmed.
+
+  This was a **half-finished migration rather than a new convention**: `algo.go`
+  had already been converted, and a test has been pinning the zero tick ever
+  since. This release brings four more files into line with a rule the package
+  already followed.
+
+- **`OrderBookResponse.TickSize` is now a `domain.Tick`, not a `domain.Price`.** It
+  used to be built as `MustNewPrice(<the tick>, "0.001")` — a price whose own tick
+  was a *different* price's tick, so the two necessarily disagreed whenever the
+  instrument was not on a 0.001 grid, and validating a faithful `0.0005` tick
+  returned a spurious error. `domain.Tick` is a scale, and deliberately defines
+  neither `Validate` nor `Round`, because a tick is not on its own grid; the
+  `0.0005` case can now neither fail validation nor be rounded, because neither
+  operation exists on the type.
+
+### Notes
+
+- **Four of the 36 production `0.001` occurrences were deliberately left alone**,
+  and the distinction is worth stating because a count is not a cause. Three are
+  `DefaultHKTickSchedule` returning the **legitimate** HK default the design keeps,
+  where replacing the value with `"0"` would leave an HK order with no grid at all.
+  One is a comment naming the literal the old `%.3f` conversion produced, which
+  documents the historical bug. A new test now asserts that none of the four
+  read-path files carries a `0.001` **literal as code**, so a helper added later is
+  covered too.
+
+- **A mutation found a hole the fixture-based tests could not.** Restoring
+  `"0.001"` in the market read path **passed the entire suite** — no assertion
+  covered those 17 sites. Two source-level guards now parse the AST of the four
+  read-path files and check the tick argument of every one of the 31
+  `MustNewPrice` calls, with a floor so that removing a field fails rather than
+  passing vacuously. That floor immediately caught the guards' own first bug: they
+  accepted only a qualified call and silently skipped the 7 unqualified ones inside
+  `pkg/domain`, seeing 24 of 31.
+
+- The `TickSize` type is pinned by the compiler rather than by a runtime
+  assertion, because no runtime assertion can catch a type change. Note the shape
+  of that pin: `go build ./...` still succeeds, since production code compiles
+  either way, and only `go test` fails — which is why the assertion lives in a test
+  file.
+
+- Whether the wire field behind `TickSize` is a tick or a bid-ask spread is
+  **unresolved by anything in this repository**: the vendor's own documentation
+  says "minimum price unit", while the single fixture is equally consistent with
+  both. The name is deliberately unchanged on that basis, and **no test asserts the
+  semantics** — asserting an unverified belief in a test is how it becomes an
+  unquestioned fact. The two-request `/hq/OrderBook` test that would decide it is
+  recorded in the design note and needs a Gateway account.
+
+- **Steps 3 to 5 of the follow-on are not done**, and each names what unblocks it:
+  the `TickSchedule` rewiring, the HK price-band table — which the design requires
+  be sourced from the exchange document *rather than from memory*, since
+  inventing the bands is the exact defect this work removes — and the
+  `/hq/OrderBook` test. No code is written against a price-band table recalled
+  from memory.
+
+- Parity is unchanged at **51/51** with the guard still enforcing in CI.
+- Coverage from a clean checkout: `pkg/services` **100.0%**, `pkg/transport`
+  **100.0%**, `pkg/domain` **96.0%**, `internal/push` 95.7%.
+
 ## [0.1.24] - 2026-09-29
 
 **The v-next layer is wired.** `services.NewStack` is the first entry point a
@@ -1325,3 +1411,4 @@ canonical in [docs/SPEC.md](./docs/SPEC.md).
 [0.1.22]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.22
 [0.1.23]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.23
 [0.1.24]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.24
+[0.1.25]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.25
