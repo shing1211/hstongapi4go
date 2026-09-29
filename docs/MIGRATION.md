@@ -3,14 +3,22 @@
 Breaking changes between major versions, and how to move between the two SDK
 layers. For the complete history see [CHANGELOG.md](../CHANGELOG.md).
 
-**Every Go sample in this document is compiled.** Each ```go block below is the
-body of a `Sample*` function in [`docs/migration/samples.go`](./migration/samples.go),
+**Every Go sample in this document is compiled.** Each ```go block below is a
+complete function from [`internal/migration/samples.go`](../internal/migration/samples.go),
 which builds as part of `go build ./...` and is checked against this file by
 `TestEverySampleInTheGuideIsPublished`. A sample that does not compile cannot be
 published here, which is a stronger guarantee than any migration guide normally
 offers — and it is one this repository needed, because the first draft of this
 document contained a sample with a `{...}` placeholder and samples whose field
 names did not exist.
+
+The samples live under `internal/` rather than beside this file on purpose.
+`mkdocs` copies every non-markdown file under its `docs_dir` into `site/`, which
+would place a second copy of the package inside the module: `go list ./...` would
+compile the samples twice, and the duplicate would run its own tests against a
+guide path that does not exist there — so `go test ./...` would fail on any
+machine that had built the documentation while CI stayed green. A documentation
+build must not be able to create a Go package.
 
 ## What changes at v1.0
 

@@ -4,15 +4,23 @@
 package migration
 
 import (
+	"io/fs"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 	"testing"
 )
 
-// guidePath is docs/MIGRATION.md relative to this package.
-const guidePath = "../MIGRATION.md"
+// guidePath is docs/MIGRATION.md relative to this package. The samples live in
+// internal/ rather than under docs/ on purpose: mkdocs copies every non-markdown
+// file under docs_dir into site/, which would create a second copy of this package
+// inside the module. go list ./... would then compile the samples twice, and the
+// duplicate would run its own tests against a guide path that does not exist
+// there - go test ./... would fail on any machine that had built the docs, while
+// CI stayed green. A documentation build must not be able to create a Go package.
+const guidePath = "../../docs/MIGRATION.md"
 
 // goBlockRE extracts a fenced go block, keeping only the body.
 var goBlockRE = regexp.MustCompile("(?s)```go\n(.*?)```")
@@ -194,6 +202,43 @@ func TestNoPlaceholdersInAnySample(t *testing.T) {
 		if strings.Contains(line, "...") && !strings.HasPrefix(strings.TrimSpace(line), "//") {
 			t.Errorf("samples.go:%d contains an ellipsis: %s", i+1, strings.TrimSpace(line))
 		}
+	}
+}
+
+// TestDocsDirCarriesNoGoSource prevents the trap this package was moved out of.
+//
+// mkdocs copies every file under its docs_dir into site/. Go source under docs/
+// is therefore duplicated into the module: go list ./... compiles it twice, and
+// the copy's tests run against a guide path that does not exist relative to
+// site/, so go test ./... fails on any machine that has built the documentation
+// while CI - which has no site/ - stays green.
+//
+// That failure was observed, not predicted: the samples were first written under
+// docs/migration, and the first full gate passed only because the build had not
+// been run yet. It is the mirror image of the dirty-tree coverage trap AGENTS.md
+// warns about, and the guard is the same shape - check the state that makes the
+// discrepancy invisible rather than the state CI sees.
+func TestDocsDirCarriesNoGoSource(t *testing.T) {
+	const docsDir = "../../docs"
+	err := filepath.WalkDir(docsDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() || !strings.HasSuffix(path, ".go") {
+			return nil
+		}
+		rel, relErr := filepath.Rel(docsDir, path)
+		if relErr != nil {
+			return relErr
+		}
+		t.Errorf("%s/%s is Go source inside the mkdocs docs_dir. mkdocs will copy it "+
+			"into site/, where it becomes a second package in this module whose tests "+
+			"cannot find the guide. Compiled documentation samples belong in "+
+			"internal/migration, not beside the document", docsDir, rel)
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walking the docs directory: %v", err)
 	}
 }
 
