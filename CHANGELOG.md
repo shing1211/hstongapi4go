@@ -7,6 +7,75 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.23] - 2026-09-29
+
+**The v-next layer gains a push orchestrator, and the released v0.x API is still
+untouched.** No caller of `pkg/hstong` can observe a change here, and this release
+establishes that by construction rather than by assertion: `internal/push.Normalize` is
+the only path to every decoder fixed below, and it has exactly one production caller -
+the new `pkg/transport` adapter. The released `pkg/hstong/stream` subscribes to raw
+protobuf frames and never normalizes, so the three defects were unreachable before this
+release and are not reachable now.
+
+### Added
+
+- **`PushOrchestration`** - topic-to-payload dispatch over the existing TCP push
+  client, with the interface declared in `pkg/services` and the concrete `PushAdapter`
+  in `pkg/transport` (ADR 0010 rule 6). It is still unreachable by a caller; the
+  opt-in constructor that exposes it is the next task, not this one.
+
+- **The subscription seam is `func(*domain.PushUpdate)`, and that was forced rather
+  than preferred.** `internal/` is unimportable outside this module, so an exported
+  interface naming `*push.Notification` would be unimplementable by any third party -
+  no fake client, no fixture, no alternative engine - while still compiling here.
+
+- **An update that matches no subscription is reported, not dropped.** It raises
+  `ErrUnrouted` on the error stream and increments a public counter, because
+  `notifyId` is not known to equal `security.code`; guessing would silently lose
+  frames that a later reconciliation would then have to explain.
+
+- **A topic-to-notify-type mapping that cannot rot.** The mapping is a total switch and
+  its test derives the key set from `pkg/types/enums.go` by parsing the declarations at
+  test time, so a twelfth `TopicID` fails the test instead of being quietly unmapped -
+  which is the defect in the released layer's hand-written equivalent table.
+
+### Fixed
+
+- **A trade fill published its quantity as its turnover.** `decodeTradeEvent` set
+  `Quantity` from `GetBusinessAmount()` and then set `Turnover` from that same field,
+  so the second mistake masked the first and the wrong value looked self-consistent.
+  Turnover now comes from `GetSumBusinessBalance()`.
+
+- **A push frame could panic the process.** The decoders called `MustNewPrice`,
+  `MustNewMoney` and `MustNewQuantity` on raw wire strings. Protobuf leaves an unset
+  string empty, and an empty decimal string panics - inside a dispatcher goroutine,
+  where the panic takes the whole process with it rather than failing one update. Empty
+  wire fields now decode to `"0"`. Reintroducing the old code against the new test
+  reproduces the crash exactly, so the fix is covered rather than assumed.
+
+- **A fabricated broker quantity.** The pushed broker frame carries level, item, type
+  and name, and no quantity at all; the decoder published `Quantity: "0"`, a hardcoded
+  zero in a field that reads as an observed quantity. It is removed as a domain type
+  change, not a literal edit, so the field cannot reappear on the same path.
+
+- **Eight `"0.001"` tick arguments** in the push decoders, now `"0"`. The price values
+  themselves are deliberately unchanged: `strconv.FormatFloat(..., -1, 64)` is faithful
+  to the protobuf `double` they are decoded from, and only the tick argument was wrong.
+
+### Notes
+
+- Parity is unchanged at **51/51 endpoints** and the guard still runs in enforcing mode
+  in CI. `PushOrchestration` names no HTTP route, so it needed no scan root - and a
+  root containing zero routes would have made the guard weaker, not stronger.
+
+- `internal/layering/layering_test.go` is unchanged down to the blob hash, because the
+  design removed the layering exception it would otherwise have needed. The push
+  internals behind the new seam (`normalizer.go`, `client.go`, `freshness.go`) are
+  likewise untouched, so the release adds a layer rather than editing one.
+
+- Coverage from a clean checkout: `pkg/services` 100.0%, `pkg/transport` 100.0%,
+  `pkg/domain` 95.7%, `internal/push` 95.7%.
+
 ## [0.1.22] - 2026-09-26
 
 **The current release.** The v-next service layer is complete: **all 51 documented
@@ -1165,3 +1234,4 @@ canonical in [docs/SPEC.md](./docs/SPEC.md).
 [0.1.20]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.20
 [0.1.21]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.21
 [0.1.22]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.22
+[0.1.23]: https://github.com/shing1211/hstongapi4go/releases/tag/v0.1.23
