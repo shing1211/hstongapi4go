@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-09-23
+- Amended: 2026-09-26 — rule 4 reversed, see [Implementation status](#implementation-status)
 - Supersedes: [0004 — Minimal dependency set](./0004-minimal-dependencies.md) (architecture branch)
 
 ## Context
@@ -61,6 +62,8 @@ internal/auth/        session/token lifecycle, AES-ECB trade password, injectabl
 3. **`gen/` is never edited**: per AGENTS.md hard rule 1.
 4. **Cross-layer calls only outward**: `domain` → no dependencies; `services` →
    `domain` + `transport`; `transport` → `internal/*`. No reverse imports.
+   **Amended 2026-09-26 — `services` must NOT import `transport`.** See
+   [Implementation status](#implementation-status).
 5. **`internal/auth`** is the only new package allowed to use `decimal.Decimal` at
    the wire bridge; all other wire/transport code uses `string` per ADRs 0004 and 0007.
 6. **Interfaces declared in the dependent package**: service interfaces are declared
@@ -89,6 +92,27 @@ their own pace.
   v-next is complete.
 - Existing CI (`go build`, `go vet`, `go test`, `golangci-lint`) continues to cover
   both surfaces; new tests cover only the new packages.
+
+## Implementation status
+
+Added 2026-09-26, when the v-next layer reached feature parity (51/51 endpoints,
+`make parity-enforce` green) and the v0.1.x surface was confirmed unchanged. An ADR
+that records only the decision stops being true the moment the decision is
+partially reversed, and rule 4 was reversed, so the reversal is recorded here
+rather than left for a reader to infer from the code.
+
+| ADR 0010 said | What shipped | Verdict |
+|---------------|--------------|---------|
+| `services` → `domain` + `transport` (rule 4) | `services` → `domain`, `client`, `internal/auth`; **`transport` is forbidden** | **Reversed.** The `transport.Adapter` this rule assumed would exist was never adopted and has been deleted. Building it would have re-created the wire leak D3 closed: `transport` mappers convert `gen/*` DTOs into wire-typed domain values, so a `domain`→`transport`→`client` call path would put a lossy wire conversion between services and the executor, dropping rate limiting, circuit breaking, metrics and tracing from every v-next call. It had no production caller. |
+| `transport` implements interfaces declared by `domain`/`services` (rule 6, diagram L46-48) | `PushAdapter` implements `services.PushTransport` | **Narrowed, not reversed.** Direction still holds — the interface is declared in the dependent package. `transport` no longer implements the *service* interfaces. |
+| `pkg/transport` provides wire→domain mappers (rule 2) | Unchanged | Holds. |
+| `domain` has zero internal dependencies | `domain` imports `gen/hq/dto` | **Known deviation, unresolved.** Recorded as `ARCHITECTURE.md` §6 in the repository root — named in plain text rather than linked, because that file sits outside the mkdocs `docs_dir` and a link to it fails `mkdocs build --strict`. Left as-is deliberately: it is a real cost, not a doc bug. |
+| Deprecation announced "when v-next reaches feature parity" | Parity reached; deprecation GoDoc added to the v0.1.x managers | Holds, and the condition is now met. |
+
+The layering this ADR could not express — that `pkg/services` must never import
+`pkg/transport` regardless of what either package contains — is enforced by
+`internal/layering`, which parses the repository's own imports. Seven boundaries
+are machine-checked, and the guard is verified by planting a violating import.
 
 ## Alternatives considered
 

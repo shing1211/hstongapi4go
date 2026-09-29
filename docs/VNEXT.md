@@ -327,9 +327,41 @@ Option A is a multi-release programme. Order matters: step 1 decides what
 | 4 | ~~Resolve R14~~ | **Done as a correction, not a rewrite.** `doc.go` turned out to be accurate — it already disclosed the missing behaviour. The register was wrong to claim otherwise. Re-scoped: `Session.ShouldRefresh`, `TokenManager.IsLoginInProgress`, `markLoginPending`, and `clearLoginPending` exist with **no non-test caller**, so single-flight and refresh are un-composed. `Authenticator` does check `IsExpired`, so expiry detection exists. `doc.go` now says so explicitly, so a reader does not mistake the methods for live behaviour. |
 | 5 | ~~Decide the `pkg/services` request path~~ | **Done.** `pkg/services` now depends on an `Executor` interface it declares itself, with `*client.Client` as the injected implementation — ADR 0010 rule 6, and no second pipeline. The three constructors and their `With*Client` options take the interface, so a fake can drive the layer without a Gateway. `pkg/services` still names `client.Route` and `client.Codec` in the signature: inverting the dependency removes the dependency on the concrete type, not on the client's shared route vocabulary, and private copies of those types would duplicate the canonical route table in `docs/SPEC.md`. |
 | 6 | ~~Add a `depguard` boundary rule~~ | **Done, but not with depguard.** depguard in golangci-lint v2.9 honours only the `$all` and `$test` tokens in `files`; a glob like `pkg/hstong/**` is accepted silently and matches nothing, so the rule passes forever while enforcing nothing. Replaced with `internal/layering`, a test that parses the repository's own imports. It also asserts that every rule's prefix matches at least one real package, so a rule cannot pass by matching nothing. See §5.6. |
-| 7 | Test `pkg/services` | `market.go` 579 and `trading.go` 780 lines sit at ~4% coverage. Written after the request-path decision, so they are not written twice. |
+| 7 | ~~Test `pkg/services`~~ | **Done.** 100.0% of statements, and *every* function at 100% - not just the aggregate. Measured from a clean `git clone` rather than a working tree, because AGENTS.md records a package measuring several points higher from a dirty tree. `market.go` (579 lines, was ~4%) and `trading.go` (780 lines) are covered through the mock Gateway e2e added in D4, not by hand-written doubles, so the coverage is of the wired path. `pkg/services` is now in the `make coverage` gate. |
 | 8 | ~~Re-gate `pkg/transport`~~ | **Done.** `pkg/transport` is at 100% after the Adapter removal and is now gated. |
-| 9 | Publish the migration guide and schedule v1.0 | The guide in §2 is the draft; it becomes a supported document. Refresh the `ARCHITECTURE.md` deviations table at the same time — a full graph regeneration is due, since the derived diagram still shows the removed push implementations. |
+| 9 | Publish the migration guide and schedule v1.0 | **Documentation done; the tag is G1.** `docs/MIGRATION.md` is a supported document, no longer a draft, with compiled before/after samples tied to it by test (E1). The `ARCHITECTURE.md` deviations table was refreshed and the four false claims corrected (E2) - but see the caveat below, because a *full graph regeneration* is still due and was deliberately not faked. Releasing v1.0 is G1, and E4 must land first. |
 
 ADR 0011 continues to hold for all of v0.1.x: none of these steps may change a
 released type or wire shape before v1.0.
+
+**ADR status, and the one rule that was reversed.** Both ADRs now carry an
+*Implementation status* section recording what actually shipped against what
+they decided, added 2026-09-26. ADR 0010 rule 4 — `services` → `domain` +
+`transport` — was **reversed**: `pkg/services` must not import `pkg/transport`,
+and that is now machine-enforced. The `transport.Adapter` the rule assumed would
+exist was never adopted and has been deleted; building it would have re-opened
+the wire leak D3 closed. ADR 0010 is marked *Amended*, not superseded, because
+one rule changed and the rest of it still holds.
+
+**Deprecation status.** Parity is reached, so ADR 0011's condition for
+announcing a deprecation is met, and each released manager package now carries
+the notice. The notice is **prose, not a `// Deprecated:` marker** — a decision,
+not an omission. `staticcheck` is enabled here, so a marker would trip SA1019 on
+this repository's own six examples and on `internal/migration/samples.go`, the
+file whose entire job is showing the old call shape as the guide's "before"
+column, and it would make every downstream consumer's build emit warnings during
+a v0.1.x patch line. The machine-readable marker ships with v1.0.0, where the
+CHANGELOG announces it. `TestV01xPackagesCarryTheDeprecationNotice` holds both
+halves of that decision: the notice must be present, and the marker must be
+absent.
+
+**Two things this table records as done that a reader should not over-read.**
+Step 9's "a full graph regeneration is due" was *not* performed: the GitNexus
+index is 78 commits stale, so the `ARCHITECTURE.md` community symbol counts
+cannot be regenerated honestly and were left stale rather than replaced with
+invented figures. E2 corrected the claims that were checkable against source and
+added a test that keeps them honest; the counts stay stale on purpose, and
+regenerating them is a follow-up that needs `gitnexus analyze` to have run.
+Separately, `pkg/services` being at 100% means its statements execute, not that
+its wire behaviour is verified against the real Gateway — that is G6, still
+deferred, and no coverage number stands in for it.

@@ -30,4 +30,21 @@
 // on an interval to extend the three-hour token.
 //
 // Managers are safe for concurrent use.
+//
+// # Relationship to pkg/services
+//
+// These managers remain the supported default and are not scheduled for
+// removal. The v-next layer in pkg/services covers the same endpoints; see
+// docs/MIGRATION.md for a side-by-side migration, and
+// docs/adr/0011-v01x-compatibility.md for the compatibility guarantee.
+// Migration is opt-in — services.NewStack is a separate constructor, and nothing
+// about the default changes when you upgrade.
+//
+// pkg/services reached feature parity on 2026-09-26, which is the condition
+// ADR 0011 sets for announcing a deprecation. Each sub-package carries a notice
+// saying so. The notice is prose rather than a // Deprecated: marker, because
+// staticcheck (SA1019) is enabled in this repository and a marker would make it
+// warn every existing consumer during a v0.1.x patch line, including this
+// repository's own examples and the migration samples that exist precisely to
+// show the old shape. The machine-readable marker ships with v1.0.0.
 package hstong

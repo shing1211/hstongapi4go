@@ -26,4 +26,29 @@
 // not own the transport.
 //
 // A Manager is safe for concurrent use by multiple goroutines.
+//
+// # Relationship to pkg/services
+//
+// This package remains the supported default and is not scheduled for removal.
+// The v-next layer in pkg/services covers the same endpoints; see
+// docs/MIGRATION.md for a side-by-side migration, and docs/adr/0011-v01x-compatibility.md
+// for the compatibility guarantee. Migration is opt-in and incremental — the two
+// surfaces coexist and nothing here changes behaviour.
+//
+// The entrustBs value set is an open question on both surfaces, not a v-next
+// difference. This package accepts the four directions documented in
+// docs/SPEC.md §7.4, and pkg/services deliberately accepts the same four rather
+// than narrowing to the two values in the vendor's enum: narrowing would be a
+// caller-visible behaviour change on incomplete evidence, and a rejected request
+// is a better failure mode than a misrouted order. Whether the Gateway honors
+// 3 and 4 is unresolved (tracker item C1b) and can only be settled by one live
+// request in a futures sandbox, which is blocked on having an account. A
+// v-next caller inherits the same ambiguity as a caller here, not a new one.
+//
+// pkg/services reached feature parity on 2026-09-26, which is the condition
+// ADR 0011 sets for announcing a deprecation. The notice is prose on purpose: a
+// // Deprecated: marker would make staticcheck (SA1019) warn every existing
+// consumer, including the examples and the migration samples in this repository,
+// during a v0.1.x patch line. The machine-readable marker ships with v1.0.0,
+// where the CHANGELOG announces it.
 package future

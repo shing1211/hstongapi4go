@@ -73,4 +73,21 @@
 // The cursor list endpoints (fund journeys, entrusts, delivers) are queried one
 // page at a time; Paginate walks them, honoring the documented page-size cap and
 // stop condition.
+//
+// # Relationship to pkg/services
+//
+// This package remains the supported default and is not scheduled for removal.
+// The v-next layer in pkg/services covers the same endpoints; see
+// docs/MIGRATION.md for a side-by-side migration, and docs/adr/0011-v01x-compatibility.md
+// for the compatibility guarantee. Migration is opt-in and incremental — the two
+// surfaces coexist and nothing here changes behaviour. Order mutations are not
+// auto-retried on either surface, so that guarantee carries across the migration
+// unchanged.
+//
+// pkg/services reached feature parity on 2026-09-26, which is the condition
+// ADR 0011 sets for announcing a deprecation. The notice is prose on purpose: a
+// // Deprecated: marker would make staticcheck (SA1019) warn every existing
+// consumer, including the examples and the migration samples in this repository,
+// during a v0.1.x patch line. The machine-readable marker ships with v1.0.0,
+// where the CHANGELOG announces it.
 package trade

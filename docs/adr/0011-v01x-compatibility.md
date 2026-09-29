@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-09-23
+- Verified: 2026-09-26 — see [Implementation status](#implementation-status)
 
 ## Context
 
@@ -92,6 +93,37 @@ ADR.
 - `pkg/domain`, `pkg/services`, `pkg/transport`, `internal/auth` have no compatibility
   guarantee yet — they are new and may change across minor versions until they reach
   v1.0.
+
+## Implementation status
+
+Added 2026-09-26, when v-next reached feature parity and the guarantee was
+checked rather than assumed. A compatibility guarantee that has only ever been
+asserted is indistinguishable from one that is about to be broken, so this
+records what was actually done to test each guarantee.
+
+| Guarantee | How it was verified | Verdict |
+|-----------|--------------------|---------|
+| 1. No breaking type changes in the v0.1.x packages | `internal/migration` samples compile the old and new call shapes side by side; the mock-Gateway e2e exercises the v0.1.x path unchanged | **Held.** The released surface is byte-for-byte the same shape it had at v0.1.23. |
+| 2. No breaking wire changes | `make proto-verify` in CI; `gen/` never edited | **Held.** |
+| 3. No new mandatory dependencies | No ADR 0004 exception was needed; `go.mod` gained nothing | **Held.** |
+| 4. Mock Gateway compatibility, no e2e test updated for v-next | The v-next e2e in `test/e2e/vnext_stack_test.go` was written *against* the existing mock Gateway rather than extending it, which is the strongest available evidence the guarantee held | **Held**, and the shape of that test is itself the evidence. |
+| 5. `gen/` never touched | `make proto-verify` in CI | **Held.** |
+
+**The one breaking change in this period, and why it did not violate the
+guarantee.** `transport.Pagination` was retyped and its constructor signature
+changed when it was split into `domain.Pagination` (a value type) and
+`transport.ApplyPagination` (the wire encoding). That is a breaking change to an
+exported symbol — and it is not a violation, because `pkg/transport` is v-next
+code. Guarantee 1 covers the v0.1.x packages listed above, and `pkg/transport` is
+not among them; it carries no compatibility promise until v1.0 by this ADR's own
+final consequence. It shipped in `v0.1.24`, two patch releases, with the
+migration documented.
+
+**Reachability is not compatibility.** The v0.1.x surface is still the default
+and is not deprecated in any build-flag sense: `services.NewStack` is opt-in, and
+`pkg/hstong/*` remains the documented default until v1.0 announces the
+deprecation. Deprecation GoDoc has been added, which is the documentation half of
+the policy above; the removal half is not scheduled and would need its own ADR.
 
 ## References
 
