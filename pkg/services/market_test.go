@@ -11,7 +11,17 @@ import (
 	"testing"
 
 	"github.com/shing1211/hstongapi4go/gen/hq/dto"
+	"github.com/shing1211/hstongapi4go/pkg/domain"
 )
+
+// A tick is a scale, not a price. This does not compile if
+// OrderBookResponse.TickSize ever reverts to domain.Price, which is the defect
+// P5 removed: a tick built as MustNewPrice(<tick>, "0.001") is a price whose
+// own tick is a different price's tick, so the two necessarily disagree
+// whenever the instrument is not on a 0.001 grid, and validating a faithful
+// 0.0005 as a price fails. No runtime assertion can catch a type change, so the
+// pin is the compiler.
+var _ domain.Tick = OrderBookResponse{}.TickSize
 
 // legacyRounded reproduces the conversion this file used before the fix, so the
 // tests below can state what the old code did instead of only what the new code

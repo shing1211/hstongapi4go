@@ -46,11 +46,11 @@ func MapBasicQotToQuoteEvent(n *notify.BasicQotNotify) domain.QuoteEvent {
 	symbol := MapSecurityToSymbol(sec.GetCode(), sec.GetDataType())
 	return domain.QuoteEvent{
 		Symbol:     symbol,
-		LastPrice:  domain.MustNewPrice(floatToString(n.GetBasicQot().GetLastPrice()), "0.001"),
-		OpenPrice:  domain.MustNewPrice(floatToString(n.GetBasicQot().GetOpenPrice()), "0.001"),
-		HighPrice:  domain.MustNewPrice(floatToString(n.GetBasicQot().GetHighPrice()), "0.001"),
-		LowPrice:   domain.MustNewPrice(floatToString(n.GetBasicQot().GetLowPrice()), "0.001"),
-		ClosePrice: domain.MustNewPrice(floatToString(n.GetBasicQot().GetLastClosePrice()), "0.001"),
+		LastPrice:  domain.MustNewPrice(floatToString(n.GetBasicQot().GetLastPrice()), "0"),
+		OpenPrice:  domain.MustNewPrice(floatToString(n.GetBasicQot().GetOpenPrice()), "0"),
+		HighPrice:  domain.MustNewPrice(floatToString(n.GetBasicQot().GetHighPrice()), "0"),
+		LowPrice:   domain.MustNewPrice(floatToString(n.GetBasicQot().GetLowPrice()), "0"),
+		ClosePrice: domain.MustNewPrice(floatToString(n.GetBasicQot().GetLastClosePrice()), "0"),
 		Volume:     domain.MustNewQuantity(strconv.FormatInt(n.GetBasicQot().GetVolume(), 10)),
 		Turnover:   domain.MustNewMoney(floatToString(n.GetBasicQot().GetTurnover()), "HKD", 3),
 		Timestamp:  n.GetBasicQot().GetMarketTime(),
@@ -60,7 +60,7 @@ func MapBasicQotToQuoteEvent(n *notify.BasicQotNotify) domain.QuoteEvent {
 func MapTickerToTickerEvent(n *dto.Ticker) domain.TickerEvent {
 	return domain.TickerEvent{
 		Symbol:    domain.Symbol{Code: "", Market: ""},
-		Price:     domain.MustNewPrice(floatToString(n.GetPrice()), "0.001"),
+		Price:     domain.MustNewPrice(floatToString(n.GetPrice()), "0"),
 		Volume:    domain.MustNewQuantity(strconv.FormatInt(n.GetVolume(), 10)),
 		Turnover:  domain.MustNewMoney(floatToString(n.GetTurnover()), "HKD", 3),
 		Timestamp: fmt.Sprintf("%d", n.GetTimestamp()),
@@ -70,7 +70,7 @@ func MapTickerToTickerEvent(n *dto.Ticker) domain.TickerEvent {
 
 func MapOrderBookAskLevel(n *dto.OrderBook) domain.OrderBookLevel {
 	return domain.OrderBookLevel{
-		Price:    domain.MustNewPrice(floatToString(n.GetPrice()), "0.001"),
+		Price:    domain.MustNewPrice(floatToString(n.GetPrice()), "0"),
 		Quantity: domain.MustNewQuantity(strconv.FormatInt(n.GetVolume(), 10)),
 	}
 }
@@ -98,7 +98,7 @@ func MapTradeDeliveryToTradeEvent(n *tradenotify.TradeStockDeliverNotify) domain
 		Symbol:      symbol,
 		OrderID:     domain.OrderID(n.GetClientId()),
 		EntrustID:   domain.EntrustID(n.GetEntrustNo()),
-		Price:       domain.MustNewPrice(decimalOrZero(n.GetBusinessPrice()), "0.001"),
+		Price:       domain.MustNewPrice(decimalOrZero(n.GetBusinessPrice()), "0"),
 		Quantity:    domain.MustNewQuantity(decimalOrZero(n.GetBusinessAmount())),
 		Turnover:    domain.MustNewMoney(decimalOrZero(n.GetSumBusinessBalance()), "HKD", 3),
 		Side:        types.EntrustBS(n.GetEntrustBs()),

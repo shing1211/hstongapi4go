@@ -633,9 +633,18 @@ func accountAssertPositionTicksAgree(t *testing.T, pos *domain.Position, index, 
 		tick := v.Field(i).Interface().(domain.Price).Tick().String()
 		if firstField == "" {
 			first, firstField = tick, field
-			if tick == "0" {
-				t.Errorf("Position[%d].%s has a zero tick, which disables the step check "+
-					"everywhere this price is validated", index, field)
+			// Inverted by P5. This asserted the tick was non-zero, which was
+			// true only because every read-path Price was built with the literal
+			// "0.001" - a grid the Gateway never promised, and the wrong one for
+			// every US instrument and most HK stocks. A read-path price now
+			// carries the zero tick, which is the type's way of saying "I
+			// observed this price; I do not know this instrument's tick
+			// schedule" (design-tick-model.md 2.1). Restoring "0.001" in
+			// pkg/domain/account.go fails this line.
+			if tick != "0" {
+				t.Errorf("Position[%d].%s has tick %s, want the zero tick: a read-path price "+
+					"carries no grid, and a non-zero one would let Round() corrupt a value "+
+					"the Gateway sent", index, field, tick)
 			}
 			continue
 		}

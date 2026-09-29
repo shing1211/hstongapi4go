@@ -116,7 +116,18 @@ type OrderBookResponse struct {
 	Security *Security               `json:"security"`
 	Ask      []domain.OrderBookLevel `json:"orderBookAskList"`
 	Bid      []domain.OrderBookLevel `json:"orderBookBidList"`
-	TickSize domain.Price            `json:"spreadLevel"`
+	// TickSize is a domain.Tick, not a domain.Price. It used to be a Price built
+	// with the literal "0.001" as its own tick, which guaranteed the two numbers
+	// disagreed whenever the instrument was not on a 0.001 grid and made a
+	// faithful 0.0005 tick fail validation as a price. A tick has no tick of its
+	// own, so the type says so instead of a value.
+	//
+	// The wire key is `spreadLevel`. Whether that field is a tick or a bid-ask
+	// spread is unresolved by anything in this repository: the vendor's own
+	// documentation says "minimum price unit", and the one fixture is equally
+	// consistent with both. The name is deliberately not changed on that basis -
+	// see design-tick-model.md sections 3 and 3.1.
+	TickSize domain.Tick `json:"spreadLevel"`
 }
 
 type orderBookWireResponse struct {
@@ -148,7 +159,7 @@ func (s *MarketService) OrderBook(ctx context.Context, req OrderBookRequest) (Or
 		Security: securityOrNil(wireResp.Security),
 		Ask:      convertOrderBookLevels(wireResp.OrderBookAskList),
 		Bid:      convertOrderBookLevels(wireResp.OrderBookBidList),
-		TickSize: domain.MustNewPrice(decimalOrZero(string(wireResp.TickSize)), "0.001"),
+		TickSize: domain.MustNewTick(decimalOrZero(string(wireResp.TickSize))),
 	}, nil
 }
 
@@ -521,12 +532,12 @@ func convertToQuote(q *dto.BasicQot) *domain.Quote {
 	}
 	return &domain.Quote{
 		IsSuspended:    q.IsSuspended,
-		OpenPrice:      domain.MustNewPrice(floatToString(q.OpenPrice), "0.001"),
-		HighPrice:      domain.MustNewPrice(floatToString(q.HighPrice), "0.001"),
-		LowPrice:       domain.MustNewPrice(floatToString(q.LowPrice), "0.001"),
-		LastPrice:      domain.MustNewPrice(floatToString(q.LastPrice), "0.001"),
-		LastClosePrice: domain.MustNewPrice(floatToString(q.LastClosePrice), "0.001"),
-		PriceSpread:    domain.MustNewPrice(floatToString(q.PriceSpread), "0.001"),
+		OpenPrice:      domain.MustNewPrice(floatToString(q.OpenPrice), "0"),
+		HighPrice:      domain.MustNewPrice(floatToString(q.HighPrice), "0"),
+		LowPrice:       domain.MustNewPrice(floatToString(q.LowPrice), "0"),
+		LastPrice:      domain.MustNewPrice(floatToString(q.LastPrice), "0"),
+		LastClosePrice: domain.MustNewPrice(floatToString(q.LastClosePrice), "0"),
+		PriceSpread:    domain.MustNewPrice(floatToString(q.PriceSpread), "0"),
 		Volume:         domain.MustNewQuantity(fmt.Sprintf("%d", q.Volume)),
 		Turnover:       domain.MustNewMoney(floatToString(q.Turnover), "HKD", 3),
 		TurnoverRate:   domain.MustNewRate(floatToString(q.TurnoverRate)),
@@ -547,7 +558,7 @@ func convertOrderBookLevels(levels []*dto.OrderBook) []domain.OrderBookLevel {
 	for i, l := range levels {
 		out[i] = domain.OrderBookLevel{
 			Level:    l.Level,
-			Price:    domain.MustNewPrice(floatToString(l.Price), "0.001"),
+			Price:    domain.MustNewPrice(floatToString(l.Price), "0"),
 			Quantity: domain.MustNewQuantity(fmt.Sprintf("%d", l.Volume)),
 		}
 	}
@@ -560,11 +571,11 @@ func convertToKLine(k *dto.KLine) *domain.KLine {
 	}
 	return &domain.KLine{
 		Date:           k.Date,
-		HighPrice:      domain.MustNewPrice(floatToString(k.HighPrice), "0.001"),
-		OpenPrice:      domain.MustNewPrice(floatToString(k.OpenPrice), "0.001"),
-		LowPrice:       domain.MustNewPrice(floatToString(k.LowPrice), "0.001"),
-		ClosePrice:     domain.MustNewPrice(floatToString(k.ClosePrice), "0.001"),
-		LastClosePrice: domain.MustNewPrice(floatToString(k.LastClosePrice), "0.001"),
+		HighPrice:      domain.MustNewPrice(floatToString(k.HighPrice), "0"),
+		OpenPrice:      domain.MustNewPrice(floatToString(k.OpenPrice), "0"),
+		LowPrice:       domain.MustNewPrice(floatToString(k.LowPrice), "0"),
+		ClosePrice:     domain.MustNewPrice(floatToString(k.ClosePrice), "0"),
+		LastClosePrice: domain.MustNewPrice(floatToString(k.LastClosePrice), "0"),
 		Volume:         domain.MustNewQuantity(fmt.Sprintf("%d", k.Volume)),
 		Turnover:       domain.MustNewMoney(floatToString(k.Turnover), "HKD", 3),
 		Timestamp:      k.Timestamp,
@@ -578,9 +589,9 @@ func convertToTimeSharePoint(ts *dto.TimeShare) *domain.TimeSharePoint {
 	}
 	return &domain.TimeSharePoint{
 		Time:           ts.Time,
-		Price:          domain.MustNewPrice(floatToString(ts.Price), "0.001"),
-		LastClosePrice: domain.MustNewPrice(floatToString(ts.LastClosePrice), "0.001"),
-		AvgPrice:       domain.MustNewPrice(floatToString(ts.AvgPrice), "0.001"),
+		Price:          domain.MustNewPrice(floatToString(ts.Price), "0"),
+		LastClosePrice: domain.MustNewPrice(floatToString(ts.LastClosePrice), "0"),
+		AvgPrice:       domain.MustNewPrice(floatToString(ts.AvgPrice), "0"),
 		Volume:         domain.MustNewQuantity(fmt.Sprintf("%d", ts.Volume)),
 		Turnover:       domain.MustNewMoney(floatToString(ts.Turnover), "HKD", 3),
 	}
@@ -593,7 +604,7 @@ func convertToTickerTick(t *dto.Ticker) *domain.TickerTick {
 	return &domain.TickerTick{
 		Time:      t.Time,
 		Side:      t.Side,
-		Price:     domain.MustNewPrice(floatToString(t.Price), "0.001"),
+		Price:     domain.MustNewPrice(floatToString(t.Price), "0"),
 		Volume:    domain.MustNewQuantity(fmt.Sprintf("%d", t.Volume)),
 		Turnover:  domain.MustNewMoney(floatToString(t.Turnover), "HKD", 3),
 		Type:      t.Type,
