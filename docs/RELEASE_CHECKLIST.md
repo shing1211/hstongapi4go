@@ -118,6 +118,13 @@ manager runs through this list before tagging and pushing.
     artifacts, and closing it would mean calling the Gitee REST API from a
     workflow step — an ADR-level decision, not a config tweak. Do not add a
     `gitee:` block expecting it to work.
+    **This is a decision, not a provisional note.** The gap was declined on
+    2026-09-29: a hand-written API step would add a credential and a
+    supply-chain surface in exchange for download convenience rather than a
+    security boundary. The rationale is recorded in
+    [`next-phase.md`](./runs/2026-09-25-hstong-agent-readiness/next-phase.md) §9.
+    Publishing artifacts there later is a new change with its own ADR, not a
+    resumption of the old backlog row.
 
 ## Post-release
 

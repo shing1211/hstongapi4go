@@ -239,7 +239,8 @@ Sections 1 to 8 are written from the perspective of the session that produced
 them, and several items they still show as outstanding have since been closed.
 This section is the current list, re-derived from the tree rather than inherited
 from the prose above. An item is listed as blocked only when the blocker is
-named.
+named, and a declined item is a decision rather than a deferral: both carry a
+date, so a reader can tell an oversight from a judgement.
 
 | Ref | Item | Status | Blocker or note |
 |-----|------|--------|-----------------|
@@ -250,7 +251,7 @@ named.
 | **G6** | **Live Gateway integration run** | **Blocked: needs a test account** | `test/integration` is env-gated and has never executed. The only item that can *retire* an assumption rather than tighten a guarantee: ADR 0007's "market `int64` arrives as a JSON number" is inferred solely from the vendored Java and Python SDKs |
 | **R3** | **Push read deadline stays off by default** | **Blocked behind G6** | `WithReadDeadline` is implemented and off. A non-zero default risks tearing down a healthy connection because the observed inter-frame gap is unknown, and measuring that gap is exactly what G6 would do |
 | **R8** | **HTTP 5xx not retryable** | **Open, and intended to stay** | Changing it would contradict documented retry semantics, and the Gateway reports overload as `1011` inside a 200 envelope. This is a disposition, not a defect |
-| **G4** | **Gitee release mirror** | **Blocked: needs `GITEE_TOKEN` and an ADR** | GoReleaser cannot target Gitee at all, because it supports GitHub, GitLab and Gitea, and a `gitee:` key fails validation. Mirroring artifacts means a hand-written workflow step calling the Gitee REST API, which is a supply-chain decision deserving its own ADR. `gh secret list` reports no Actions secrets |
+| **G4** | **Gitee release mirror** | **Declined 2026-09-29** | Not a blocker but a decision, and a narrow one. Source and every tag are already mirrored to Gitee, so the only gap is the release artifacts: six archives, six SBOMs, the signed checksums file, and the cosign bundle. GoReleaser cannot close it, because it publishes to GitHub, GitLab and Gitea only and a `gitee:` key is rejected with `field gitee not found in type config.Release`. Gitee is a separate host, not a Gitea deployment GoReleaser can be aimed at, so the only route is a hand-written workflow step calling the Gitee REST API. That is a new credential and a new supply-chain surface, in exchange for download convenience rather than a security boundary. `docs/RELEASE_CHECKLIST.md` step 17 already records the gap as "not expected", so declining aligns the backlog with the checklist rather than contradicting it. Anyone who later wants the artifacts there should treat it as a new change with its own ADR, not as resuming this row |
 
-G6 and the Gitee mirror each need a credential this environment does not hold.
-Recording them as blocked is the honest state, not a deferral.
+G6 is the one remaining item that needs something this environment does not have.
+Recording it as blocked is the honest state, not a deferral.

@@ -63,7 +63,7 @@
 | Documentación (READMEs, sitio MkDocs, ADR, SPEC, LEGACY) | Implementado |
 | Pruebas offline + e2e SDK-a-mock de todos los endpoints | Implementado |
 | Pruebas de integración contra una pasarela real | Escritas y condicionadas por entorno; confirmación en vivo pendiente de ejecución del usuario |
-| Publicación (GitHub + Gitee) | v1.0.0 |
+| Publicación (GitHub) | v1.0.2 |
 
 Los 51 endpoints HTTP y los 11 temas de push de mercado están implementados. Los
 recuentos son canónicos en [docs/SPEC.md](./docs/SPEC.md); no los edites a mano en
