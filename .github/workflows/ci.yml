@@ -184,6 +184,12 @@ jobs:
         run: go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
       - name: Run govulncheck
         run: govulncheck ./...
+        # govulncheck walks the call graph reachable from this module.  OTel packages
+        # are in go.mod (compile-time optional, gated by -tags otel) but are NOT in
+        # the default build's call graph, so vulnerabilities in OTel's transitive deps
+        # may appear in output.  These do not affect a binary built without the otel
+        # tag.  See docs/DEPENDENCIES.md §Compliance note for the regulated-user
+        # perspective.
 
   secrets:
     name: secret scan

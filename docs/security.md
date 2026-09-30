@@ -16,6 +16,35 @@ The only sensitive value the SDK handles is the plaintext trade password, which 
 encrypts on the way out and never logs (see below). The bundled platform public
 keys are **public reference data**, not secrets.
 
+## Trust boundary diagram
+
+The three parties and the boundaries between them:
+
+```mermaid
+graph LR
+    A["Your application\n(hstongapi4go SDK)"] -->|"plain JSON over\n127.0.0.1:11111"| B["HStong Gateway\n(local process)"]
+    B -->|"TCP push\n127.0.0.1:11112"| A
+    B -->|"HTTPS / WSS\ninternet"| C["HStong cloud\n(platform API)"]
+    style A fill:#e1f5fe
+    style B fill:#fff8e1
+    style C fill:#fce4ec
+    classDef local stroke:#1976d2,stroke-width:2px
+    classDef cloud stroke:#c2185b,stroke-width:2px
+    class A,B local
+    class C cloud
+```
+
+**What each party owns:**
+
+| Party | Owns | Trust level |
+|-------|------|-------------|
+| Your application / SDK | Market data logic, order validation, your application code | Full control |
+| **HStong Gateway** (local) | Platform credentials, RSA signing, device binding, request encryption, trade session | Runs locally; credentials never leave the local process |
+| **HStong cloud** (remote) | Account data, market data, order execution | Connected via HTTPS/WSS; the SDK never sees credentials directly |
+
+The SDK is **not a party to the trust relationship**. It operates entirely inside
+the local-machine boundary and delegates all credential-holding to the Gateway.
+
 ## Trade password
 
 On `/trade/TradeLogin` the password is sent as:

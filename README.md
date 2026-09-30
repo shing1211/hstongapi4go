@@ -91,6 +91,14 @@ Before writing your first call, understand these SDK abstractions:
 All 51 HTTP endpoints and 11 market push topics are implemented. Counts are
 canonical in [docs/SPEC.md](./docs/SPEC.md); do not hand-edit them elsewhere.
 
+> **What "alpha" means here.**  The SDK is at v1.0.3 with a stable API (semver),
+> meaning the types and wire shapes will not change unexpectedly.  "Alpha" reflects
+> that the wire codec (specifically the `int64` representation in market payloads)
+> has only been tested against the **mock Gateway**, not against a live HStong
+> Gateway in every market.  A full validation pass against a real account is
+> documented in [docs/integration-testing.md](./docs/integration-testing.md) and
+> will be run as part of the open-source readiness review.
+
 ## Install
 
 ```bash

@@ -1,0 +1,6 @@
+# CODEOWNERS — github.com/shing1211/hstongapi4go
+#
+# All pull requests are reviewed by the maintainer.
+# This file is ignored by gitignore and is public in the repository.
+
+* @shing1211

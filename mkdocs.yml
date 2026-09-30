@@ -81,6 +81,7 @@ nav:
       - Quick Reference: quick-reference.md
       - Design rationale: DESIGN.md
       - API Reference: SPEC.md
+      - Dependencies: DEPENDENCIES.md
       - Compatibility Matrix: COMPAT.md
   - Operations:
       - Runbook: runbook.md
