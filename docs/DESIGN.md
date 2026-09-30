@@ -4,8 +4,8 @@
 - **Status:** Living document. Reflects the accepted ADRs; update it when they change.
 
 This document is the architecture overview. The binding decisions live in
-[`docs/adr/`](./adr/README.md); the plan of record is
-[`plan.md`](./runs/2026-09-21-hstong-full-surface/plan.md).
+[`docs/adr/`](./adr/README.md); the run that produced v0.1.x is archived
+(`docs/runs/index.md` lists all runs).
 
 ## 1. Overview
 
@@ -215,6 +215,6 @@ to reconcile via the real/history entrust and deliver queries.
 ## 8. Related documents
 
 - Decisions: [`docs/adr/`](./adr/README.md)
-- Plan of record: [`plan.md`](./runs/2026-09-21-hstong-full-surface/plan.md)
+- Run index: [docs/runs/index.md](./runs/index.md)
 - Canonical counts: [docs/SPEC.md](./SPEC.md) — endpoint/topic/schema inventory
 - Legacy protocol: [docs/LEGACY.md](./LEGACY.md) — documented but not implemented

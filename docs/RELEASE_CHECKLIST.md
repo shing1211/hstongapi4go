@@ -122,7 +122,7 @@ manager runs through this list before tagging and pushing.
     2026-09-29: a hand-written API step would add a credential and a
     supply-chain surface in exchange for download convenience rather than a
     security boundary. The rationale is recorded in
-    [`next-phase.md`](./runs/2026-09-25-hstong-agent-readiness/next-phase.md) §9.
+    the v1.0 release decisions (archived; rationale preserved in this checklist)
     Publishing artifacts there later is a new change with its own ADR, not a
     resumption of the old backlog row.
 

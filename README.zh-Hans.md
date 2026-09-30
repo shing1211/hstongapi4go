@@ -23,14 +23,14 @@
 [English](./README.md) · [简体中文](./README.zh-Hans.md) · [繁體中文](./README.zh-Hant.md) · [日本語](./README.ja.md) · [한국어](./README.ko.md) · [Español](./README.es.md)
 
 > 本文件是英文 [README](./README.md) 的社区翻译。**英文版本为准。**
-> 同步于 / Last synced: 2026-09-25
+> 同步于 / Last synced: 2026-09-30
 
 ## 目录
 
 - [状态](#状态)
 - [安装](#安装)
-- [快速开始](#快速开始)
-- [迁移到 v1.0](#迁移到-v10)
+- [快速开始 — 实时交易](#快速开始--实时交易)
+- [快速开始 — 离线 / Mock](#快速开始--离线--mock)
 - [功能矩阵](#功能矩阵)
 - [配置](#配置)
 - [包结构](#包结构)
@@ -60,7 +60,7 @@
 | 文档（README、MkDocs 站点、ADR、SPEC、LEGACY） | 已实现 |
 | 离线测试 + 全端点 SDK 对 mock 的端到端测试 | 已实现 |
 | 针对真实 Gateway 的集成测试 | 已编写并按环境变量门控；待用户实际运行确认 |
-| 发布（GitHub） | v1.0.2 |
+| 发布（GitHub；工件不在 Gitee 上，由决策决定） | v1.0.3 |
 
 全部 51 个 HTTP 端点和 11 个行情推送主题均已实现。计数以
 [docs/SPEC.md](./docs/SPEC.md) 为准；请勿在其他地方手动修改。
@@ -75,105 +75,33 @@ go get github.com/shing1211/hstongapi4go
 （或仓库内的 [Mock Gateway](./docs/mock-gateway.md)）。SDK 从不安装、启动或再分发
 Gateway；默认连接 `http://127.0.0.1:11111`（HTTP）和 `127.0.0.1:11112`（TCP 推送）。
 
-## 快速开始
+## 快速开始 — 实时交易
 
-构建一次客户端，共享使用，并在程序退出时关闭。客户端可安全并发使用。
+1. **[申请 API 访问权限](docs/getting-started-live.md)** — 需要华盛账户、RSA 公钥上传，
+   审批需要 2–3 个工作日。
+2. **[安装华盛 Gateway](docs/getting-started-live.md)** — 从 quant-open.hstong.com 下载，
+   本地运行。
+3. **[用集成测试验证](docs/integration-testing.md)** — 在真实下单前验证完整链路。
+4. **[下单第一笔真实订单](examples/trading)**：
 
-```go
-package main
+   ```sh
+   HSTONG_TRADE_PASSWORD=yourpassword \
+   HSTONG_EXAMPLE_PLACE_ORDER=1 \
+     go run ./examples/trading
+   ```
 
-import (
-	"context"
-	"fmt"
-	"log"
-	"time"
+   `HSTONG_EXAMPLE_PLACE_ORDER` 标志是明确的 opt-in，防止因环境变量遗忘而意外下单。
 
-	"github.com/shing1211/hstongapi4go/client"
-	"github.com/shing1211/hstongapi4go/gen/hq/dto"
-	"github.com/shing1211/hstongapi4go/pkg/hstong"
-	"github.com/shing1211/hstongapi4go/pkg/hstong/market"
-	"github.com/shing1211/hstongapi4go/pkg/hstong/trade"
-	"github.com/shing1211/hstongapi4go/pkg/types"
-)
+## 快速开始 — 离线 / Mock
 
-func main() {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+在没有真实账户的情况下探索 SDK，使用仓库内置的 Mock Gateway：
 
-	// 1. 从 HSTONG_* 解析配置（见「配置」章节）。
-	c, err := client.New(client.WithEnv())
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer c.Close()
-
-	// 2. 登录交易会话（需要 HSTONG_TRADE_PASSWORD）。
-	session := hstong.NewSessionManager(c)
-	if err := session.Login(ctx); err != nil {
-		log.Fatalf("trade login: %v", err)
-	}
-	defer session.Logout(ctx)
-
-	// 3. 请求一条行情报价。
-	marketMgr := market.New(c)
-	quote, err := marketMgr.BasicQot(ctx, market.BasicQotRequest{
-		Security: []*dto.Security{
-			{DataType: int32(types.DataTypeHKStock), Code: "0700.HK"},
-		},
-		MktTmType: 1,
-	})
-	if err != nil {
-		log.Fatal(err)
-	}
-	for _, q := range quote.BasicQot {
-		fmt.Printf("quote %s last=%v\n", q.GetSecurity().GetCode(), q.GetLastPrice())
-	}
-
-	// 4. 查询今日真实订单（需认证）。
-	tradeMgr := trade.New(c, trade.WithSession(session))
-	orders, err := tradeMgr.RealEntrustList(ctx, trade.RealEntrustListRequest{
-		ExchangeType: types.ExchangeHK,
-		QueryCount:   20,
-	})
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Printf("today's real orders: %d\n", len(orders))
-}
+```sh
+go run ./cmd/hstong-mock-gateway &   # 运行于 :11111/:11112
+go run ./examples/quickstart          # 无需凭据
 ```
 
-通过 TCP 通道订阅行情推送主题（导入
-`github.com/shing1211/hstongapi4go/pkg/hstong/stream`）：
-
-```go
-s := stream.New(c)
-if err := s.Connect(ctx); err != nil {
-	log.Fatal(err)
-}
-defer s.Close()
-
-sub, err := s.Subscribe(ctx, types.TopicBasicQot,
-	&dto.Security{DataType: int32(types.DataTypeHKStock), Code: "0700.HK"})
-if err != nil {
-	log.Fatal(err)
-}
-defer sub.Cancel(context.Background())
-
-for {
-	select {
-	case <-ctx.Done():
-		return
-	case ev := <-sub.Updates():
-		if q, ok := ev.BasicQot(); ok {
-			fmt.Printf("%s last=%v\n", ev.ID, q.GetBasicQot().GetLastPrice())
-		}
-	case err := <-sub.Errors():
-		log.Printf("stream: %v", err)
-	}
-}
-```
-
-[`examples/`](./examples/README.md) 中提供覆盖每个接口的、可运行且无需凭据即可编译的程序：
+[`examples/`](./examples/README.md) 中也提供覆盖每个接口的、可运行且无需凭据即可编译的程序：
 `quickstart`、`market-data`、`trading`、`futures`、`algo` 和 `streaming`。
 
 ## 迁移到 v1.0

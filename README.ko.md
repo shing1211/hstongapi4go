@@ -24,13 +24,14 @@
 [English](./README.md) · [简体中文](./README.zh-Hans.md) · [繁體中文](./README.zh-Hant.md) · [日本語](./README.ja.md) · [한국어](./README.ko.md) · [Español](./README.es.md)
 
 > 이 문서는 영어 [README](./README.md)의 커뮤니티 번역입니다. **영어판이 정본입니다.**
-> 동기화 / Last synced: 2026-09-25
+> 동기화 / Last synced: 2026-09-30
 
 ## 목차
 
 - [상태](#상태)
 - [설치](#설치)
-- [빠른 시작](#빠른-시작)
+- [빠른 시작 — 라이브 거래](#빠른-시작--라이브-거래)
+- [빠른 시작 — 오프라인 / 모의](#빠른-시작--오프라인--모의)
 - [v1.0으로 마이그레이션](#v10으로-마이그레이션)
 - [기능 매트릭스](#기능-매트릭스)
 - [구성](#구성)
@@ -61,7 +62,7 @@
 | 문서(README, MkDocs 사이트, ADR, SPEC, LEGACY) | 구현됨 |
 | 오프라인 테스트 + 전 엔드포인트 SDK 대 모의 e2e | 구현됨 |
 | 실제 Gateway 대상 통합 테스트 | 작성됨·환경 변수로 게이트됨. 실사용 확인은 사용자 실행 대기 |
-| 릴리스(GitHub) | v1.0.2 |
+| 릴리스(GitHub,工件는 Gitee에 배포되지 않음을 결정으로 결정) | v1.0.3 |
 
 51개 HTTP 엔드포인트와 11개 시세 푸시 토픽이 모두 구현되었습니다. 수치는
 [docs/SPEC.md](./docs/SPEC.md)가 정본입니다. 다른 곳에서 수동으로 편집하지 마세요.
@@ -77,106 +78,34 @@ go get github.com/shing1211/hstongapi4go
 설치·시작·재배포하지 않습니다. 기본적으로 `http://127.0.0.1:11111`(HTTP)과
 `127.0.0.1:11112`(TCP 푸시)에 연결합니다.
 
-## 빠른 시작
+## 빠른 시작 — 라이브 거래
 
-클라이언트는 한 번 생성해 공유하고 프로그램 종료 시 닫습니다. 클라이언트는 동시 사용에
-안전합니다.
+1. **[API 액세스 신청](docs/getting-started-live.md)** —华盛 계정, RSA 공개 키 업로드 필요,
+   승인까지 2–3영업일.
+2. **[华盛 Gateway 설치](docs/getting-started-live.md)** — quant-open.hstong.com에서 다운로드,
+   로컬에서 실행.
+3. **[통합 테스트로 검증](docs/integration-testing.md)** — 실제 주문 전에 전체 스택 검증.
+4. **[첫 번째 주문 실행](examples/trading)**：
 
-```go
-package main
+   ```sh
+   HSTONG_TRADE_PASSWORD=yourpassword \
+   HSTONG_EXAMPLE_PLACE_ORDER=1 \
+     go run ./examples/trading
+   ```
 
-import (
-	"context"
-	"fmt"
-	"log"
-	"time"
+   `HSTONG_EXAMPLE_PLACE_ORDER` 플래그는 명시적 opt-in으로, 환경 변수 잊어버려서
+  误주문를 방지합니다.
 
-	"github.com/shing1211/hstongapi4go/client"
-	"github.com/shing1211/hstongapi4go/gen/hq/dto"
-	"github.com/shing1211/hstongapi4go/pkg/hstong"
-	"github.com/shing1211/hstongapi4go/pkg/hstong/market"
-	"github.com/shing1211/hstongapi4go/pkg/hstong/trade"
-	"github.com/shing1211/hstongapi4go/pkg/types"
-)
+## 빠른 시작 — 오프라인 / 모의
 
-func main() {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+ réelle 계정 없이 SDK를 탐색하려면 내장 모의 Gateway를 사용：
 
-	// 1. HSTONG_*에서 구성을 확인합니다(「구성」 참고).
-	c, err := client.New(client.WithEnv())
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer c.Close()
-
-	// 2. 트레이딩 세션에 로그인합니다(HSTONG_TRADE_PASSWORD 필요).
-	session := hstong.NewSessionManager(c)
-	if err := session.Login(ctx); err != nil {
-		log.Fatalf("trade login: %v", err)
-	}
-	defer session.Logout(ctx)
-
-	// 3. 시세를 한 건 요청합니다.
-	marketMgr := market.New(c)
-	quote, err := marketMgr.BasicQot(ctx, market.BasicQotRequest{
-		Security: []*dto.Security{
-			{DataType: int32(types.DataTypeHKStock), Code: "0700.HK"},
-		},
-		MktTmType: 1,
-	})
-	if err != nil {
-		log.Fatal(err)
-	}
-	for _, q := range quote.BasicQot {
-		fmt.Printf("quote %s last=%v\n", q.GetSecurity().GetCode(), q.GetLastPrice())
-	}
-
-	// 4. 오늘의 실제 주문을 조회합니다(인증 필요).
-	tradeMgr := trade.New(c, trade.WithSession(session))
-	orders, err := tradeMgr.RealEntrustList(ctx, trade.RealEntrustListRequest{
-		ExchangeType: types.ExchangeHK,
-		QueryCount:   20,
-	})
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Printf("today's real orders: %d\n", len(orders))
-}
+```sh
+go run ./cmd/hstong-mock-gateway &   # :11111/:11112에서 실행
+go run ./examples/quickstart          # 자격 증명 불필요
 ```
 
-TCP 채널을 통해 시세 푸시 토픽을 구독합니다(
-`github.com/shing1211/hstongapi4go/pkg/hstong/stream` 임포트):
-
-```go
-s := stream.New(c)
-if err := s.Connect(ctx); err != nil {
-	log.Fatal(err)
-}
-defer s.Close()
-
-sub, err := s.Subscribe(ctx, types.TopicBasicQot,
-	&dto.Security{DataType: int32(types.DataTypeHKStock), Code: "0700.HK"})
-if err != nil {
-	log.Fatal(err)
-}
-defer sub.Cancel(context.Background())
-
-for {
-	select {
-	case <-ctx.Done():
-		return
-	case ev := <-sub.Updates():
-		if q, ok := ev.BasicQot(); ok {
-			fmt.Printf("%s last=%v\n", ev.ID, q.GetBasicQot().GetLastPrice())
-		}
-	case err := <-sub.Errors():
-		log.Printf("stream: %v", err)
-	}
-}
-```
-
-모든 표면에 대해 실행 가능하고 자격 증명 없이 컴파일되는 프로그램이
+모든 표면에 대해 실행 가능하고 자격 증명 없이 컴파일되는 프로그램도
 [`examples/`](./examples/README.md)에 있습니다: `quickstart`, `market-data`, `trading`,
 `futures`, `algo`, `streaming`.
 

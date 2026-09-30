@@ -55,6 +55,6 @@ Adopt **`go.uber.org/goleak` v1.3.0 as a test-only dependency**.
 
 ## References
 
-- Plan: [plan.md](../runs/2026-09-21-hstong-full-surface/plan.md) §T06, §T09, §P01
+- Plan: plan.md (archived; decisions preserved in this ADR) §T06, §T09, §P01
 - Design: [DESIGN.md](../DESIGN.md) §6 (concurrency and cleanup)
 - Related: [0004](./0004-minimal-dependencies.md)

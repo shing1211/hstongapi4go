@@ -71,6 +71,6 @@ hand-written mirror struct scoped to that endpoint.
 
 ## References
 
-- Plan: [plan.md](../runs/2026-09-21-hstong-full-surface/plan.md) §F2, §F3, §Approach
+- Plan: plan.md (archived; decisions preserved in this ADR) §F2, §F3, §Approach
 - [docs/SPEC.md](../SPEC.md) — per-endpoint codec inventory and PB version record
 - Related: [0004](./0004-minimal-dependencies.md), [0005](./0005-key-model-and-push-verification.md)

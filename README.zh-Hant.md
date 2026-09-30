@@ -23,7 +23,7 @@
 [English](./README.md) · [简体中文](./README.zh-Hans.md) · [繁體中文](./README.zh-Hant.md) · [日本語](./README.ja.md) · [한국어](./README.ko.md) · [Español](./README.es.md)
 
 > 本文件是英文 [README](./README.md) 的社群翻譯。**英文版本為準。**
-> 同步於 / Last synced: 2026-09-25
+> 同步於 / Last synced: 2026-09-30
 
 ## 目錄
 
@@ -60,7 +60,7 @@
 | 文件（README、MkDocs 網站、ADR、SPEC、LEGACY） | 已實作 |
 | 離線測試 + 全端點 SDK 對 mock 的端對端測試 | 已實作 |
 | 針對真實 Gateway 的整合測試 | 已撰寫並以環境變數閘控；待使用者實際執行確認 |
-| 發佈（GitHub） | v1.0.2 |
+| 發佈（GitHub；工件不在 Gitee 上，由決策決定） | v1.0.3 |
 
 全部 51 個 HTTP 端點和 11 個行情推送主題均已實作。計數以
 [docs/SPEC.md](./docs/SPEC.md) 為準；請勿在其他地方手動修改。

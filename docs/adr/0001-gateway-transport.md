@@ -57,7 +57,7 @@ push channels.
 
 ## References
 
-- Plan: [plan.md](../runs/2026-09-21-hstong-full-surface/plan.md) §Goal, §Scope, §F1, §F4
+- Plan: plan.md (archived; decisions preserved in this ADR)
 - Legacy documentation (not implemented): https://quant-open.hstong.com/api-docs/old/
 - Current documentation: https://quant-open.hstong.com/api-docs/
 - Precedent: `futuapi4go` targets the local OpenD daemon rather than the broker's

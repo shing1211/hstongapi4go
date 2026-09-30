@@ -88,8 +88,8 @@ rest of ADR 0002 stand.
 ## References
 
 - Supersedes-in-part: [0002 — Hybrid codec](./0002-hybrid-codec.md) (market DTO branch narrowed)
-- Phase: [P03-market-pull.md](../runs/2026-09-21-hstong-full-surface/phases/P03-market-pull.md)
-- Plan: [plan.md](../runs/2026-09-21-hstong-full-surface/plan.md) §F3
+- Phase: P03-market-pull.md (archived; decisions preserved in this ADR)
+- Plan: plan.md (archived; decisions preserved in this ADR) §F3
 - Vendor SDKs (v2.3.0): `华盛通OpenAPI-SDK-Java.zip`, `华盛通OpenAPI-SDK-Python.zip` (repository root)
 - Implementation: `pkg/hstong/market/doc.go` (codec choice rationale)
 - Design: [DESIGN.md](../DESIGN.md) §7 (money and quantities)

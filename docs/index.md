@@ -35,6 +35,24 @@ keys, heartbeat, device binding) is **documented but not implemented** — see
 
 Canonical endpoint and schema counts live in the [API Reference](SPEC.md).
 
+## Start Here
+
+New to the SDK? Follow this sequence:
+
+1. **[Install the SDK](getting-started.md)** — `go get github.com/shing1211/hstongapi4go`
+2. **[Get API access](getting-started-live.md)** — requires an HStong account, RSA key upload,
+   and 2–3 business days for approval
+3. **[Install the Gateway](getting-started-live.md)** — download from quant-open.hstong.com,
+   run locally
+4. **[Verify your setup](integration-testing.md)** — integration tests against a live
+   Gateway confirm the full stack before you place a real order
+5. **[Configure credentials](configuration.md)** — set `HSTONG_*` environment variables
+6. **[Run the examples](https://github.com/shing1211/hstongapi4go/tree/main/examples)**
+   — `examples/quickstart`, `examples/trading`, `examples/streaming`, and more
+
+To explore without an HStong account, start with the
+**[Mock Gateway](mock-gateway.md)** — all 51 HTTP routes and TCP push run offline.
+
 ## Quick start
 
 ```go

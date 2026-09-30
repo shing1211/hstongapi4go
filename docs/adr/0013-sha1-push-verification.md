@@ -23,7 +23,7 @@ implementation. `docs/SPEC.md:159` and ADR 0005 both record this; the ADR is
 verification](./0005-key-model-and-push-verification.md).
 
 This decision was previously captured only as a residual-risk line in
-`docs/runs/2026-09-21-hstong-full-surface/phases/P10-hardening.md:61`, an
+the P10-hardening.md residual-risk line (archived), an
 implementation-phase note. This ADR promotes it to the standing record the rest
 of the security decisions live in. It adds no behaviour and changes no default.
 
@@ -85,6 +85,6 @@ of the security decisions live in. It adds no behaviour and changes no default.
 - [0005 — Gateway key model and opt-in push verification](./0005-key-model-and-push-verification.md)
 - [0001 — Target the local Gateway](./0001-gateway-transport.md)
 - [0004 — Minimal dependency set](./0004-minimal-dependencies.md)
-- `docs/runs/2026-09-21-hstong-full-surface/phases/P10-hardening.md:61` — the
-  residual-risk line this ADR supersedes
+- P10-hardening.md:61 — the residual-risk line this ADR supersedes (archived;
+  rationale preserved in this ADR)
 - `internal/push/verify.go:10` — the single `crypto/sha1` site

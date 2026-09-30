@@ -24,14 +24,14 @@
 [English](./README.md) · [简体中文](./README.zh-Hans.md) · [繁體中文](./README.zh-Hant.md) · [日本語](./README.ja.md) · [한국어](./README.ko.md) · [Español](./README.es.md)
 
 > 本書は英語版 [README](./README.md) のコミュニティ翻訳です。**英語版が正式です。**
-> 同期 / Last synced: 2026-09-25
+> 同期 / Last synced: 2026-09-30
 
 ## 目次
 
 - [ステータス](#ステータス)
 - [インストール](#インストール)
-- [クイックスタート](#クイックスタート)
-- [v1.0 への移行](#v10-への移行)
+- [クイックスタート — ライブ取引](#クイックスタート--ライブ取引)
+- [クイックスタート — オフライン / モック](#クイックスタート--オフライン--モック)
 - [機能マトリクス](#機能マトリクス)
 - [設定](#設定)
 - [パッケージ構成](#パッケージ構成)
@@ -61,7 +61,7 @@
 | ドキュメント（README、MkDocs サイト、ADR、SPEC、LEGACY） | 実装済み |
 | オフラインテスト + 全エンドポイントの SDK 対モック e2e | 実装済み |
 | 実 Gateway に対する統合テスト | 作成済み・環境変数でゲート。実機確認はユーザー実行待ち |
-| リリース（GitHub） | v1.0.2 |
+| リリース（GitHub、工件は Gitee には配布しないことを决定的に決定） | v1.0.3 |
 
 51 の HTTP エンドポイントと 11 の相場配信トピックがすべて実装済みです。件数は
 [docs/SPEC.md](./docs/SPEC.md) が正式です。他の場所で手動編集しないでください。
@@ -77,106 +77,34 @@ go get github.com/shing1211/hstongapi4go
 Gateway をインストール・起動・再配布しません。既定で `http://127.0.0.1:11111`（HTTP）
 と `127.0.0.1:11112`（TCP 配信）に接続します。
 
-## クイックスタート
+## クイックスタート — ライブ取引
 
-クライアントは一度構築して共有し、プログラム終了時にクローズします。クライアントは
-並行利用に対して安全です。
+1. **[API アクセスを申請](docs/getting-started-live.md)** — 华盛アカウント、RSA
+   公開鍵アップロードが必要、承認に 2–3 営業日。
+2. **[华盛 Gateway をインストール](docs/getting-started-live.md)** — quant-open.hstong.com
+   からダウンロードしてローカルで実行。
+3. **[統合テストで検証](docs/integration-testing.md)** — 実際の注文前にフルスタックを検証。
+4. **[最初の発注を実行](examples/trading)**：
 
-```go
-package main
+   ```sh
+   HSTONG_TRADE_PASSWORD=yourpassword \
+   HSTONG_EXAMPLE_PLACE_ORDER=1 \
+     go run ./examples/trading
+   ```
 
-import (
-	"context"
-	"fmt"
-	"log"
-	"time"
+   `HSTONG_EXAMPLE_PLACE_ORDER` フラグは明示的な opt-in で、环境変数の忘れによる
+   誤発注を防ぎます。
 
-	"github.com/shing1211/hstongapi4go/client"
-	"github.com/shing1211/hstongapi4go/gen/hq/dto"
-	"github.com/shing1211/hstongapi4go/pkg/hstong"
-	"github.com/shing1211/hstongapi4go/pkg/hstong/market"
-	"github.com/shing1211/hstongapi4go/pkg/hstong/trade"
-	"github.com/shing1211/hstongapi4go/pkg/types"
-)
+## クイックスタート — オフライン / モック
 
-func main() {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+ реальныйアカウントなしで SDK を試すには、組み込みモック Gateway を使用：
 
-	// 1. HSTONG_* から設定を解決します（「設定」を参照）。
-	c, err := client.New(client.WithEnv())
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer c.Close()
-
-	// 2. 取引セッションにログインします（HSTONG_TRADE_PASSWORD が必要）。
-	session := hstong.NewSessionManager(c)
-	if err := session.Login(ctx); err != nil {
-		log.Fatalf("trade login: %v", err)
-	}
-	defer session.Logout(ctx)
-
-	// 3. 相場を 1 件取得します。
-	marketMgr := market.New(c)
-	quote, err := marketMgr.BasicQot(ctx, market.BasicQotRequest{
-		Security: []*dto.Security{
-			{DataType: int32(types.DataTypeHKStock), Code: "0700.HK"},
-		},
-		MktTmType: 1,
-	})
-	if err != nil {
-		log.Fatal(err)
-	}
-	for _, q := range quote.BasicQot {
-		fmt.Printf("quote %s last=%v\n", q.GetSecurity().GetCode(), q.GetLastPrice())
-	}
-
-	// 4. 本日の real 注文を照会します（要認証）。
-	tradeMgr := trade.New(c, trade.WithSession(session))
-	orders, err := tradeMgr.RealEntrustList(ctx, trade.RealEntrustListRequest{
-		ExchangeType: types.ExchangeHK,
-		QueryCount:   20,
-	})
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Printf("today's real orders: %d\n", len(orders))
-}
+```sh
+go run ./cmd/hstong-mock-gateway &   # :11111/:11112 で起動
+go run ./examples/quickstart          # 資格情報不要
 ```
 
-TCP チャネル経由で相場配信トピックを購読します（
-`github.com/shing1211/hstongapi4go/pkg/hstong/stream` をインポート）：
-
-```go
-s := stream.New(c)
-if err := s.Connect(ctx); err != nil {
-	log.Fatal(err)
-}
-defer s.Close()
-
-sub, err := s.Subscribe(ctx, types.TopicBasicQot,
-	&dto.Security{DataType: int32(types.DataTypeHKStock), Code: "0700.HK"})
-if err != nil {
-	log.Fatal(err)
-}
-defer sub.Cancel(context.Background())
-
-for {
-	select {
-	case <-ctx.Done():
-		return
-	case ev := <-sub.Updates():
-		if q, ok := ev.BasicQot(); ok {
-			fmt.Printf("%s last=%v\n", ev.ID, q.GetBasicQot().GetLastPrice())
-		}
-	case err := <-sub.Errors():
-		log.Printf("stream: %v", err)
-	}
-}
-```
-
-全サーフェスの実行可能で、コンパイルに資格情報が不要なプログラムが
+全サーフェスの実行可能で、コンパイルに資格情報が不要なプログラムも
 [`examples/`](./examples/README.md) にあります：`quickstart`、`market-data`、`trading`、
 `futures`、`algo`、`streaming`。
 

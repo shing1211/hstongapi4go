@@ -54,5 +54,5 @@ records the purpose and the alternative considered.
 
 ## References
 
-- Plan: [plan.md](../runs/2026-09-21-hstong-full-surface/plan.md) §Assumptions, §P10
+- Plan: plan.md (archived; decisions preserved in this ADR) §Assumptions, §P10
 - Related: [0002](./0002-hybrid-codec.md)

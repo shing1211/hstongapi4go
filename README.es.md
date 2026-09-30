@@ -26,13 +26,14 @@
 [English](./README.md) · [简体中文](./README.zh-Hans.md) · [繁體中文](./README.zh-Hant.md) · [日本語](./README.ja.md) · [한국어](./README.ko.md) · [Español](./README.es.md)
 
 > Este documento es una traducción comunitaria del [README](./README.md) en inglés.
-> **La versión en inglés es la autoritativa.** Sincronizado / Last synced: 2026-09-25
+> **La versión en inglés es la autoritativa.** Sincronizado / Last synced: 2026-09-30
 
 ## Tabla de contenidos
 
 - [Estado](#estado)
 - [Instalación](#instalación)
-- [Inicio rápido](#inicio-rápido)
+- [Inicio rápido — Trading en vivo](#inicio-rápido--trading-en-vivo)
+- [Inicio rápido — Sin conexión / Mock](#inicio-rápido--sin-conexión--mock)
 - [Migrar a v1.0](#migrar-a-v10)
 - [Matriz de funciones](#matriz-de-funciones)
 - [Configuración](#configuración)
@@ -63,7 +64,7 @@
 | Documentación (READMEs, sitio MkDocs, ADR, SPEC, LEGACY) | Implementado |
 | Pruebas offline + e2e SDK-a-mock de todos los endpoints | Implementado |
 | Pruebas de integración contra una pasarela real | Escritas y condicionadas por entorno; confirmación en vivo pendiente de ejecución del usuario |
-| Publicación (GitHub) | v1.0.2 |
+| Publicación (GitHub, los artefactos no se distribuyen en Gitee por decisión) | v1.0.3 |
 
 Los 51 endpoints HTTP y los 11 temas de push de mercado están implementados. Los
 recuentos son canónicos en [docs/SPEC.md](./docs/SPEC.md); no los edites a mano en
@@ -80,103 +81,32 @@ local en ejecución (o el [Mock Gateway](./docs/mock-gateway.md) incluido en el
 repositorio). El SDK nunca instala, inicia ni redistribuye la pasarela; se conecta a
 `http://127.0.0.1:11111` (HTTP) y `127.0.0.1:11112` (push TCP) por defecto.
 
-## Inicio rápido
+## Inicio rápido — Trading en vivo
 
-Construye el cliente una vez, compártelo y ciérralo al salir del programa. El cliente
-es seguro para uso concurrente.
+1. **[Solicita acceso API](docs/getting-started-live.md)** — necesitas cuenta 华盛, subir clave
+   RSA pública y 2–3 días laborables para la aprobación.
+2. **[Instala la Pasarela 华盛](docs/getting-started-live.md)** — descarga desde
+   quant-open.hstong.com, ejecuta en local.
+3. **[Valida con pruebas de integración](docs/integration-testing.md)** — valida la pila
+   completa antes de hacer pedidos reales.
+4. **[Realiza tu primer pedido](examples/trading)**：
 
-```go
-package main
+   ```sh
+   HSTONG_TRADE_PASSWORD=yourpassword \
+   HSTONG_EXAMPLE_PLACE_ORDER=1 \
+     go run ./examples/trading
+   ```
 
-import (
-	"context"
-	"fmt"
-	"log"
-	"time"
+   El indicador `HSTONG_EXAMPLE_PLACE_ORDER` es el opt-in explícito que impide un
+   pedido accidental por una variable de entorno olvidada.
 
-	"github.com/shing1211/hstongapi4go/client"
-	"github.com/shing1211/hstongapi4go/gen/hq/dto"
-	"github.com/shing1211/hstongapi4go/pkg/hstong"
-	"github.com/shing1211/hstongapi4go/pkg/hstong/market"
-	"github.com/shing1211/hstongapi4go/pkg/hstong/trade"
-	"github.com/shing1211/hstongapi4go/pkg/types"
-)
+## Inicio rápido — Sin conexión / Mock
 
-func main() {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+Para explorar el SDK sin cuenta real, usa el Mock Gateway integrado：
 
-	// 1. Resuelve la configuración desde HSTONG_* (véase Configuración).
-	c, err := client.New(client.WithEnv())
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer c.Close()
-
-	// 2. Inicia sesión en la sesión de trading (requiere HSTONG_TRADE_PASSWORD).
-	session := hstong.NewSessionManager(c)
-	if err := session.Login(ctx); err != nil {
-		log.Fatalf("trade login: %v", err)
-	}
-	defer session.Logout(ctx)
-
-	// 3. Solicita una cotización de mercado.
-	marketMgr := market.New(c)
-	quote, err := marketMgr.BasicQot(ctx, market.BasicQotRequest{
-		Security: []*dto.Security{
-			{DataType: int32(types.DataTypeHKStock), Code: "0700.HK"},
-		},
-		MktTmType: 1,
-	})
-	if err != nil {
-		log.Fatal(err)
-	}
-	for _, q := range quote.BasicQot {
-		fmt.Printf("quote %s last=%v\n", q.GetSecurity().GetCode(), q.GetLastPrice())
-	}
-
-	// 4. Consulta las órdenes reales de hoy (requiere autenticación).
-	tradeMgr := trade.New(c, trade.WithSession(session))
-	orders, err := tradeMgr.RealEntrustList(ctx, trade.RealEntrustListRequest{
-		ExchangeType: types.ExchangeHK,
-		QueryCount:   20,
-	})
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Printf("today's real orders: %d\n", len(orders))
-}
-```
-
-Suscríbete a un tema de push de mercado por el canal TCP (importa
-`github.com/shing1211/hstongapi4go/pkg/hstong/stream`):
-
-```go
-s := stream.New(c)
-if err := s.Connect(ctx); err != nil {
-	log.Fatal(err)
-}
-defer s.Close()
-
-sub, err := s.Subscribe(ctx, types.TopicBasicQot,
-	&dto.Security{DataType: int32(types.DataTypeHKStock), Code: "0700.HK"})
-if err != nil {
-	log.Fatal(err)
-}
-defer sub.Cancel(context.Background())
-
-for {
-	select {
-	case <-ctx.Done():
-		return
-	case ev := <-sub.Updates():
-		if q, ok := ev.BasicQot(); ok {
-			fmt.Printf("%s last=%v\n", ev.ID, q.GetBasicQot().GetLastPrice())
-		}
-	case err := <-sub.Errors():
-		log.Printf("stream: %v", err)
-	}
-}
+```sh
+go run ./cmd/hstong-mock-gateway &   # ejecuta en :11111/:11112
+go run ./examples/quickstart          # sin credenciales
 ```
 
 Hay programas ejecutables y compilables sin credenciales para cada superficie en

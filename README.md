@@ -26,7 +26,7 @@
 
 [English](./README.md) · [简体中文](./README.zh-Hans.md) · [繁體中文](./README.zh-Hant.md) · [日本語](./README.ja.md) · [한국어](./README.ko.md) · [Español](./README.es.md)
 
-> Canonical English source. Last synced: 2026-09-25
+> Canonical English source. Last synced: 2026-09-30
 
 ## Key Concepts
 
@@ -50,7 +50,8 @@ Before writing your first call, understand these SDK abstractions:
 - [Key Concepts](#key-concepts)
 - [Status](#status)
 - [Install](#install)
-- [Quickstart](#quickstart)
+- [Quickstart — Live Trading](#quickstart--live-trading)
+- [Quickstart — Offline / Mock](#quickstart--offline--mock)
 - [Feature Matrix](#feature-matrix)
 - [Configuration](#configuration)
 - [Package Layout](#package-layout)
@@ -85,7 +86,7 @@ Before writing your first call, understand these SDK abstractions:
 | Threat model and risk register | [docs/threat-model.md](./docs/threat-model.md); 7 adversarial defects found and fixed |
 | Enterprise CI (lint, security, coverage gate, SBOM, GoReleaser config) | 13 jobs green |
 | v-next layer (`pkg/domain`, `pkg/services`, `pkg/transport`, `internal/auth`) | Implemented, tested, and **feature-complete at 51/51 endpoints** — opt in via [`services.NewStack`](#migrating-to-v10); `pkg/hstong/*` stays the default |
-| Release (GitHub) | v1.0.2 |
+| Release (GitHub only; artifacts declined on Gitee by decision) | v1.0.3 |
 
 All 51 HTTP endpoints and 11 market push topics are implemented. Counts are
 canonical in [docs/SPEC.md](./docs/SPEC.md); do not hand-edit them elsewhere.
@@ -101,106 +102,35 @@ Requires **Go 1.26+** and a running local [HStong OpenAPI Gateway](https://quant
 starts, or redistributes the Gateway; it dials `http://127.0.0.1:11111` (HTTP)
 and `127.0.0.1:11112` (TCP push) by default.
 
-## Quickstart
+## Quickstart — Live Trading
 
-Build the client once, share it, and close it when the program exits. The client
-is safe for concurrent use.
+1. **[Apply for API access](docs/getting-started-live.md)** — requires an HStong
+   account, RSA key upload, and 2–3 working days for approval.
+2. **[Install the HStong Gateway](docs/getting-started-live.md)** — download from
+   quant-open.hstong.com, run locally.
+3. **[Verify with integration tests](docs/integration-testing.md)** — validate the
+   full stack before placing real orders.
+4. **[Place your first order](examples/trading)**:
 
-```go
-package main
+   ```sh
+   HSTONG_TRADE_PASSWORD=yourpassword \
+   HSTONG_EXAMPLE_PLACE_ORDER=1 \
+     go run ./examples/trading
+   ```
 
-import (
-	"context"
-	"fmt"
-	"log"
-	"time"
+   The `HSTONG_EXAMPLE_PLACE_ORDER` flag is the explicit opt-in that prevents an
+   accidental order from a forgotten environment variable.
 
-	"github.com/shing1211/hstongapi4go/client"
-	"github.com/shing1211/hstongapi4go/gen/hq/dto"
-	"github.com/shing1211/hstongapi4go/pkg/hstong"
-	"github.com/shing1211/hstongapi4go/pkg/hstong/market"
-	"github.com/shing1211/hstongapi4go/pkg/hstong/trade"
-	"github.com/shing1211/hstongapi4go/pkg/types"
-)
+## Quickstart — Offline / Mock
 
-func main() {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+To explore the SDK without a live account, use the in-repo mock Gateway:
 
-	// 1. Resolve configuration from HSTONG_* (see Configuration).
-	c, err := client.New(client.WithEnv())
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer c.Close()
-
-	// 2. Log in to the trade session (needs HSTONG_TRADE_PASSWORD).
-	session := hstong.NewSessionManager(c)
-	if err := session.Login(ctx); err != nil {
-		log.Fatalf("trade login: %v", err)
-	}
-	defer session.Logout(ctx)
-
-	// 3. Request one market quote.
-	marketMgr := market.New(c)
-	quote, err := marketMgr.BasicQot(ctx, market.BasicQotRequest{
-		Security: []*dto.Security{
-			{DataType: int32(types.DataTypeHKStock), Code: "0700.HK"},
-		},
-		MktTmType: 1,
-	})
-	if err != nil {
-		log.Fatal(err)
-	}
-	for _, q := range quote.BasicQot {
-		fmt.Printf("quote %s last=%v\n", q.GetSecurity().GetCode(), q.GetLastPrice())
-	}
-
-	// 4. Query today's real orders (authenticated).
-	tradeMgr := trade.New(c, trade.WithSession(session))
-	orders, err := tradeMgr.RealEntrustList(ctx, trade.RealEntrustListRequest{
-		ExchangeType: types.ExchangeHK,
-		QueryCount:   20,
-	})
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Printf("today's real orders: %d\n", len(orders))
-}
+```sh
+go run ./cmd/hstong-mock-gateway &   # runs on :11111/:11112
+go run ./examples/quickstart          # no credentials needed
 ```
 
-Subscribe to a market push topic over the TCP channel (import
-`github.com/shing1211/hstongapi4go/pkg/hstong/stream`):
-
-```go
-s := stream.New(c)
-if err := s.Connect(ctx); err != nil {
-	log.Fatal(err)
-}
-defer s.Close()
-
-sub, err := s.Subscribe(ctx, types.TopicBasicQot,
-	&dto.Security{DataType: int32(types.DataTypeHKStock), Code: "0700.HK"})
-if err != nil {
-	log.Fatal(err)
-}
-defer sub.Cancel(context.Background())
-
-for {
-	select {
-	case <-ctx.Done():
-		return
-	case ev := <-sub.Updates():
-		if q, ok := ev.BasicQot(); ok {
-			fmt.Printf("%s last=%v\n", ev.ID, q.GetBasicQot().GetLastPrice())
-		}
-	case err := <-sub.Errors():
-		log.Printf("stream: %v", err)
-	}
-}
-```
-
-Runnable, credential-free-to-compile programs for every surface live in
+Runnable, credential-free-to-compile programs for every surface also live in
 [`examples/`](./examples/README.md): `quickstart`, `market-data`, `trading`,
 `futures`, `algo`, and `streaming`.
 

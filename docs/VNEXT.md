@@ -2,9 +2,8 @@
 
 - **Status:** **N1 decided 2026-09-25 — Option A, commit to the layered API.**
   No code changed for the decision; the programme is tracked in §6.
-- **Purpose:** the forcing function for the N1 decision recorded in
-  `runs/2026-09-25-hstong-agent-readiness/next-phase.md` §1, and the record of
-  what was decided.
+- **Purpose:** the forcing function for the N1 decision (the 2026-09-25 agent-readiness
+  run's next-phase.md §1 — archived), and the record of what was decided.
 - **Reader:** whoever implements the layered API, and whoever maintains the
   released flat API until v1.0.
 
@@ -329,7 +328,7 @@ Option A is a multi-release programme. Order matters: step 1 decides what
 | 6 | ~~Add a `depguard` boundary rule~~ | **Done, but not with depguard.** depguard in golangci-lint v2.9 honours only the `$all` and `$test` tokens in `files`; a glob like `pkg/hstong/**` is accepted silently and matches nothing, so the rule passes forever while enforcing nothing. Replaced with `internal/layering`, a test that parses the repository's own imports. It also asserts that every rule's prefix matches at least one real package, so a rule cannot pass by matching nothing. See §5.6. |
 | 7 | ~~Test `pkg/services`~~ | **Done.** 100.0% of statements, and *every* function at 100% - not just the aggregate. Measured from a clean `git clone` rather than a working tree, because AGENTS.md records a package measuring several points higher from a dirty tree. `market.go` (579 lines, was ~4%) and `trading.go` (780 lines) are covered through the mock Gateway e2e added in D4, not by hand-written doubles, so the coverage is of the wired path. `pkg/services` is now in the `make coverage` gate. |
 | 8 | ~~Re-gate `pkg/transport`~~ | **Done.** `pkg/transport` is at 100% after the Adapter removal and is now gated. |
-| 9 | Publish the migration guide and schedule v1.0 | **Documentation done; the tag is G1.** `docs/MIGRATION.md` is a supported document, no longer a draft, with compiled before/after samples tied to it by test (E1). The `ARCHITECTURE.md` deviations table was refreshed and the four false claims corrected (E2) - but see the caveat below, because a *full graph regeneration* is still due and was deliberately not faked. Releasing v1.0 is G1, and E4 must land first. |
+| 9 | Publish the migration guide and schedule v1.0 | **Done. v1.0.0 shipped 2026-09-29; v1.0.3 is current.** `docs/MIGRATION.md` is a supported document, with compiled before/after samples tied to it by test (E1). `ARCHITECTURE.md` §2 and the flow figures were regenerated from a fresh graph on 2026-09-29 (102 commits stale → 0). The caveats below have been resolved. |
 
 ADR 0011 continues to hold for all of v0.1.x: none of these steps may change a
 released type or wire shape before v1.0.

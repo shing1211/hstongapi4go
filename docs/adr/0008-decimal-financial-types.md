@@ -150,7 +150,7 @@ was not an oversight but a decision with a receipt: the run that implemented
 `pkg/hstong/market` named the exported field `TickSize` rather than
 `SpreadLevel` *specifically so that* `check_money.py`, which then judged Go
 field names only, would not flag it
-(`docs/runs/2026-09-21-hstong-full-surface/evidence/P03-T12-T13.txt` §1). The
+(archived evidence; decision rationale preserved in this ADR) §1. The
 field was therefore never in violation of the guard as the guard was then
 written; it was a violation of the *decision*, hidden by a gap in the
 enforcement. The json-tag rule added on 2026-09-26 closed that gap and the

@@ -81,6 +81,6 @@ The algorithm is `SHA1WithRSA` (PKCS#1 v1.5), matching the platform's Java
 
 ## References
 
-- Plan: [plan.md](../runs/2026-09-21-hstong-full-surface/plan.md) §Assumption 7, §F4, §R7
+- Plan: plan.md (archived; decisions preserved in this ADR) §Assumption 7, §F4, §R7
 - Legacy documentation (key source, not implemented): https://quant-open.hstong.com/api-docs/old/
 - Related: [0001](./0001-gateway-transport.md), [0004](./0004-minimal-dependencies.md)

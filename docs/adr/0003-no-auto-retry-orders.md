@@ -55,5 +55,5 @@ exceeds a threshold (plan §F4), so it carries the same ambiguity.
 
 ## References
 
-- Plan: [plan.md](../runs/2026-09-21-hstong-full-surface/plan.md) §Assumption 4, §F4, §R5
+- Plan: plan.md (archived; decisions preserved in this ADR) §Assumption 4, §F4, §R5
 - Related: [0001](./0001-gateway-transport.md), [0002](./0002-hybrid-codec.md)

@@ -57,6 +57,8 @@ nav:
   - Home: index.md
   - Getting Started:
       - Installation: getting-started.md
+      - Live Trading Setup: getting-started-live.md
+      - Integration Testing: integration-testing.md
       - Configuration: configuration.md
       - Authentication: authentication.md
   - Protocol:

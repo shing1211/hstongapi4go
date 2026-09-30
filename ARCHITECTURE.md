@@ -282,24 +282,21 @@ real clock and a test fake, and the analyzer attributed it to the test file. See
 
 ### 4.5 Push ingest and reconnect — `push.Client.readLoop`
 
-> **Stale entry, retained for history.** This trace was extracted from the
-> knowledge graph when `push.Manager` still existed. `Manager` and `Fanout` were
-> retired on 2026-09-25 (`docs/VNEXT.md` §5), so the symbols below no longer
-> exist. The live path is `push.Client`, whose trace is `readLoop → decodeNotification
-> → dispatch`. This section is regenerated at the v1.0 milestone.
+The released push transport is `internal/push.Client`. The `stream.Client` in
+`pkg/hstong/stream` is the public subscription API; it delegates to the push
+client internally. The v-next `PushOrchestration` (`pkg/services/push.go`) is a
+separate composition layer that wraps the same `push.Client` for the layered API.
 
 ```
-1. readLoop            internal/push/manager.go   [REMOVED]
-2.   reconnectLoop     internal/push/manager.go   [REMOVED]
-3.     resubscribeAll  internal/push/manager.go   [REMOVED]
-4.     sendTopicRequest    internal/push/manager.go   [REMOVED]
-5.       buildTopicRequest internal/push/manager.go   [REMOVED]
+1. readLoop              internal/push/client.go
+2.   decodeNotification  internal/push/notify_normalize.go  (NormalizeNotification)
+3.     dispatch          internal/push/client.go  (per-topic handlers)
 ```
 
-The read loop consumes 151-byte frames, skips heartbeats, decodes `PBNotify`
-payloads, and on a read error closes the connection and walks the reconnect
-ladder. This was the v-next `Manager`; the released stream API uses
-`internal/push.Client`, which has a separate lifecycle and is the survivor.
+`readLoop` reads 151-byte frames, skips zero-type (heartbeat) frames, decodes
+`PBNotify` payloads via `NormalizeNotification`, and dispatches to registered
+handlers. On a read error it closes the connection and walks the exponential-
+backoff reconnect ladder, re-subscribing all active topics on success.
 
 ## 5. The v-next layer, and who can reach it
 
@@ -317,7 +314,7 @@ it.
 | `pkg/services` | **No.** Nothing in the SDK imports it |
 | `pkg/transport` | **No.** Nothing in the SDK imports it |
 | `internal/auth` | **Yes** — `pkg/services/session.go` |
-| `internal/push.Manager`, `.Fanout` | **Removed 2026-09-25.** Retired as part of the Option A decision |
+| `internal/push` | **Yes** — `pkg/hstong/stream` and `pkg/services` both hold `*push.Client` |
 | `pkg/transport.Adapter` | **Removed 2026-09-26.** See consequence 3 |
 
 **"Not imported" is not "unreachable", and the distinction is the point.** The two

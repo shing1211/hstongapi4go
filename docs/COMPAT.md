@@ -54,8 +54,8 @@ the full compatibility and deprecation policy.
 
 ## Push Topic Support
 
-All 11 documented push topics are implemented in `pkg/hstong/stream` and the push
-manager (`internal/push/manager.go`):
+All 11 documented push topics are implemented in `pkg/hstong/stream` backed by the
+push transport (`internal/push/client.go`):
 
 | Topic ID | Description | Package |
 |----------|-------------|---------|
