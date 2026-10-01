@@ -202,17 +202,25 @@ jobs:
           # gitleaks scans the working tree and the commit history, so the
           # history must be fetched rather than the default shallow clone.
           fetch-depth: 0
-      # Pinned by exact tag, not @latest, for the same reason gosec and
-      # govulncheck are pinned: an upstream release must not change a security
-      # result without a commit. See docs/adr/0012-ci-secret-scanning.md.
+      # Pinned to an exact release tag rather than @latest or the floating
+      # @v2 major tag, for the same reason gosec and govulncheck are pinned:
+      # an upstream release must not change a security result without a
+      # commit. See docs/adr/0012-ci-secret-scanning.md.
       - name: Scan repository history for credentials
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@v2.3.9
         env:
+          # Required by gitleaks-action v2 on pull_request events: the action
+          # calls the GitHub API with this token to report a finding. Without
+          # it the job aborts within a few seconds and scans nothing, which
+          # meant pull requests carried no secret scanning at all.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "false"
-        with:
-          # Scan the whole history of the pushed ref, not just its diff, so a
-          # credential that landed in an earlier commit is still reported.
-          args: detect --source . --redact --no-banner
+          # .gitleaks.toml in the repository root is auto-detected. The leading
+          # dot is required; gitleaks does not pick up a bare `gitleaks.toml`.
+          # Its allowlists suppress specific paths, never a rule class.
+          # This action runs `gitleaks detect` over the checked-out tree
+          # itself, so the fetch-depth: 0 above is what puts earlier commits
+          # inside the scan rather than just the current diff.
 
   otel:
     name: build and test with otel tag
