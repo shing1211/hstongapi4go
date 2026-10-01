@@ -56,8 +56,9 @@ hand.
 |------|----------|
 | Design decisions | `docs/adr/` (index: [docs/adr/README.md](./docs/adr/README.md)) |
 | Architecture overview | [ARCHITECTURE.md](./ARCHITECTURE.md) (graph-derived, source-verified) · [docs/DESIGN.md](./docs/DESIGN.md) (design rationale) |
-| Plan of record | [plan.md](./docs/runs/2026-09-25-hstong-agent-readiness/plan.md) |
-| Run tracker | [todos.md](./docs/runs/2026-09-25-hstong-agent-readiness/todos.md) |
+| Plan of record | [plan.md](./docs/runs/2026-09-26-vnext-parity-wire/plan.md) |
+| Run tracker | [todos.md](./docs/runs/2026-09-26-vnext-parity-wire/todos.md) |
+| Archived runs (2026-09-21, 2026-09-25) | Removed after v1.0 shipped; decisions preserved in `docs/adr/` and `CHANGELOG.md` — see [docs/runs/index.md](./docs/runs/index.md) |
 | Endpoint index (canonical) | `docs/SPEC.md` |
 | Legacy protocol (not implemented) | `docs/LEGACY.md` |
 | Vendored protos + provenance | `proto/` |

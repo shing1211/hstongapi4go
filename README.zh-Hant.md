@@ -29,7 +29,8 @@
 
 - [狀態](#狀態)
 - [安裝](#安裝)
-- [快速開始](#快速開始)
+- [快速開始 — 實時交易](#快速開始--實時交易)
+- [快速開始 — 離線 / Mock](#快速開始--離線--mock)
 - [遷移到 v1.0](#遷移到-v10)
 - [功能矩陣](#功能矩陣)
 - [設定](#設定)
@@ -75,102 +76,30 @@ go get github.com/shing1211/hstongapi4go
 （或倉庫內的 [Mock Gateway](./docs/mock-gateway.md)）。SDK 從不安裝、啟動或再分發
 Gateway；預設連線 `http://127.0.0.1:11111`（HTTP）和 `127.0.0.1:11112`（TCP 推送）。
 
-## 快速開始
+## 快速開始 — 實時交易
 
-建置一次用戶端，共用使用，並在程式結束時關閉。用戶端可安全並行使用。
+1. **[申請 API 存取權限](docs/getting-started-live.md)** — 需要華盛帳戶、RSA 公鑰上傳，
+   審批需要 2–3 個工作日。
+2. **[安裝華盛 Gateway](docs/getting-started-live.md)** — 從 quant-open.hstong.com 下載，
+   本機執行。
+3. **[用整合測試驗證](docs/integration-testing.md)** — 在真實下單前驗證完整鏈路。
+4. **[下單第一筆真實訂單](examples/trading)**：
 
-```go
-package main
+   ```sh
+   HSTONG_TRADE_PASSWORD=yourpassword \
+   HSTONG_EXAMPLE_PLACE_ORDER=1 \
+     go run ./examples/trading
+   ```
 
-import (
-	"context"
-	"fmt"
-	"log"
-	"time"
+   `HSTONG_EXAMPLE_PLACE_ORDER` 標誌是明確的 opt-in，防止因環境變數遺忘而意外下單。
 
-	"github.com/shing1211/hstongapi4go/client"
-	"github.com/shing1211/hstongapi4go/gen/hq/dto"
-	"github.com/shing1211/hstongapi4go/pkg/hstong"
-	"github.com/shing1211/hstongapi4go/pkg/hstong/market"
-	"github.com/shing1211/hstongapi4go/pkg/hstong/trade"
-	"github.com/shing1211/hstongapi4go/pkg/types"
-)
+## 快速開始 — 離線 / Mock
 
-func main() {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+在沒有真實帳戶的情況下探索 SDK，使用倉庫內建的 Mock Gateway：
 
-	// 1. 從 HSTONG_* 解析設定（見「設定」章節）。
-	c, err := client.New(client.WithEnv())
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer c.Close()
-
-	// 2. 登入交易工作階段（需要 HSTONG_TRADE_PASSWORD）。
-	session := hstong.NewSessionManager(c)
-	if err := session.Login(ctx); err != nil {
-		log.Fatalf("trade login: %v", err)
-	}
-	defer session.Logout(ctx)
-
-	// 3. 請求一筆行情報價。
-	marketMgr := market.New(c)
-	quote, err := marketMgr.BasicQot(ctx, market.BasicQotRequest{
-		Security: []*dto.Security{
-			{DataType: int32(types.DataTypeHKStock), Code: "0700.HK"},
-		},
-		MktTmType: 1,
-	})
-	if err != nil {
-		log.Fatal(err)
-	}
-	for _, q := range quote.BasicQot {
-		fmt.Printf("quote %s last=%v\n", q.GetSecurity().GetCode(), q.GetLastPrice())
-	}
-
-	// 4. 查詢今日真實訂單（需認證）。
-	tradeMgr := trade.New(c, trade.WithSession(session))
-	orders, err := tradeMgr.RealEntrustList(ctx, trade.RealEntrustListRequest{
-		ExchangeType: types.ExchangeHK,
-		QueryCount:   20,
-	})
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Printf("today's real orders: %d\n", len(orders))
-}
-```
-
-透過 TCP 通道訂閱行情推送主題（匯入
-`github.com/shing1211/hstongapi4go/pkg/hstong/stream`）：
-
-```go
-s := stream.New(c)
-if err := s.Connect(ctx); err != nil {
-	log.Fatal(err)
-}
-defer s.Close()
-
-sub, err := s.Subscribe(ctx, types.TopicBasicQot,
-	&dto.Security{DataType: int32(types.DataTypeHKStock), Code: "0700.HK"})
-if err != nil {
-	log.Fatal(err)
-}
-defer sub.Cancel(context.Background())
-
-for {
-	select {
-	case <-ctx.Done():
-		return
-	case ev := <-sub.Updates():
-		if q, ok := ev.BasicQot(); ok {
-			fmt.Printf("%s last=%v\n", ev.ID, q.GetBasicQot().GetLastPrice())
-		}
-	case err := <-sub.Errors():
-		log.Printf("stream: %v", err)
-	}
-}
+```sh
+go run ./cmd/hstong-mock-gateway &   # 執行於 :11111/:11112
+go run ./examples/quickstart          # 無需憑證即可編譯
 ```
 
 [`examples/`](./examples/README.md) 中提供涵蓋每個介面的、可執行且無需憑證即可編譯的程式：
