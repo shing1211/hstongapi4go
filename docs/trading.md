@@ -158,7 +158,7 @@ that turns on retry for mutations (ADR 0003).
 
 The released `trade.Manager` above does **not** validate order prices against
 the instrument's tick. The v-next layer (`services.NewStack`, opted into per
-[Migrating to v1.0](../README.md#migrating-to-v10)) does: `Entrust` and
+[Migrating to v1.0](https://github.com/shing1211/hstongapi4go#migrating-to-v10)) does: `Entrust` and
 `ChangeEntrust` check an HK order price against the instrument's minimum
 price increment before sending it.
 
