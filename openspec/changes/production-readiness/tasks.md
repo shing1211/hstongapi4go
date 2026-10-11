@@ -54,13 +54,23 @@
 > Verification: either the HKEX band table is populated in `pkg/domain/`
 > or `docs/trading.md` documents the approximation boundary for callers.
 
-- [ ] 5.1 Source the authoritative HKEX price-band tick table from public
+- [x] 5.1 Source the authoritative HKEX price-band tick table from public
   exchange documentation. Populate `pkg/domain/tick_schedule.go` or the
   existing `services.TickSchedule` table.
-- [ ] 5.2 If the table cannot be fully sourced, add a clearly-worded
+  (Done: `pkg/domain/hk_price_bands.go` — bands from the HKEX Phase 2 FAQ
+  v2026-05-08 and the Dec-2024 conclusions, effective 2026-08-03.
+  `TickSchedule.ScheduleForPrice` implements the new additive
+  `domain.PricedTickScheduleResolver`; `services.validatePriceForHK`
+  prefers the priced answer, and `ok false` above the 9 995 ceiling skips
+  the check. Excluded types keep fixed DataType ticks.)
+- [x] 5.2 If the table cannot be fully sourced, add a clearly-worded
   warning in `docs/trading.md` that HK price-band validation uses an
   approximation and callers with strict requirements must inject
   `domain.TickScheduleResolver`.
+  (The table was fully sourced, so no approximation warning was required;
+  `docs/trading.md` documents the table, scope, ceiling skip, snapshot
+  caveat and the `WithTickSchedule` override path anyway, per issue #21
+  Option C.)
 
 ## 6. v-next layer — deprecate `pkg/hstong/*` (Option A chosen)
 

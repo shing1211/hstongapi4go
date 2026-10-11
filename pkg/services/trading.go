@@ -124,12 +124,14 @@ func WithTradingClient(c Executor) TradingOption {
 // WithTickSchedule injects the resolver used to validate order prices and
 // quantities against the instrument's own grid.
 //
-// Without it, validation falls back to the default HK table, which is keyed on
-// DataType and is therefore a data-type-level approximation rather than a
-// per-instrument one. Supplying a real instrument master is what makes the
-// price check mean anything: the default table returns a grid, and a grid
-// invented by the SDK is the defect this option exists to let a caller replace.
-// See docs/runs/2026-09-26-vnext-parity-wire/design-tick-model.md §2.2.
+// Without it, validation falls back to the default HK table: HK stock prices
+// are checked against the HKEX price-band increments published by the exchange
+// (effective 2026-08-03, see domain's hk_price_bands.go), and other HK data
+// types against fixed per-type ticks. A resolver answering from a live
+// instrument master is still the more precise choice; a
+// domain.PricedTickScheduleResolver additionally takes over the per-price
+// answer. A grid invented by the SDK is the defect this option exists to let a
+// caller replace. See docs/runs/2026-09-26-vnext-parity-wire/design-tick-model.md §2.2.
 //
 // A nil resolver is ignored rather than stored, because a nil schedule must
 // mean "use the default" rather than a nil dereference on the first order.
@@ -756,15 +758,15 @@ func validateQuantityForHK(qty domain.Quantity, schedule domain.TickScheduleReso
 // validation. ValidateOn takes the instrument's grid, so the resolver's answer
 // is what decides.
 //
-// ok false skips the step check. The design's "reject an order whose tick is
-// unknown" is deliberately not implemented here: the default table still answers
-// 0.001 for an HK stock, so an unknown tick today means "the price-band table has
-// not been sourced yet" rather than "this instrument has no grid", and rejecting
-// on that basis would break orders the exchange accepts. The rejection lands
-// with the band table. See design-tick-model.md §2.3 and the deferred
-// price-band work in next-phase.md.
+// A PricedTickScheduleResolver is consulted first: for an HK stock the grid is
+// a function of the order price (HKEX sets the increment by band), so its
+// ScheduleForPrice answer wins outright. ok false skips the step check and does
+// not fall back to ScheduleFor: a price above the band table's ceiling is
+// unknown, not an invitation to validate against a coarser default the priced
+// resolver just declined to supply. A resolver that does not implement the
+// priced interface is answered by ScheduleFor alone, as before.
 func validatePriceForHK(price domain.Price, schedule domain.TickScheduleResolver, sym domain.Symbol) error {
-	_, tick, ok := schedule.ScheduleFor(sym)
+	tick, ok := resolveTickForPrice(price, schedule, sym)
 	if !ok {
 		return nil
 	}
@@ -772,6 +774,16 @@ func validatePriceForHK(price domain.Price, schedule domain.TickScheduleResolver
 		return errs.New(types.StatusInvalidParam, opEntrust, err.Error())
 	}
 	return nil
+}
+
+// resolveTickForPrice returns the instrument tick to validate price against,
+// preferring the priced answer when the resolver has one.
+func resolveTickForPrice(price domain.Price, schedule domain.TickScheduleResolver, sym domain.Symbol) (string, bool) {
+	if priced, isPriced := schedule.(domain.PricedTickScheduleResolver); isPriced {
+		return priced.ScheduleForPrice(sym, price)
+	}
+	_, tick, ok := schedule.ScheduleFor(sym)
+	return tick, ok
 }
 
 func validateSessionWindow(market domain.Market, sessionType string) error {

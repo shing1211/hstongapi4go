@@ -142,8 +142,8 @@ func TestValidatePriceForHKMatrix(t *testing.T) {
 		wantErr bool
 		why     string
 	}{
-		{"stock on tick", types.DataTypeHKStock, "123.456", "0.001", false, "an exact multiple of 0.001"},
-		{"stock off tick", types.DataTypeHKStock, "123.4565", "0.001", true, "0.0005 remainder"},
+		{"stock on tick", types.DataTypeHKStock, "123.5", "0.001", false, "an exact multiple of the 0.1 band tick"},
+		{"stock off tick", types.DataTypeHKStock, "123.4565", "0.001", true, "not a multiple of the 0.1 band tick"},
 		{"stock negative", types.DataTypeHKStock, "-1", "0.001", true, "the negative check runs before the step check"},
 		{"stock negative zero", types.DataTypeHKStock, "-0.001", "0.001", true, "and it is a sign test, not a magnitude test"},
 		{"stock zero price", types.DataTypeHKStock, "0", "0.001", false, "zero is not negative and divides evenly"},
@@ -207,7 +207,7 @@ func TestValidatePriceForHKSplitsGateFromStep(t *testing.T) {
 
 	// A price on the instrument's grid passes whichever tick it declares, because
 	// the declared tick is no longer consulted for the step.
-	declaredCoarser := domain.MustNewPrice("388.05", "0.01")
+	declaredCoarser := domain.MustNewPrice("388.2", "0.01")
 	if err := validatePriceForHK(declaredCoarser, domain.TickSchedule{}, stock); err != nil {
 		t.Errorf("a price on the stock grid was rejected because it declared 0.01: %v. "+
 			"The instrument's tick decides the step, not the price's own.", err)
@@ -949,7 +949,7 @@ func TestValidateOrderForHKRejectsOneFaultAtATime(t *testing.T) {
 			name: "order type is not eligible for HK",
 			mutate: func(o *domain.Order) {
 				o.OrderType = types.EntrustTypeMarket // price-optional, so the price still passes
-				o.Price = domain.MustNewPrice("387.05", "0.001")
+				o.Price = domain.MustNewPrice("387.2", "0.2")
 			},
 			why: `"5" is not in knownHKOrderTypes`,
 		},
@@ -972,7 +972,7 @@ func TestValidateOrderForHKRejectsOneFaultAtATime(t *testing.T) {
 			name: "conditional order with validDays below the range",
 			mutate: func(o *domain.Order) {
 				o.OrderType = types.EntrustTypeStopProfitLimit
-				o.Price = domain.MustNewPrice("387.05", "0.001")
+				o.Price = domain.MustNewPrice("387.2", "0.2")
 				o.ValidDays = 0
 				o.CondValue = "380.000"
 			},
@@ -982,7 +982,7 @@ func TestValidateOrderForHKRejectsOneFaultAtATime(t *testing.T) {
 			name: "conditional order with validDays above the range",
 			mutate: func(o *domain.Order) {
 				o.OrderType = types.EntrustTypeStopProfitLimit
-				o.Price = domain.MustNewPrice("387.05", "0.001")
+				o.Price = domain.MustNewPrice("387.2", "0.2")
 				o.ValidDays = maxValidDays + 1
 				o.CondValue = "380.000"
 			},
@@ -992,7 +992,7 @@ func TestValidateOrderForHKRejectsOneFaultAtATime(t *testing.T) {
 			name: "conditional order with no condValue",
 			mutate: func(o *domain.Order) {
 				o.OrderType = types.EntrustTypeStopProfitLimit
-				o.Price = domain.MustNewPrice("387.05", "0.001")
+				o.Price = domain.MustNewPrice("387.2", "0.2")
 				o.ValidDays = 7
 				o.CondValue = ""
 			},
@@ -1124,7 +1124,7 @@ func TestValidateOrderForHKValidDaysBoundaries(t *testing.T) {
 		t.Run(strconv.Itoa(tc.days), func(t *testing.T) {
 			order := tradingHKOrder()
 			order.OrderType = types.EntrustTypeStopProfitLimit
-			order.Price = domain.MustNewPrice("387.05", "0.001")
+			order.Price = domain.MustNewPrice("387.2", "0.2")
 			order.ValidDays = tc.days
 			order.CondValue = "380.000"
 

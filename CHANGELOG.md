@@ -49,13 +49,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   `services.WithTickSchedule` injects a `domain.TickScheduleResolver` for callers
   with a real instrument master. A caller who injects nothing gets exactly the
-  previous behaviour, which is what makes this shippable on its own. The default
-  table is still keyed on `DataType` and is an approximation: HKEX sets a stock's
-  tick by price band, and that table is **not** filled in, because the bands must
-  be sourced from the exchange document rather than from memory.
+  previous behaviour, which is what makes this shippable on its own.
+
+  For HK stocks the default resolver now consults the **HKEX price-band tick
+  table**, sourced from the exchange's published Phase 2 documentation rather
+  than recalled from memory (bands effective 2026-08-03). See the new entry
+  under Added.
 
 ### Added
 
+- **HKEX price-band tick table for HK stock order prices.** `domain.TickSchedule`
+  now implements the new `domain.PricedTickScheduleResolver` interface, whose
+  `ScheduleForPrice(sym, price)` answers with the minimum increment HKEX
+  publishes for the order price's band — 0.001 at HKD ≤ 0.25 up to 5.000 at
+  (5 000, 9 995], inclusive at each band's upper bound. The table is sourced
+  from the HKEX Phase 2 FAQ (version 2026-05-08) and the December 2024
+  consultation conclusions; bands took effect 2026-08-03. ETFs, bonds, warrants
+  and CBBCs are outside the exchange's band scope and keep their fixed
+  `DataType` ticks. A price above the published ceiling (9 995) has no answer:
+  the check is skipped rather than validated against a coarser invented grid.
+  The table is a snapshot; inject a `PricedTickScheduleResolver` via
+  `services.WithTickSchedule` to override. Documented in `docs/trading.md`.
 - **`domain.TickScheduleResolver`** — resolves an instrument's lot size and tick.
   `ok false` means "no opinion", which callers must treat as unknown rather than
   substituting a default; a fabricated grid is the defect this type exists to let

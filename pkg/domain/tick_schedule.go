@@ -3,6 +3,10 @@
 
 package domain
 
+import (
+	"github.com/shing1211/hstongapi4go/pkg/types"
+)
+
 // TickScheduleResolver resolves the lot size and minimum price increment for one
 // instrument.
 //
@@ -30,15 +34,36 @@ type TickScheduleResolver interface {
 	ScheduleFor(sym Symbol) (lot uint64, tick string, ok bool)
 }
 
+// PricedTickScheduleResolver is a TickScheduleResolver that can additionally
+// answer the tick as a function of the order price.
+//
+// HKEX sets an HK stock's minimum price increment by price band, so for those
+// instruments the tick is a property of (instrument, price), not of the
+// instrument alone. Order validation prefers this method when the resolver
+// implements it; a plain TickScheduleResolver keeps the price-independent
+// answer and remains accepted, so adopting the priced form is additive.
+//
+// The ok contract matches ScheduleFor: false means "no opinion" and the caller
+// must skip the check rather than substitute a default.
+type PricedTickScheduleResolver interface {
+	TickScheduleResolver
+
+	// ScheduleForPrice returns the minimum price increment for sym at the given
+	// order price. ok is false when the resolver has no opinion about that
+	// (symbol, price) pair, in which case tick is empty and must be ignored.
+	ScheduleForPrice(sym Symbol, price Price) (tick string, ok bool)
+}
+
 // ScheduleFor implements TickScheduleResolver, so the default HK table can be
 // injected anywhere the interface is taken.
 //
 // The lookup is keyed on the symbol's DataType, which is a data-type-level
-// default rather than a per-instrument one. That is a known and recorded
-// limitation: HKEX sets a stock's tick by price band, so no single value is
-// correct for every HK stock, and the band table is deliberately absent rather
-// than guessed. See the deferred price-band work in next-phase.md and
-// design-tick-model.md §2.3.
+// default rather than a per-instrument one. For an HK stock the real answer is
+// priced — HKEX sets the increment by band, see hk_price_bands.go — and
+// ScheduleFor's 0.001 is only correct in the lowest band. It survives as the
+// price-independent answer for lot checks and other callers that need a single
+// number; order price validation must use ScheduleForPrice, which this type
+// also implements.
 func (t TickSchedule) ScheduleFor(sym Symbol) (lot uint64, tick string, ok bool) {
 	// The default tables are HK-only, so a symbol from another market is not
 	// answered from them even if its DataType happens to collide.
@@ -50,4 +75,22 @@ func (t TickSchedule) ScheduleFor(sym Symbol) (lot uint64, tick string, ok bool)
 		return 0, "", false
 	}
 	return schedule.Lot, schedule.TickSize, true
+}
+
+// ScheduleForPrice implements PricedTickScheduleResolver on the default table.
+//
+// The market guard matches ScheduleFor. An HK stock is answered from the HKEX
+// price-band table keyed on the order price; every other covered type falls
+// back to ScheduleFor's DataType answer, because HKEX does not band those
+// instruments. ok false means no opinion for that (symbol, price) pair — an HK
+// stock priced above the table's ceiling, or a type the table does not cover.
+func (t TickSchedule) ScheduleForPrice(sym Symbol, price Price) (tick string, ok bool) {
+	if sym.Market != MarketHK && sym.Market != "" {
+		return "", false
+	}
+	if sym.DataType == types.DataTypeHKStock {
+		return hkStockTickAtPrice(price)
+	}
+	_, tick, ok = t.ScheduleFor(sym)
+	return tick, ok
 }
