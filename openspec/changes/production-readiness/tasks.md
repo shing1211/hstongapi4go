@@ -106,8 +106,12 @@
   download steps for checksums/bundle/archive, the `cosign verify-blob`
   command with the correct `--certificate-identity`, and the
   `sha256sum --check` command.
-- [ ] 8.2 Verify the documented command against the latest release
-  (v1.0.3 or later).
+- [x] 8.2 Verify the documented command against the latest release
+  (v1.0.3 or later). (Verified 2026-10-11 against v1.0.3 on Windows:
+  cosign 3.1.3 `verify-blob` printed `Verified OK` with the documented
+  `--certificate-identity`/`--certificate-oidc-issuer`/`--bundle`
+  arguments, and `sha256sum --check --ignore-missing` confirmed
+  `hstongapi4go_1.0.3_windows_amd64.zip`.)
 
 ## 9. Gateway version compatibility matrix
 
