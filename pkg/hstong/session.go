@@ -97,9 +97,10 @@ func WithKeepAliveRoute(route client.Route) SessionOption {
 // Deprecated: use the v-next session service instead — see docs/MIGRATION.md. It
 // is reachable as services.Stack.Session after services.NewStack(c); the
 // v-next service composes internal/auth, which adds the injectable clock the
-// trade-password crypto needs. This type still works and is not scheduled for
-// removal; the marker is advisory, and it was added in v1.0.0 to mark the moment
-// docs/MIGRATION.md stopped being a draft.
+// trade-password crypto needs. This type is deprecated in v1.0 and will be
+// removed in v2.0 (2027); the deprecation window ends 2026-11-11. pkg/services
+// is the recommended path forward and is not deprecated. The marker was added
+// in v1.0.0 to mark the moment docs/MIGRATION.md stopped being a draft.
 type SessionManager struct {
 	client            *client.Client
 	keepAliveInterval time.Duration

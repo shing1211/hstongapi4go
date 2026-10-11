@@ -298,6 +298,57 @@ named constant (`types.StatusNotLoggedIn`) rather than a literal.
       [Security](./security.md) and [ADR 0005](./adr/0005-key-model-and-push-verification.md).
 - [ ] **Build and test:** `go build ./... && go test ./...`.
 
+## v1 → v2
+
+`pkg/hstong/*` is deprecated in v1.0 (2026-10-11) and will be removed in v2.0
+(~2027). The deprecation window is **1 month**, closing **2026-11-11**. After that
+date, no further v1.x patch releases will be made.
+
+**What this means for you:** if you use `pkg/hstong/*`, you must migrate to
+`pkg/services` before upgrading to v2.0. The two surfaces coexist until v2.0, so
+you can migrate at your own pace. The `pkg/services` import path does not change.
+
+The migration examples below are the same ones shown for v1.0; the before/after
+is identical because the only difference between v1→v2 and v0.1.x→v1.0 is the
+removal of the deprecated surface.
+
+### What changes at v2.0
+
+| | v1.x (current) | v2.0 |
+|---|---|---|
+| `pkg/hstong/*` | deprecated, still present | **removed** |
+| `pkg/services` | the recommended path | the only path |
+| Module path | `github.com/shing1211/hstongapi4go` | unchanged |
+| Go version | 1.26+ | unchanged |
+
+### Per-package migration
+
+| Package | Migration path |
+|---------|---------------|
+| `pkg/hstong/market` | `services.NewStack(c).Market` |
+| `pkg/hstong/trade` | `services.NewStack(c).Trading` |
+| `pkg/hstong/future` | `services.NewStack(c).Futures` |
+| `pkg/hstong/algo` | `services.NewStack(c).Algo` |
+| `pkg/hstong/stream` | `services.NewStack(c).Push` (see push migration below) |
+| `pkg/hstong/session` | `services.NewStack(c).Session` |
+
+### Push migration note
+
+`pkg/hstong/stream` (channel-based push API) has no direct v-next equivalent.
+The v-next push path uses `transport.PushAdapter` and a `domain.PushUpdate` channel.
+See the v1.0 push migration example above for the v-next pattern.
+
+### Checklist for v2.0
+
+- [ ] **Replace all `pkg/hstong/*` calls** with `pkg/services` equivalents using the
+      per-package table above.
+- [ ] **For push**, adopt the `transport.PushAdapter` pattern from the v1.0 push
+      migration example.
+- [ ] **Stop reading deprecated fields** if you have not yet done so.
+- [ ] **Test against a live Gateway** with `HSTONG_INTEGRATION=1` before upgrading
+      to v2.0.
+- [ ] **Build and test:** `go build ./... && go test ./...`.
+
 ## v0.1.x notes
 
 v0.1.x is the current series. Its API is stable under
