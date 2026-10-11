@@ -9,6 +9,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **`pkg/hstong/*` is now deprecated.** All public symbols in `pkg/hstong/market`,
+  `pkg/hstong/trade`, `pkg/hstong/future`, `pkg/hstong/algo`,
+  `pkg/hstong/stream`, and `pkg/hstong/session` carry `// Deprecated:` GoDoc
+  comments pointing to `docs/MIGRATION.md`. The deprecation window is 1 month,
+  closing 2026-11-11. The packages will be removed in v2.0 (~2027). The
+  `pkg/services` import path is unchanged. See [ADR 0014](./docs/adr/0014-v2.0-removal-of-pkg-hstong.md).
+
+### Added
+
+- **Public GitHub issue templates.** `.github/ISSUE_TEMPLATE/bug_report.yml` and
+  `.github/ISSUE_TEMPLATE/feature_request.yml` guide reporters to include
+  market, Gateway version, and `HSTONG_INTEGRATION` status — the fields most
+  useful for a trading SDK bug report.
+- **`docs/SIGNING.md`** — step-by-step guide for verifying release artifacts using
+  cosign keyless verification and `sha256sum`.
+- **`docs/COMPAT.md`** — SDK/Gateway version compatibility matrix with the
+  integration test suite as the canonical compatibility gate.
+
+### Documentation
+
+- **`docs/MIGRATION.md`** — added v1→v2 section covering the deprecation
+  timeline, per-package migration table, and v2.0 readiness checklist.
+- **`docs/adr/README.md`** — ADR 0014 indexed.
+
 - **Hong Kong order price validation now uses the instrument's tick, not the
   caller's.** `services.validatePriceForHK` consulted the tick schedule only to
   decide whether a check ran, then called `Price.Validate(true)` — which tests a
