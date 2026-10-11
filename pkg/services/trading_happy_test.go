@@ -60,7 +60,9 @@ func tradingConnectSymbol() domain.Symbol {
 //
 // Every branch of validateOrderForHK is satisfied deliberately:
 //   - Quantity 100 is an integer and a multiple of the HK stock lot of 100;
-//   - Price 387.05 is positive and a multiple of the 0.001 tick;
+//   - Price 387.2 is a multiple of the 0.2 band tick the HKEX spread table
+//     returns for its price (the (200,500] band), so the priced step check
+//     accepts it;
 //   - OrderType "3" (limit) is in knownHKOrderTypes and is neither
 //     price-optional nor conditional, so the price is checked and the
 //     validDays/condValue block does not run;
@@ -74,7 +76,7 @@ func tradingHKOrder() domain.Order {
 		Side:        types.EntrustBuy,
 		OrderType:   types.EntrustTypeLimit,
 		Quantity:    domain.MustNewQuantity("100"),
-		Price:       domain.MustNewPrice("387.05", "0.001"),
+		Price:       domain.MustNewPrice("387.2", "0.2"),
 		TimeInForce: "DAY",
 		SessionType: "",
 	}
@@ -290,8 +292,8 @@ func TestEntrustHKPlacesTheOrder(t *testing.T) {
 	if req.EntrustAmount != "100" {
 		t.Errorf("EntrustAmount = %q, want 100", req.EntrustAmount)
 	}
-	if req.EntrustPrice != "387.05" {
-		t.Errorf("EntrustPrice = %q, want 387.05", req.EntrustPrice)
+	if req.EntrustPrice != "387.2" {
+		t.Errorf("EntrustPrice = %q, want 387.2", req.EntrustPrice)
 	}
 	if req.EntrustBS != types.EntrustBuy {
 		t.Errorf("EntrustBS = %q, want %q", req.EntrustBS, types.EntrustBuy)
@@ -491,7 +493,7 @@ func TestBatchCancelEntrustSendsEveryID(t *testing.T) {
 func TestChangeEntrustSendsTheReplacement(t *testing.T) {
 	exec := newSequencedExecutor(t, sequencedReply{reply: json.RawMessage(`{"data":"1"}`)})
 	err := NewTradingService(exec).ChangeEntrust(t.Context(), tradingAccountID(), tradingEntrustID(),
-		domain.MustNewPrice("388.05", "0.001"), domain.MustNewQuantity("200"))
+		domain.MustNewPrice("388.2", "0.2"), domain.MustNewQuantity("200"))
 	if err != nil {
 		t.Fatalf("ChangeEntrust: %v", err)
 	}
@@ -501,8 +503,8 @@ func TestChangeEntrustSendsTheReplacement(t *testing.T) {
 	if req.EntrustID != "E-1001" {
 		t.Errorf("EntrustID = %q, want E-1001", req.EntrustID)
 	}
-	if req.EntrustPrice != "388.05" {
-		t.Errorf("EntrustPrice = %q, want 388.05", req.EntrustPrice)
+	if req.EntrustPrice != "388.2" {
+		t.Errorf("EntrustPrice = %q, want 388.2", req.EntrustPrice)
 	}
 	if req.EntrustAmount != "200" {
 		t.Errorf("EntrustAmount = %q, want 200", req.EntrustAmount)
@@ -533,7 +535,7 @@ func TestChangeEntrustValidatesAsAnHKStock(t *testing.T) {
 	t.Run("odd lot is refused", func(t *testing.T) {
 		exec := newSequencedExecutor(t, sequencedReply{reply: json.RawMessage(`{"data":"1"}`)})
 		err := NewTradingService(exec).ChangeEntrust(t.Context(), tradingAccountID(), tradingEntrustID(),
-			domain.MustNewPrice("388.05", "0.001"), domain.MustNewQuantity("7"))
+			domain.MustNewPrice("388.2", "0.2"), domain.MustNewQuantity("7"))
 		assertInvalidParam(t, err, opEntrust)
 		requireCalls(t, exec, 0)
 	})
@@ -545,7 +547,7 @@ func TestChangeEntrustValidatesAsAnHKStock(t *testing.T) {
 		// schedule's". That was the defect: the caller chose the number the check
 		// tested, so the check could not fail for a reason they had not already
 		// accepted. The instrument's grid now decides, and 388.0501 is not a
-		// multiple of 0.001.
+		// multiple of the band tick 0.200.
 		exec := newSequencedExecutor(t, sequencedReply{reply: json.RawMessage(`{"data":"1"}`)})
 		err := NewTradingService(exec).ChangeEntrust(t.Context(), tradingAccountID(), tradingEntrustID(),
 			domain.MustNewPrice("388.0501", "0.0001"), domain.MustNewQuantity("100"))
@@ -559,14 +561,14 @@ func TestChangeEntrustValidatesAsAnHKStock(t *testing.T) {
 		// exactly as given.
 		exec := newSequencedExecutor(t, sequencedReply{reply: json.RawMessage(`{"data":"1"}`)})
 		err := NewTradingService(exec).ChangeEntrust(t.Context(), tradingAccountID(), tradingEntrustID(),
-			domain.MustNewPrice("388.05", "0.01"), domain.MustNewQuantity("100"))
+			domain.MustNewPrice("388.2", "0.01"), domain.MustNewQuantity("100"))
 		if err != nil {
 			t.Fatalf("ChangeEntrust with an on-grid price declaring 0.01 = %v, want nil: the "+
 				"declared tick is not consulted for the step", err)
 		}
 		req := tradingParamsAs[changeEntrustWireRequest](t, exec)
-		if req.EntrustPrice != "388.05" {
-			t.Errorf("EntrustPrice = %q, want 388.05 verbatim", req.EntrustPrice)
+		if req.EntrustPrice != "388.2" {
+			t.Errorf("EntrustPrice = %q, want 388.2 verbatim", req.EntrustPrice)
 		}
 	})
 

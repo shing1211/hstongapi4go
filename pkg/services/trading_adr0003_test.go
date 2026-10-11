@@ -101,7 +101,7 @@ func tradingMutationAttempts() []tradingMutationAttempt {
 			route: client.RouteTradeChangeEntrust,
 			invoke: func(ctx context.Context, svc *TradingService) error {
 				return svc.ChangeEntrust(ctx, account, entrustID,
-					domain.MustNewPrice("388.05", "0.001"), domain.MustNewQuantity("200"))
+					domain.MustNewPrice("388.2", "0.2"), domain.MustNewQuantity("200"))
 			},
 		},
 	}

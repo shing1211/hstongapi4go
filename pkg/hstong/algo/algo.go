@@ -655,9 +655,10 @@ func WithDefaultExchangeType(exchange types.ExchangeType) Option {
 //
 // Deprecated: use the v-next algo service instead — see docs/MIGRATION.md. It is
 // reachable as services.Stack.Algo after services.NewStack(c), and the
-// no-auto-retry guarantee carries across unchanged. This type still works and is
-// not scheduled for removal; the marker is advisory, and it was added in v1.0.0
-// to mark the moment docs/MIGRATION.md stopped being a draft.
+// no-auto-retry guarantee carries across unchanged. This type is deprecated in v1.0
+// and will be removed in v2.0 (2027); the deprecation window ends 2026-11-11.
+// pkg/services is the recommended path forward and is not deprecated. The marker
+// was added in v1.0.0 to mark the moment docs/MIGRATION.md stopped being a draft.
 type Manager struct {
 	client *client.Client
 	cfg    config

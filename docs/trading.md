@@ -154,6 +154,58 @@ exactly one attempt. On an ambiguous failure, reconcile by querying the
 real/history entrust and deliver lists before resubmitting. There is no option
 that turns on retry for mutations (ADR 0003).
 
+### Hong Kong tick validation (v-next `pkg/services` only)
+
+The released `trade.Manager` above does **not** validate order prices against
+the instrument's tick. The v-next layer (`services.NewStack`, opted into per
+[Migrating to v1.0](https://github.com/shing1211/hstongapi4go#migrating-to-v10)) does: `Entrust` and
+`ChangeEntrust` check an HK order price against the instrument's minimum
+price increment before sending it.
+
+For HK stocks that increment is set by **price band**, not per instrument. The
+SDK ships the HKEX table (Phase 2, in force from 2026-08-03):
+
+| Order price (HKD) | Minimum increment |
+|---|---|
+| up to 0.25 | 0.001 |
+| over 0.25 to 10 | 0.005 |
+| over 10 to 20 | 0.010 |
+| over 20 to 50 | 0.020 |
+| over 50 to 100 | 0.050 |
+| over 100 to 200 | 0.100 |
+| over 200 to 500 | 0.200 |
+| over 500 to 1,000 | 0.500 |
+| over 1,000 to 2,000 | 1.000 |
+| over 2,000 to 5,000 | 2.000 |
+| over 5,000 to 9,995 | 5.000 |
+
+Bands are inclusive at the upper bound. A price above 9,995 has no published
+band; the SDK skips the check rather than inventing a coarser grid, and the
+Gateway decides. A price below the published floor (0.01) resolves to the
+lowest band; a negative price is still rejected on its sign.
+
+Scope, as published by HKEX: equities, REITs and equity warrants. ETFs, bonds,
+equity tradeable options, inline warrants and structured products (CBBCs) are
+excluded and keep fixed per-type increments (0.001, or 0.0001 for bonds).
+
+Two caveats:
+
+- The table is a **snapshot** of an exchange rule that can change. Source:
+  [HKEX minimum-spread reduction FAQ (Phase 2)](https://www.hkex.com.hk/-/media/HKEX-Market/Services/Trading/Securities/Overview/Trading-Mechanism/Reduction-of-Minimum-Spreads/Reduction-of-Minimum-Spreads-FAQP2_E.pdf)
+  and the [December 2024 consultation conclusions](https://www.hkex.com.hk/-/media/HKEX-Market/News/Market-Consultations/2016-Present/June-2024-Review-of-Minimum-Spreads/Conclusions-Dec-2024/cp202406cc.pdf).
+- The check is a **client-side convenience, not a substitute for the
+  Gateway**. It uses the symbol's `DataType`, not a per-instrument master, so
+  a misclassified symbol is validated against the wrong table.
+
+Callers with strict requirements should inject their own resolver:
+
+```go
+// domain.TickScheduleResolver answers lot+tick; implementing the optional
+// domain.PricedTickScheduleResolver additionally controls the per-price
+// answer used for HK stock prices.
+trading.WithTickSchedule(myMaster)
+```
+
 ### Query open and historical orders
 
 ```go

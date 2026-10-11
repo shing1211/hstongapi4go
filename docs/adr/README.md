@@ -19,6 +19,7 @@ new ADR, not editing the old one.
 | [0011](./0011-v01x-compatibility.md) | v0.1.x compatibility guarantees | Accepted | No breaking type or wire changes to `pkg/hstong/*`, `pkg/types`, `client/`, `internal/*`; mock Gateway and e2e tests unchanged. |
 | [0012](./0012-ci-secret-scanning.md) | CI-only secret scanning | Accepted | `gitleaks` runs as a pinned CI-only Action over the full history, with a path allowlist for the public platform keys, vendored protos, and the published AES test vector; `go.mod` is untouched. |
 | [0013](./0013-sha1-push-verification.md) | Accept SHA-1 for push frame verification | Accepted | The Gateway signs push frames with `SHA1WithRSA` and the algorithm is not the SDK's to choose; verification stays opt-in, the single `crypto/sha1` site is bounded by the localhost trust model, and the G505 suppression is reviewed rather than silent. |
+| [0014](./0014-v2.0-removal-of-pkg-hstong.md) | v2.0 removal of pkg/hstong/* | Accepted | `pkg/hstong/*` deprecated in v1.0 (2026-10-11), 1-month deprecation window ending 2026-11-11, removed in v2.0 (~2027); `pkg/services` is the only public surface from v2.0 onward. Supersedes ADR 0011 §Deprecation. |
 
 Template:
 

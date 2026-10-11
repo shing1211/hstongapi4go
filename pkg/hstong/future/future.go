@@ -90,10 +90,10 @@ func WithDefaultPageSize(size int) Option {
 //
 // Deprecated: use the v-next futures service instead — see docs/MIGRATION.md.
 // It is reachable as services.Stack.Futures after services.NewStack(c). This
-// type still works and is not scheduled for removal; the marker is advisory, and
-// it was added in v1.0.0 to mark the moment docs/MIGRATION.md stopped being a
-// draft. Note that the entrustBs value set is unresolved on both surfaces
-// (resolved in v1.0.1: the futures endpoint takes 1 and 2 only, per the vendor)
+// type is deprecated (2026-10-11, ends 2026-11-11, removed in v2.0/2027);
+// the marker is advisory. pkg/services stays as-is. Note that the entrustBs
+// value set is unresolved on both surfaces (resolved in v1.0.1: the futures
+// endpoint takes 1 and 2 only, per the vendor)
 type Manager struct {
 	client          *client.Client
 	defaultPageSize int

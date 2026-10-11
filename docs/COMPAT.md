@@ -18,12 +18,28 @@ supported Go version. CI runs on the latest stable Go (via `setup-go` with
 
 | hstongapi4go | Gateway Version | Protocol | Notes |
 |--------------|----------------|----------|-------|
-| v0.1.x | v2.4.x (local) | HTTP+TCP | Current; all 51 endpoints + 11 push topics |
+| v1.0.x | v2.4.x (local) | HTTP+TCP | Current; all 51 endpoints + 11 push topics |
+| v0.1.x | v2.4.x (local) | HTTP+TCP | Likely compatible; mock-tested only |
 | v0.0.x | v2.3.x (local) | HTTP+TCP | Pre-release history |
 
 The SDK targets the **local HStong Gateway** (HTTP `127.0.0.1:11111`, TCP push
 `127.0.0.1:11112`). It does **not** implement the legacy direct-to-platform
 protocol. See [LEGACY.md](./LEGACY.md).
+
+**How compatibility is confirmed.** The SDK has no built-in protocol version
+negotiation with the Gateway — there is no version handshake. Compatibility is
+confirmed by the **integration test suite**, not by matching version numbers:
+
+```
+HSTONG_INTEGRATION=1 go test ./test/integration/...
+```
+
+A green run against a live Gateway proves that the SDK's request shapes and the
+Gateway's response shapes are mutually intelligible. When you upgrade the Gateway,
+re-run the suite to detect any drift. If a market data endpoint fails after a
+Gateway upgrade, it may indicate the Gateway changed a field type in a response —
+the wire codec probe test (`TestIntegration_WireCodecProbe`) is designed to catch
+this.
 
 ## OpenTelemetry Build Tag
 

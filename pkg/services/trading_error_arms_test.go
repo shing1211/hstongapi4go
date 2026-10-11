@@ -68,7 +68,7 @@ func tradingErrorCases() []tradingErrorCase {
 	account := tradingAccountID()
 	entrustID := tradingEntrustID()
 	order := tradingHKOrder()
-	price := domain.MustNewPrice("387.05", "0.001")
+	price := domain.MustNewPrice("387.2", "0.2")
 	qty := domain.MustNewQuantity("100")
 
 	return []tradingErrorCase{
@@ -372,7 +372,7 @@ func TestTradingCallIsCancellable(t *testing.T) {
 		}},
 		{"ChangeEntrust", func(_ *testing.T, ctx context.Context, svc *TradingService) error {
 			return svc.ChangeEntrust(ctx, tradingAccountID(), tradingEntrustID(),
-				domain.MustNewPrice("387.05", "0.001"), domain.MustNewQuantity("100"))
+				domain.MustNewPrice("387.2", "0.2"), domain.MustNewQuantity("100"))
 		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

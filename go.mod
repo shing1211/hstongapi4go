@@ -6,9 +6,12 @@ go 1.26.0
 // for consumers; this pins the toolchain this module is built and scanned with.
 // go1.26.1 through go1.26.5 carry standard-library vulnerabilities that
 // `make govulncheck` reports against this module's own call graph (net/url,
-// crypto/tls, net/http, encoding/asn1 and others, all fixed in go1.26.6).
+// crypto/tls, net/http, encoding/asn1 and others, all fixed in go1.26.6);
+// go1.26.6 through go1.26.8 carry further net/http, mime/multipart and
+// crypto/tls vulnerabilities (GO-2026-6610, 6608, 6607, 6605, 6603),
+// fixed in go1.26.9.
 // GOTOOLCHAIN=auto downloads it automatically, including in CI.
-toolchain go1.26.6
+toolchain go1.26.9
 
 require (
 	github.com/shopspring/decimal v1.5.0

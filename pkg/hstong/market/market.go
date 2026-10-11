@@ -39,9 +39,8 @@ const MaxTickerLimit = 100
 //
 // Deprecated: use the v-next market service instead — see docs/MIGRATION.md.
 // MarketManager is reachable as services.Stack.Market after
-// services.NewStack(c). This type still works and is not scheduled for removal;
-// the marker is advisory, and it was added in v1.0.0 to mark the moment
-// docs/MIGRATION.md stopped being a draft.
+// services.NewStack(c). This type is deprecated (2026-10-11, ends 2026-11-11, removed in
+// v2.0/2027); the marker is advisory. pkg/services stays as-is.
 type Manager struct {
 	client *client.Client
 }

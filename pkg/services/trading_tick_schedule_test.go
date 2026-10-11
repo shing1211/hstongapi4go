@@ -52,7 +52,7 @@ func hkStockSymbol() domain.Symbol {
 // be refused by the current one.
 func TestTheInstrumentTickGovernsNotTheCallers(t *testing.T) {
 	stock := hkStockSymbol()
-	const fourDecimals = "388.0501" // not a multiple of the HK stock tick 0.001
+	const fourDecimals = "388.0501" // not a multiple of the 0.200 band tick for its (200, 500] band
 
 	// The caller declares a tick that divides the price, which is what used to
 	// make the check pass.
@@ -61,7 +61,7 @@ func TestTheInstrumentTickGovernsNotTheCallers(t *testing.T) {
 	err := validatePriceForHK(price, domain.TickSchedule{}, stock)
 	if err == nil {
 		t.Fatal("a price declaring its own 0.0001 tick was accepted for an HK stock whose " +
-			"tick is 0.001: the check is still running against the caller's number")
+			"band tick is 0.200: the check is still running against the caller's number")
 	}
 	assertInvalidParam(t, err, opEntrust)
 }
@@ -75,11 +75,117 @@ func TestTheInstrumentTickGovernsNotTheCallers(t *testing.T) {
 func TestTheDeclaredTickNoLongerWidensTheGrid(t *testing.T) {
 	stock := hkStockSymbol()
 
-	// Declares 0.01, a coarser grid than the stock's 0.001, but 388.05 is on both.
-	coarser := domain.MustNewPrice("388.05", "0.01")
+	// Declares 1, a coarser grid than the band answer 0.200 for a price in
+	// (200, 500], but 388.2 is on both.
+	coarser := domain.MustNewPrice("388.2", "1")
 	if err := validatePriceForHK(coarser, domain.TickSchedule{}, stock); err != nil {
-		t.Errorf("a price on the stock grid was rejected because it declared 0.01: %v. "+
+		t.Errorf("a price on the stock grid was rejected because it declared 1: %v. "+
 			"The instrument's tick decides the step; the declared tick is not consulted", err)
+	}
+}
+
+// TestTheDefaultTableRejectsOffBandPrices is the band table seen through the
+// order path: the default resolver is a PricedTickScheduleResolver, so a price
+// is checked against the increment HKEX publishes for its band, not against the
+// 0.001 ScheduleFor would still report.
+func TestTheDefaultTableRejectsOffBandPrices(t *testing.T) {
+	stock := hkStockSymbol()
+
+	// 388.1 sits in (200, 500], whose tick is 0.200; 388.1/0.2 = 1940.5.
+	off := domain.MustNewPrice("388.1", "0.001")
+	if err := validatePriceForHK(off, domain.TickSchedule{}, stock); err == nil {
+		t.Error("388.1 was accepted for an HK stock whose band tick is 0.200: " +
+			"the price check is not using the band table")
+	}
+
+	// Above the published ceiling the resolver declines, so the check is
+	// skipped and the exchange decides — a fabricated coarser grid would
+	// reject orders the table never covered.
+	above := domain.MustNewPrice("9995.01", "0.001")
+	if err := validatePriceForHK(above, domain.TickSchedule{}, stock); err != nil {
+		t.Errorf("a price above the band table's ceiling was rejected: %v. "+
+			"ok false must skip, not invent a grid", err)
+	}
+
+	// The sign check still runs whenever the band answers: a negative price
+	// resolves to the lowest band and fails ValidateOn on its sign.
+	negative := domain.MustNewPrice("-1", "0")
+	if err := validatePriceForHK(negative, domain.TickSchedule{}, stock); err == nil {
+		t.Error("a negative price was accepted for an HK stock: the band lookup " +
+			"under-constrains deliberately, but ValidateOn must still reject the sign")
+	}
+}
+
+// pricedSchedule is a TickScheduleResolver that also implements
+// PricedTickScheduleResolver, so a test can prove which answer the order path
+// consults when the two disagree.
+type pricedSchedule struct {
+	lot  uint64
+	tick string
+	ok   bool
+
+	pricedTick  string
+	pricedOK    bool
+	pricedCalls int
+}
+
+func (p *pricedSchedule) ScheduleFor(domain.Symbol) (uint64, string, bool) {
+	return p.lot, p.tick, p.ok
+}
+
+func (p *pricedSchedule) ScheduleForPrice(domain.Symbol, domain.Price) (string, bool) {
+	p.pricedCalls++
+	return p.pricedTick, p.pricedOK
+}
+
+// TestAPricedResolverWinsOverThePlainAnswer proves the type assertion is live:
+// when the priced answer and the price-independent one disagree, the priced
+// one decides, and ScheduleFor is not consulted for the price check.
+func TestAPricedResolverWinsOverThePlainAnswer(t *testing.T) {
+	stock := hkStockSymbol()
+
+	// Priced says 1 (388.2 is off that grid); plain says 0.001 (388.2 is on
+	// it). Accepting would mean the plain answer decided.
+	priced := &pricedSchedule{
+		lot:        100,
+		tick:       "0.001",
+		ok:         true,
+		pricedTick: "1",
+		pricedOK:   true,
+	}
+
+	err := validatePriceForHK(domain.MustNewPrice("388.2", "0"), priced, stock)
+	if err == nil {
+		t.Fatal("388.2 was accepted although the priced resolver says the grid is 1: " +
+			"the plain ScheduleFor answer decided the price check")
+	}
+	assertInvalidParam(t, err, opEntrust)
+	if priced.pricedCalls != 1 {
+		t.Errorf("ScheduleForPrice consulted %d times, want 1", priced.pricedCalls)
+	}
+}
+
+// TestAPricedResolverThatDeclinesSkipsTheCheck covers ok false on the priced
+// path: no fallback to the plain answer, which is the difference between "the
+// master has no opinion at this price" and "validate against something else".
+func TestAPricedResolverThatDeclinesSkipsTheCheck(t *testing.T) {
+	stock := hkStockSymbol()
+
+	// Plain would answer 0.001 and reject -1 on its sign; priced declines, so
+	// the whole step check is skipped.
+	priced := &pricedSchedule{
+		lot:      100,
+		tick:     "0.001",
+		ok:       true,
+		pricedOK: false,
+	}
+
+	if err := validatePriceForHK(domain.MustNewPrice("-1", "0"), priced, stock); err != nil {
+		t.Errorf("a price was rejected although the priced resolver declined: %v. "+
+			"ok false must skip without falling back to ScheduleFor", err)
+	}
+	if priced.pricedCalls != 1 {
+		t.Errorf("ScheduleForPrice consulted %d times, want 1", priced.pricedCalls)
 	}
 }
 
@@ -197,8 +303,9 @@ func TestANilResolverFallsBackToTheDefaultTable(t *testing.T) {
 	}
 
 	stock := hkStockSymbol()
-	// The default table says 0.001 for an HK stock, so four decimals is refused
-	// exactly as it is with the concrete value passed directly.
+	// The default resolver answers with the 0.200 band tick for this price's
+	// (200, 500] band, so four decimals is refused exactly as it is with the
+	// concrete value passed directly.
 	price := domain.MustNewPrice("388.0501", "0.0001")
 	viaNil := validatePriceForHK(price, svc.tickSchedule(), stock)
 	viaDefault := validatePriceForHK(price, domain.TickSchedule{}, stock)
