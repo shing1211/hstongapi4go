@@ -5,10 +5,10 @@
 > Owner: community / account holder. The maintainer has no live account.
 > Verification: all tests in `test/integration/` pass with `HSTONG_INTEGRATION=1`.
 
-- [ ] 1.1 Post a GitHub Discussion asking a live-account holder to run
+- [x] 1.1 Post a GitHub Discussion asking a live-account holder to run
   the integration suite — copy the commands from `docs/integration-testing.md`
   §Run verbatim. Reference `TestIntegration_WireCodecProbe` as the
-  critical test to confirm.
+  critical test to confirm. (Posted as discussion #28 on 2026-10-11.)
 - [ ] 1.2 Once a green run is confirmed, record the run's date, Gateway
   version, and account region in `docs/integration-testing.md` §Verification.
 - [ ] 1.3 If `TestIntegration_WireCodecProbe` fails — follow ADR 0007's
@@ -39,10 +39,11 @@
 > Verification: audit report or public thread is linked from
 > `SECURITY.md` or `docs/security.md`.
 
-- [ ] 4.1 Post a public request for an independent security audit
+- [x] 4.1 Post a public request for an independent security audit
   (GitHub Discussion or security advisory). Scope the four areas from
   design.md D4: trade password path, push SHA1WithRSA verification,
-  session token exposure, OTel build tag surface.
+  session token exposure, OTel build tag surface. (Posted as discussion
+  #29 on 2026-10-11; findings route via a private security advisory.)
 - [ ] 4.2 If findings are reported, fix each one and add a regression
   test to the appropriate `_test.go` file.
 - [ ] 4.3 Link the audit result (or the "no findings" thread) from
