@@ -43,3 +43,20 @@ body:
     attributes:
       label: Alternatives considered
       description: Any alternative approaches you evaluated
+    validations:
+      required: true
+
+  - type: textarea
+    id: api-sketch
+    attributes:
+      label: API sketch (optional)
+      description: |
+        If you have a specific API in mind, sketch what the ideal call would look like.
+        This is optional but helps the maintainer understand the intended design.
+      placeholder: |
+        // Example: what would you like to call?
+        result, err := stack.Market.BasicQot(ctx, &market.BasicQotRequest{
+            SecurityList: []string{"00700.HK"},
+        })
+    validations:
+      required: false

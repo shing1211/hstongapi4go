@@ -71,13 +71,53 @@ body:
     validations:
       required: true
 
+  - type: dropdown
+    id: market
+    attributes:
+      label: Market / exchange
+      description: Which market are you testing against?
+      options:
+        - label: Hong Kong (HK)
+          value: HK
+        - label: United States (US)
+          value: US
+        - label: Shenzhen (A-shares)
+          value: Shenzhen
+        - label: Shanghai (A-shares)
+          value: Shanghai
+        - label: Other / Unknown
+          value: Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: integration-status
+    attributes:
+      label: HSTONG_INTEGRATION status
+      description: Were you running against the mock Gateway or a live HStong Gateway?
+      options:
+        - label: Mock Gateway (no live account needed)
+          value: mock
+        - label: Live HStong Gateway (HSTONG_INTEGRATION=1)
+          value: live
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-vs-actual
+    attributes:
+      label: Expected vs actual behavior
+      description: What did you expect to happen? What actually happened?
+    validations:
+      required: true
+
   - type: textarea
     id: error-output
     attributes:
       label: Error output
       description: Full error message and stack trace (secrets redacted)
     validations:
-      required: true
+      required: false
 
   - type: textarea
     id: context
