@@ -205,6 +205,8 @@ Conventional Commits referencing the run and task IDs (for example
 `docs(adr): add ADR 0002 hybrid codec (T01)`). `Signed-off-by` trailer via
 `git commit -s`. Do not commit unless explicitly asked.
 
+<!-- global-playbook: See ~/.config/opencode/AGENTS.md — Phase 0 (session start), Phase 1–6 (SDLC lifecycle), Tool reference (GitNexus MCP, GitHub MCP, etc.) -->
+
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
@@ -237,15 +239,4 @@ This project is indexed by GitNexus as **hstongapi4go** (9943 symbols, 35576 rel
 | `gitnexus://repo/hstongapi4go/processes` | All execution flows |
 | `gitnexus://repo/hstongapi4go/process/{name}` | Step-by-step execution trace |
 
-## CLI
-
-| Task | Read this skill file |
-| --- | --- |
-| Understand architecture / "How does X work?" | `.claude/skills/gitnexus-exploring/SKILL.md` |
-| Blast radius / "What breaks if I change X?" | `.claude/skills/gitnexus-impact-analysis/SKILL.md` |
-| Trace bugs / "Why is X failing?" | `.claude/skills/gitnexus-debugging/SKILL.md` |
-| Rename / extract / split / refactor | `.claude/skills/gitnexus-refactoring/SKILL.md` |
-| Tools, resources, schema reference | `.claude/skills/gitnexus-guide/SKILL.md` |
-| Index, status, clean, wiki CLI commands | `.claude/skills/gitnexus-cli/SKILL.md` |
-
-<!-- gitnexus:end -->
+<!-- global-playbook: See `~/.config/opencode/AGENTS.md` → **GitNexus MCP** section for the canonical tool reference. -->
