@@ -3,7 +3,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Go-1.26+-00ADD8?style=flat-square&logo=go" alt="Go">
   <img src="https://img.shields.io/badge/License-Apache%202.0-blue?style=flat-square" alt="License">
-  <img src="https://img.shields.io/badge/Status-alpha-blue?style=flat-square" alt="Status">
+  <img src="https://img.shields.io/badge/Status-stable-green?style=flat-square" alt="Status">
   <a href="https://github.com/shing1211/hstongapi4go/actions/workflows/ci.yml"><img src="https://github.com/shing1211/hstongapi4go/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <img src="https://img.shields.io/badge/Gateway-v2.4.1-brightgreen?style=flat-square" alt="Gateway version">
   <img src="https://img.shields.io/badge/Protobuf-v2.2.0-blueviolet?style=flat-square" alt="Protobuf package version">
@@ -12,7 +12,7 @@
   <a href="https://shing1211.github.io/hstongapi4go/"><img src="https://img.shields.io/badge/Docs-GitHub%20Pages-97CAFF?style=flat-square&logo=github" alt="Docs"></a>
 </p>
 
-> **Unofficial and alpha.** `hstongapi4go` is a community Go SDK for the HStong
+> **Unofficial.** `hstongapi4go` is a community Go SDK for the HStong
 > (华盛) Quant OpenAPI **local Gateway**. It is **not** affiliated with,
 > authorized by, endorsed by, or sponsored by HStong / 华盛 (Huasheng) or any of
 > its subsidiaries. "HStong", "华盛", "华盛通", and related names and marks are
