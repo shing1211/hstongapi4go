@@ -114,6 +114,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Documentation
 
+- **The six READMEs now agree with each other and with the release.** Two drifts
+  had accumulated. The five translations still carried the `Status-alpha-blue`
+  badge and the "unofficial and alpha" opening line that `364f6c9` removed from
+  the English README — so the badge read `alpha` in five languages and `stable`
+  in one. And the release row still said `v1.0.3` while v1.0.5 was the current
+  release.
+
+  The blockquote that explained what "alpha" meant is now **"What 'stable' does
+  and does not mean"**. The caveat it carried is still true and still matters —
+  the wire codec's `int64` representation in market payloads has only been tested
+  against the mock Gateway, not against a live one — so it was reframed rather
+  than deleted, and translated into all five languages, which had never carried
+  it.
+
+  `check_i18n.py` enforces heading parity, the switcher, the sync date, and
+  native-script content. It does not compare badge URLs, opening lines, table
+  rows, or body prose, which is why this drift went unnoticed. The three
+  Status-table rows the translations are still missing — threat model, enterprise
+  CI, and the v-next layer — are a separate, still-open gap.
 - **The Gitee mirror now carries the release artifacts, mirrored by hand.**
   `v1.0.5` is published on Gitee with the same 14 assets as GitHub — the six
   platform archives, their SPDX SBOMs, the checksum file, and its cosign bundle
