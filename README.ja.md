@@ -26,8 +26,26 @@
 > 本書は英語版 [README](./README.md) のコミュニティ翻訳です。**英語版が正式です。**
 > 同期 / Last synced: 2026-10-21
 
+## 主要コンセプト
+
+最初の呼び出しを書く前に、次の SDK 抽象の使い方を理解してください:
+
+| コンセプト | パッケージ | 説明 |
+|---|---|---|
+| `Client` | [client](./docs/configuration.md) | スレッドセーフな HTTP トランスポート。生成して共有します |
+| `SessionManager` | [pkg/hstong](./docs/authentication.md) | 取引のログイン/ログアウト、キープアライブ、シングルフライト再ログイン |
+| `Manager` | [pkg/hstong/market](./docs/market-data.md) | 用途別 API（マーケット、トレーディング、先物、アルゴ） |
+| `stream.Client` | [pkg/hstong/stream](./docs/streaming.md) | 自動再接続付きの TCP プッシュ購読 |
+
+**使う面を選んでください:**
+
+- **マーケットデータだけ?** → `market.New(c)` — 認証は不要です
+- **トレーディング、先物、アルゴ?** → まず `hstong.NewSessionManager(c)` + `Login`
+- **リアルタイム相場?** → `stream.New(c)` + `Connect` + `Subscribe`
+
 ## 目次
 
+- [主要コンセプト](#主要コンセプト)
 - [ステータス](#ステータス)
 - [インストール](#インストール)
 - [クイックスタート — ライブ取引](#クイックスタート--ライブ取引)
@@ -35,6 +53,7 @@
 - [機能マトリクス](#機能マトリクス)
 - [設定](#設定)
 - [パッケージ構成](#パッケージ構成)
+- [v1.0 への移行](#v10-への移行)
 - [ドキュメント](#ドキュメント)
 - [ビルドとテスト](#ビルドとテスト)
 - [コントリビュート](#コントリビュート)
@@ -61,6 +80,10 @@
 | ドキュメント（README、MkDocs サイト、ADR、SPEC、LEGACY） | 実装済み |
 | オフラインテスト + 全エンドポイントの SDK 対モック e2e | 実装済み |
 | 実 Gateway に対する統合テスト | 作成済み・環境変数でゲート。実機確認はユーザー実行待ち |
+| OpenTelemetry のトレースとメトリクス | `otel` ビルドタグの背後にある。タグなしでは標準ライブラリのみ |
+| 脅威モデルとリスクレジスタ | [docs/threat-model.md](./docs/threat-model.md)。7 件の敵対的欠陥を検出・修正済み |
+| エンタープライズ CI（lint、セキュリティスキャン、カバレッジゲート、SBOM、GoReleaser 設定） | 13 ジョブすべてグリーン |
+| v-next レイヤー（`pkg/domain`、`pkg/services`、`pkg/transport`、`internal/auth`） | 実装済み・テスト済みで、**51/51 エンドポイントで機能完備**。[`services.NewStack`](#v10-への移行) でオプトインします。`pkg/hstong/*` が既定のままです |
 | リリース（GitHub を主とし、工件は手作業で Gitee にミラー） | v1.0.5 |
 
 51 の HTTP エンドポイントと 11 の相場配信トピックがすべて実装済みです。件数は
@@ -114,41 +137,6 @@ go run ./examples/quickstart          # 資格情報不要
 全サーフェスの実行可能で、コンパイルに資格情報が不要なプログラムも
 [`examples/`](./examples/README.md) にあります：`quickstart`、`market-data`、`trading`、
 `futures`、`algo`、`streaming`。
-
-## v1.0 への移行
-
-v1.0.0 は**いま使っている API を変更しません**。`pkg/hstong/*`、`pkg/types/`、
-`client/` はそのまま変更されておらず、既定のままです。何もする必要はありません。
-v1.0.0 が追加するのは、同じ 51 エンドポイントを階層化した完全な実装で、
-必要なときに選択して使うものです。
-
-```go
-// 引き続き既定のままで、正しく動きます:
-m := market.New(c)
-
-// v-next レイヤーを選択する:
-stack, err := services.NewStack(c)
-if err != nil {
-    return err
-}
-defer stack.Close()
-q, err := stack.Market.BasicQot(ctx, req)
-```
-
-移行は呼び出し単位で進めます。`pkg/hstong` の呼び出しを `pkg/services` の
-呼び出しに自分のペースで置き換えていきます。両者は併存します。コンパイルされる
-サンプル付きの完全な移行ガイドは [docs/MIGRATION.md](./docs/MIGRATION.md) にあります。
-
-始める前に知っておくべきことが 2 つあります:
-
-- **注文の操作は自動リトライしません**。どちらのインターフェースでも同じです。
-  trade・futures・algo の操作はそのとおり 1 回だけ試行し、曖昧な失敗は呼び出し側で
-  照合するという意味です。これは
-  [ADR 0003](./docs/adr/0003-no-auto-retry-orders.md) であり、移行しても変わりません。
-- **金額と数量は `string` / `json.Number` で、`float64` ではありません**。
-
-手順ではなく根拠を知りたい場合は、`docs/VNEXT.md` に何を作ったか、何を意図的に残したかが記録されています。また [CHANGELOG.md](./CHANGELOG.md) の `v1.0.0` の項には、このリリースが**主張しない**ことが列挙されており、実 Gateway に対して一度も実行されていないことも含みます。
-
 
 ## 機能マトリクス
 
@@ -227,6 +215,41 @@ hstongapi4go/
 ├── scripts/           # ビルドと検証スクリプト
 └── docs/              # MkDocs サイト、SPEC、ADR、DESIGN、LEGACY
 ```
+
+## v1.0 への移行
+
+v1.0.0 は**いま使っている API を変更しません**。`pkg/hstong/*`、`pkg/types/`、
+`client/` はそのまま変更されておらず、既定のままです。何もする必要はありません。
+v1.0.0 が追加するのは、同じ 51 エンドポイントを階層化した完全な実装で、
+必要なときに選択して使うものです。
+
+```go
+// 引き続き既定のままで、正しく動きます:
+m := market.New(c)
+
+// v-next レイヤーを選択する:
+stack, err := services.NewStack(c)
+if err != nil {
+    return err
+}
+defer stack.Close()
+q, err := stack.Market.BasicQot(ctx, req)
+```
+
+移行は呼び出し単位で進めます。`pkg/hstong` の呼び出しを `pkg/services` の
+呼び出しに自分のペースで置き換えていきます。両者は併存します。コンパイルされる
+サンプル付きの完全な移行ガイドは [docs/MIGRATION.md](./docs/MIGRATION.md) にあります。
+
+始める前に知っておくべきことが 2 つあります:
+
+- **注文の操作は自動リトライしません**。どちらのインターフェースでも同じです。
+  trade・futures・algo の操作はそのとおり 1 回だけ試行し、曖昧な失敗は呼び出し側で
+  照合するという意味です。これは
+  [ADR 0003](./docs/adr/0003-no-auto-retry-orders.md) であり、移行しても変わりません。
+- **金額と数量は `string` / `json.Number` で、`float64` ではありません**。
+
+手順ではなく根拠を知りたい場合は、`docs/VNEXT.md` に何を作ったか、何を意図的に残したかが記録されています。また [CHANGELOG.md](./CHANGELOG.md) の `v1.0.0` の項には、このリリースが**主張しない**ことが列挙されており、実 Gateway に対して一度も実行されていないことも含みます。
+
 
 ## ドキュメント
 
