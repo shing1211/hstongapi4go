@@ -28,8 +28,26 @@
 > Este documento es una traducción comunitaria del [README](./README.md) en inglés.
 > **La versión en inglés es la autoritativa.** Sincronizado / Last synced: 2026-10-21
 
+## Conceptos clave
+
+Antes de escribir tu primera llamada, entiende estas abstracciones del SDK:
+
+| Concepto | Paquete | Descripción |
+|---|---|---|
+| `Client` | [client](./docs/configuration.md) | Transporte HTTP seguro para hilos; créalo una vez y compártelo |
+| `SessionManager` | [pkg/hstong](./docs/authentication.md) | Login/logout de trading, keep-alive, re-login single-flight |
+| `Manager` | [pkg/hstong/market](./docs/market-data.md) | API por superficie (mercado, trading, futuros, algos) |
+| `stream.Client` | [pkg/hstong/stream](./docs/streaming.md) | Suscriptor de push TCP con reconexión automática |
+
+**Elige tu superficie:**
+
+- **¿Solo datos de mercado?** → `market.New(c)` — no requiere autenticación
+- **¿Trading, futuros, algos?** → `hstong.NewSessionManager(c)` + `Login` primero
+- **¿Cotizaciones en tiempo real?** → `stream.New(c)` + `Connect` + `Subscribe`
+
 ## Tabla de contenidos
 
+- [Conceptos clave](#conceptos-clave)
 - [Estado](#estado)
 - [Instalación](#instalación)
 - [Inicio rápido — Trading en vivo](#inicio-rápido--trading-en-vivo)
@@ -64,6 +82,10 @@
 | Documentación (READMEs, sitio MkDocs, ADR, SPEC, LEGACY) | Implementado |
 | Pruebas offline + e2e SDK-a-mock de todos los endpoints | Implementado |
 | Pruebas de integración contra una pasarela real | Escritas y condicionadas por entorno; confirmación en vivo pendiente de ejecución del usuario |
+| Trazas y métricas de OpenTelemetry | Implementado tras la etiqueta de compilación `otel`; solo la biblioteca estándar sin ella |
+| Modelo de amenazas y registro de riesgos | [docs/threat-model.md](./docs/threat-model.md); 7 defectos adversarios encontrados y corregidos |
+| CI empresarial (lint, escaneo de seguridad, cobertura, SBOM, configuración de GoReleaser) | 13 jobs en verde |
+| Capa v-next (`pkg/domain`, `pkg/services`, `pkg/transport`, `internal/auth`) | Implementada y probada, **completa en 51/51 endpoints** — actívala con [`services.NewStack`](#migrar-a-v10); `pkg/hstong/*` sigue siendo la opción por defecto |
 | Publicación (GitHub como principal; artefactos reflejados a Gitee a mano) | v1.0.5 |
 
 Los 51 endpoints HTTP y los 11 temas de push de mercado están implementados. Los
@@ -120,43 +142,6 @@ go run ./examples/quickstart          # sin credenciales
 Hay programas ejecutables y compilables sin credenciales para cada superficie en
 [`examples/`](./examples/README.md): `quickstart`, `market-data`, `trading`,
 `futures`, `algo` y `streaming`.
-
-## Migrar a v1.0
-
-v1.0.0 **no** cambia la API que ya estás usando. `pkg/hstong/*`, `pkg/types/` y
-`client/` no cambian, siguen siendo la opción predeterminada y no tienes que hacer
-nada. Lo que añade v1.0.0 es una segunda implementación, por capas y probada, de
-los mismos 51 endpoints, a la que te apuntas cuando quieras.
-
-```go
-// Sigue siendo la opción predeterminada, y sigue siendo correcta:
-m := market.New(c)
-
-// Apuntarse a la capa v-next:
-stack, err := services.NewStack(c)
-if err != nil {
-    return err
-}
-defer stack.Close()
-q, err := stack.Market.BasicQot(ctx, req)
-```
-
-La migración es incremental y endpoint a endpoint: sustituyes las llamadas de
-`pkg/hstong` por llamadas de `pkg/services` a tu ritmo, y ambas conviven. La guía
-completa antes/después, con ejemplos compilados, está en
-[docs/MIGRATION.md](./docs/MIGRATION.md).
-
-Dos cosas que conviene saber antes de empezar:
-
-- **Las mutaciones de órdenes nunca se reintentan solas**, en ninguna de las dos
-  superficies. Una operación de trade, futuros o algo hace exactamente un intento;
-  un fallo ambiguo significa que reconcilias tú, no que reintentas. Esto es
-  [ADR 0003](./docs/adr/0003-no-auto-retry-orders.md) y migrar no lo cambia.
-- **El dinero y las cantidades son `string` / `json.Number`, nunca `float64`,** en
-  ambas superficies.
-
-Si te interesa el razonamiento y no la mecánica, `docs/VNEXT.md` registra lo que se construyó y lo que se dejó sin hacer deliberadamente, y la entrada `v1.0.0` del [CHANGELOG.md](./CHANGELOG.md) enumera lo que esta versión **no** afirma, incluido que nunca se ha ejecutado contra un Gateway real.
-
 
 ## Matriz de funciones
 
@@ -236,6 +221,43 @@ hstongapi4go/
 ├── scripts/           # Scripts de compilación y verificación
 └── docs/              # Sitio MkDocs, SPEC, ADR, DESIGN, LEGACY
 ```
+
+## Migrar a v1.0
+
+v1.0.0 **no** cambia la API que ya estás usando. `pkg/hstong/*`, `pkg/types/` y
+`client/` no cambian, siguen siendo la opción predeterminada y no tienes que hacer
+nada. Lo que añade v1.0.0 es una segunda implementación, por capas y probada, de
+los mismos 51 endpoints, a la que te apuntas cuando quieras.
+
+```go
+// Sigue siendo la opción predeterminada, y sigue siendo correcta:
+m := market.New(c)
+
+// Apuntarse a la capa v-next:
+stack, err := services.NewStack(c)
+if err != nil {
+    return err
+}
+defer stack.Close()
+q, err := stack.Market.BasicQot(ctx, req)
+```
+
+La migración es incremental y endpoint a endpoint: sustituyes las llamadas de
+`pkg/hstong` por llamadas de `pkg/services` a tu ritmo, y ambas conviven. La guía
+completa antes/después, con ejemplos compilados, está en
+[docs/MIGRATION.md](./docs/MIGRATION.md).
+
+Dos cosas que conviene saber antes de empezar:
+
+- **Las mutaciones de órdenes nunca se reintentan solas**, en ninguna de las dos
+  superficies. Una operación de trade, futuros o algo hace exactamente un intento;
+  un fallo ambiguo significa que reconcilias tú, no que reintentas. Esto es
+  [ADR 0003](./docs/adr/0003-no-auto-retry-orders.md) y migrar no lo cambia.
+- **El dinero y las cantidades son `string` / `json.Number`, nunca `float64`,** en
+  ambas superficies.
+
+Si te interesa el razonamiento y no la mecánica, `docs/VNEXT.md` registra lo que se construyó y lo que se dejó sin hacer deliberadamente, y la entrada `v1.0.0` del [CHANGELOG.md](./CHANGELOG.md) enumera lo que esta versión **no** afirma, incluido que nunca se ha ejecutado contra un Gateway real.
+
 
 ## Documentación
 

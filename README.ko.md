@@ -26,8 +26,26 @@
 > 이 문서는 영어 [README](./README.md)의 커뮤니티 번역입니다. **영어판이 정본입니다.**
 > 동기화 / Last synced: 2026-10-21
 
+## 핵심 개념
+
+첫 호출을 작성하기 전에 다음 SDK 추상화를 이해하세요:
+
+| 개념 | 패키지 | 설명 |
+|---|---|---|
+| `Client` | [client](./docs/configuration.md) | 스레드 안전한 HTTP 전송 계층. 한 번 만들어 공유합니다 |
+| `SessionManager` | [pkg/hstong](./docs/authentication.md) | 트레이딩 로그인/로그아웃, 킵얼라이브, 단일 비행 재로그인 |
+| `Manager` | [pkg/hstong/market](./docs/market-data.md) | 용도별 API(시세, 트레이딩, 선물, 알고) |
+| `stream.Client` | [pkg/hstong/stream](./docs/streaming.md) | 자동 재연결을 갖춘 TCP 푸시 구독자 |
+
+**사용할 면을 고르세요:**
+
+- **시세 데이터만?** → `market.New(c)` — 인증이 필요 없습니다
+- **트레이딩, 선물, 알고?** → 먼저 `hstong.NewSessionManager(c)` + `Login`
+- **실시간 시세?** → `stream.New(c)` + `Connect` + `Subscribe`
+
 ## 목차
 
+- [핵심 개념](#핵심-개념)
 - [상태](#상태)
 - [설치](#설치)
 - [빠른 시작 — 라이브 거래](#빠른-시작--라이브-거래)
@@ -62,6 +80,10 @@
 | 문서(README, MkDocs 사이트, ADR, SPEC, LEGACY) | 구현됨 |
 | 오프라인 테스트 + 전 엔드포인트 SDK 대 모의 e2e | 구현됨 |
 | 실제 Gateway 대상 통합 테스트 | 작성됨·환경 변수로 게이트됨. 실사용 확인은 사용자 실행 대기 |
+| OpenTelemetry 트레이스와 메트릭 | `otel` 빌드 태그 뒤에 구현됨. 태그 없이면 표준 라이브러리만 사용 |
+| 위협 모델과 위험 등록부 | [docs/threat-model.md](./docs/threat-model.md). 적대적 결함 7건 발견 후 수정됨 |
+| 엔터프라이즈 CI(lint, 보안 스캔, 커버리지 게이트, SBOM, GoReleaser 설정) | 13개 잡 모두 통과 |
+| v-next 레이어(`pkg/domain`, `pkg/services`, `pkg/transport`, `internal/auth`) | 구현 및 테스트 완료, **51/51 엔드포인트에서 기능 완비** — [`services.NewStack`](#v10으로-마이그레이션)로 옵트인. `pkg/hstong/*`는 기본값 유지 |
 | 릴리스(GitHub를 주 대상으로,工件는 수동으로 Gitee에 미러링) | v1.0.5 |
 
 51개 HTTP 엔드포인트와 11개 시세 푸시 토픽이 모두 구현되었습니다. 수치는
@@ -115,42 +137,6 @@ go run ./examples/quickstart          # 자격 증명 불필요
 모든 표면에 대해 실행 가능하고 자격 증명 없이 컴파일되는 프로그램도
 [`examples/`](./examples/README.md)에 있습니다: `quickstart`, `market-data`, `trading`,
 `futures`, `algo`, `streaming`.
-
-## v1.0으로 마이그레이션
-
-v1.0.0은 지금 사용 중인 API를 **변경하지 않습니다**. `pkg/hstong/*`, `pkg/types/`,
-`client/` 는 그대로이고 기본값으로 남습니다. 따로 할 일은 없습니다.
-v1.0.0이 추가하는 것은 동일한 51개 엔드포인트를 계층화하고 완성된 두 번째
-구현이며, 필요할 때 선택해 사용합니다.
-
-```go
-// 여전히 기본값이며, 여전히 올바르게 동작합니다:
-m := market.New(c)
-
-// v-next 계층을 선택합니다:
-stack, err := services.NewStack(c)
-if err != nil {
-    return err
-}
-defer stack.Close()
-q, err := stack.Market.BasicQot(ctx, req)
-```
-
-마이그레이션은 호출 단위로 점진적입니다. `pkg/hstong` 호출을 `pkg/services` 호출로
-자신 속도에 맞춰 바꾸면 되고, 둘은 공존합니다. 컴파일되는 샘플과 함께 있는 완전한
-가이드는 [docs/MIGRATION.md](./docs/MIGRATION.md)에 있습니다.
-
-시작하기 전에 알아둘 두 가지:
-
-- **주문 변경은 자동 재시도하지 않습니다.** 두 인터페이스 모두 마찬가지입니다.
-  trade·futures·algo 변경은 정확히 한 번만 시도하며, 모호한 실패는 재시도한다는
-  뜻이 아니라 호출자가 대조한다는 뜻입니다. 이는
-  [ADR 0003](./docs/adr/0003-no-auto-retry-orders.md)이며 마이그레이션해도
-  바뀌지 않습니다.
-- **금액과 수량은 `string` / `json.Number`이며 `float64`이 아닙니다.**
-
-절차보다 근거를 알고 싶다면 `docs/VNEXT.md`에 무엇을 만들었고 무엇을 의도적으로 남겨 두었는지 기록되어 있습니다. 그리고 [CHANGELOG.md](./CHANGELOG.md)의 `v1.0.0` 항목에는 이번 릴리스가 **주장하지 않는** 것이 나열되어 있으며, 실제 Gateway에 대해 한 번도 실행되지 않았다는 점도 포함됩니다.
-
 
 ## 기능 매트릭스
 
@@ -229,6 +215,42 @@ hstongapi4go/
 ├── scripts/           # 빌드 및 검증 스크립트
 └── docs/              # MkDocs 사이트, SPEC, ADR, DESIGN, LEGACY
 ```
+
+## v1.0으로 마이그레이션
+
+v1.0.0은 지금 사용 중인 API를 **변경하지 않습니다**. `pkg/hstong/*`, `pkg/types/`,
+`client/` 는 그대로이고 기본값으로 남습니다. 따로 할 일은 없습니다.
+v1.0.0이 추가하는 것은 동일한 51개 엔드포인트를 계층화하고 완성된 두 번째
+구현이며, 필요할 때 선택해 사용합니다.
+
+```go
+// 여전히 기본값이며, 여전히 올바르게 동작합니다:
+m := market.New(c)
+
+// v-next 계층을 선택합니다:
+stack, err := services.NewStack(c)
+if err != nil {
+    return err
+}
+defer stack.Close()
+q, err := stack.Market.BasicQot(ctx, req)
+```
+
+마이그레이션은 호출 단위로 점진적입니다. `pkg/hstong` 호출을 `pkg/services` 호출로
+자신 속도에 맞춰 바꾸면 되고, 둘은 공존합니다. 컴파일되는 샘플과 함께 있는 완전한
+가이드는 [docs/MIGRATION.md](./docs/MIGRATION.md)에 있습니다.
+
+시작하기 전에 알아둘 두 가지:
+
+- **주문 변경은 자동 재시도하지 않습니다.** 두 인터페이스 모두 마찬가지입니다.
+  trade·futures·algo 변경은 정확히 한 번만 시도하며, 모호한 실패는 재시도한다는
+  뜻이 아니라 호출자가 대조한다는 뜻입니다. 이는
+  [ADR 0003](./docs/adr/0003-no-auto-retry-orders.md)이며 마이그레이션해도
+  바뀌지 않습니다.
+- **금액과 수량은 `string` / `json.Number`이며 `float64`이 아닙니다.**
+
+절차보다 근거를 알고 싶다면 `docs/VNEXT.md`에 무엇을 만들었고 무엇을 의도적으로 남겨 두었는지 기록되어 있습니다. 그리고 [CHANGELOG.md](./CHANGELOG.md)의 `v1.0.0` 항목에는 이번 릴리스가 **주장하지 않는** 것이 나열되어 있으며, 실제 Gateway에 대해 한 번도 실행되지 않았다는 점도 포함됩니다.
+
 
 ## 문서
 

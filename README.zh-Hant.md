@@ -25,8 +25,26 @@
 > 本文件是英文 [README](./README.md) 的社群翻譯。**英文版本為準。**
 > 同步於 / Last synced: 2026-10-21
 
+## 關鍵概念
+
+在寫下第一行呼叫之前，先理解這幾個 SDK 抽象：
+
+| 概念 | 包 | 說明 |
+|------|----|------|
+| `Client` | [client](./docs/configuration.md) | 執行緒安全的 HTTP 傳輸層；建立一次，廣泛共用 |
+| `SessionManager` | [pkg/hstong](./docs/authentication.md) | 交易登入/登出、保活、單飛重新登入 |
+| `Manager` | [pkg/hstong/market](./docs/market-data.md) | 按業務面劃分的 API（行情、交易、期貨、演算法） |
+| `stream.Client` | [pkg/hstong/stream](./docs/streaming.md) | 帶自動重連的 TCP 推送訂閱者 |
+
+**選擇你需要的介面：**
+
+- **只要行情資料？** → `market.New(c)` —— 無需認證
+- **交易、期貨、演算法？** → 先 `hstong.NewSessionManager(c)` + `Login`
+- **即時行情？** → `stream.New(c)` + `Connect` + `Subscribe`
+
 ## 目錄
 
+- [關鍵概念](#關鍵概念)
 - [狀態](#狀態)
 - [安裝](#安裝)
 - [快速開始 — 實時交易](#快速開始--實時交易)
@@ -61,6 +79,10 @@
 | 文件（README、MkDocs 網站、ADR、SPEC、LEGACY） | 已實作 |
 | 離線測試 + 全端點 SDK 對 mock 的端對端測試 | 已實作 |
 | 針對真實 Gateway 的整合測試 | 已撰寫並以環境變數閘控；待使用者實際執行確認 |
+| OpenTelemetry 追蹤與指標 | 在 `otel` 建置標籤後實作；不帶該標籤時僅用標準函式庫 |
+| 威脅模型與風險登記冊 | [docs/threat-model.md](./docs/threat-model.md)；已發現並修復 7 個對抗性缺陷 |
+| 企業級 CI（lint、安全掃描、覆蓋率閘門、SBOM、GoReleaser 設定） | 13 個工作全綠 |
+| v-next 層（`pkg/domain`、`pkg/services`、`pkg/transport`、`internal/auth`） | 已實作、已測試，在 51/51 個端點上**功能完備** —— 透過 [`services.NewStack`](#遷移到-v10) 選擇啟用；`pkg/hstong/*` 仍為預設 |
 | 發佈（以 GitHub 為主；工件由人工鏡像至 Gitee） | v1.0.5 |
 
 全部 51 個 HTTP 端點和 11 個行情推送主題均已實作。計數以
@@ -110,39 +132,6 @@ go run ./examples/quickstart          # 無需憑證即可編譯
 
 [`examples/`](./examples/README.md) 中提供涵蓋每個介面的、可執行且無需憑證即可編譯的程式：
 `quickstart`、`market-data`、`trading`、`futures`、`algo` 和 `streaming`。
-
-## 遷移到 v1.0
-
-v1.0.0 **不會**改變你正在呼叫的 API。`pkg/hstong/*`、`pkg/types/` 與 `client/`
-維持不變，仍是預設路徑，你不需要做任何事。v1.0.0 新增的是同一批 51 個端點的第二套
-分層實作，你可以在需要時選擇使用。
-
-```go
-// 仍是預設路徑，也依然正確：
-m := market.New(c)
-
-// 選擇 v-next 層：
-stack, err := services.NewStack(c)
-if err != nil {
-    return err
-}
-defer stack.Close()
-q, err := stack.Market.BasicQot(ctx, req)
-```
-
-遷移是漸進的，可以依呼叫逐一替換：依你自己的節奏把 `pkg/hstong` 的呼叫換成
-`pkg/services` 的呼叫，兩者可以並存。附可編譯範例的完整遷移指南見
-[docs/MIGRATION.md](./docs/MIGRATION.md)。
-
-開始之前請先了解兩點：
-
-- **委託變更永遠不會自動重試**，兩個介面皆然。交易、期貨或演算法的一次變更
-  只嘗試一次；出現語意不明確的失敗時需要你去對帳，而不是重試。這是
-  [ADR 0003](./docs/adr/0003-no-auto-retry-orders.md)，遷移不會改變這一點。
-- **金額與數量使用 `string` / `json.Number`，絕不使用 `float64`**，兩個介面皆然。
-
-如果你想了解的是理由而不是操作步驟，`docs/VNEXT.md` 記錄了建置了什麼、以及刻意沒有做什麼；而 [CHANGELOG.md](./CHANGELOG.md) 中的 `v1.0.0` 條目列出了本次發布**不**主張的內容，包括它從未針對真實 Gateway 執行過。
-
 
 ## 功能矩陣
 
@@ -219,6 +208,39 @@ hstongapi4go/
 ├── scripts/           # 建置與驗證腳本
 └── docs/              # MkDocs 網站、SPEC、ADR、DESIGN、LEGACY
 ```
+
+## 遷移到 v1.0
+
+v1.0.0 **不會**改變你正在呼叫的 API。`pkg/hstong/*`、`pkg/types/` 與 `client/`
+維持不變，仍是預設路徑，你不需要做任何事。v1.0.0 新增的是同一批 51 個端點的第二套
+分層實作，你可以在需要時選擇使用。
+
+```go
+// 仍是預設路徑，也依然正確：
+m := market.New(c)
+
+// 選擇 v-next 層：
+stack, err := services.NewStack(c)
+if err != nil {
+    return err
+}
+defer stack.Close()
+q, err := stack.Market.BasicQot(ctx, req)
+```
+
+遷移是漸進的，可以依呼叫逐一替換：依你自己的節奏把 `pkg/hstong` 的呼叫換成
+`pkg/services` 的呼叫，兩者可以並存。附可編譯範例的完整遷移指南見
+[docs/MIGRATION.md](./docs/MIGRATION.md)。
+
+開始之前請先了解兩點：
+
+- **委託變更永遠不會自動重試**，兩個介面皆然。交易、期貨或演算法的一次變更
+  只嘗試一次；出現語意不明確的失敗時需要你去對帳，而不是重試。這是
+  [ADR 0003](./docs/adr/0003-no-auto-retry-orders.md)，遷移不會改變這一點。
+- **金額與數量使用 `string` / `json.Number`，絕不使用 `float64`**，兩個介面皆然。
+
+如果你想了解的是理由而不是操作步驟，`docs/VNEXT.md` 記錄了建置了什麼、以及刻意沒有做什麼；而 [CHANGELOG.md](./CHANGELOG.md) 中的 `v1.0.0` 條目列出了本次發布**不**主張的內容，包括它從未針對真實 Gateway 執行過。
+
 
 ## 文件
 

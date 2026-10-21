@@ -15,6 +15,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   comments pointing to `docs/MIGRATION.md`. The deprecation window is 1 month,
   closing 2026-11-11. The packages will be removed in v2.0 (~2027). The
   `pkg/services` import path is unchanged. See [ADR 0014](./docs/adr/0014-v2.0-removal-of-pkg-hstong.md).
+- **The build and scan toolchain is pinned to go1.26.10.** GO-2026-6809 — distrust
+  compromised intermediate certificates in `crypto/x509` — is fixed in go1.26.10,
+  and `go.mod` pinned go1.26.9, so CI built with the vulnerable standard library
+  and the required `gosec + govulncheck` job failed on every branch. The
+  `go 1.26.0` language floor is unchanged, so consumers' language compatibility
+  is unaffected; only the toolchain pin moves, following the pattern the
+  `go.mod` comment already documents for the previous advisories. See
+  `docs/adr/0012-ci-secret-scanning.md` for the companion scanning decision.
 
 ### Added
 
@@ -32,6 +40,130 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`docs/MIGRATION.md`** — added v1→v2 section covering the deprecation
   timeline, per-package migration table, and v2.0 readiness checklist.
 - **`docs/adr/README.md`** — ADR 0014 indexed.
+
+### Added
+
+- **HKEX price-band tick table for HK stock order prices.** `domain.TickSchedule`
+  now implements the new `domain.PricedTickScheduleResolver` interface, whose
+  `ScheduleForPrice(sym, price)` answers with the minimum increment HKEX
+  publishes for the order price's band — 0.001 at HKD ≤ 0.25 up to 5.000 at
+  (5 000, 9 995], inclusive at each band's upper bound. The table is sourced
+  from the HKEX Phase 2 FAQ (version 2026-05-08) and the December 2024
+  consultation conclusions; bands took effect 2026-08-03. ETFs, bonds, warrants
+  and CBBCs are outside the exchange's band scope and keep their fixed
+  `DataType` ticks. A price above the published ceiling (9 995) has no answer:
+  the check is skipped rather than validated against a coarser invented grid.
+  The table is a snapshot; inject a `PricedTickScheduleResolver` via
+  `services.WithTickSchedule` to override. Documented in `docs/trading.md`.
+
+### Documentation
+
+- **The six READMEs now agree with each other and with the release.** Two drifts
+  had accumulated. The five translations still carried the `Status-alpha-blue`
+  badge and the "unofficial and alpha" opening line that `364f6c9` removed from
+  the English README — so the badge read `alpha` in five languages and `stable`
+  in one. And the release row still said `v1.0.3` while v1.0.5 was the current
+  release.
+
+  The blockquote that explained what "alpha" meant is now **"What 'stable' does
+  and does not mean"**. The caveat it carried is still true and still matters —
+  the wire codec's `int64` representation in market payloads has only been tested
+  against the mock Gateway, not against a live one — so it was reframed rather
+  than deleted, and translated into all five languages, which had never carried
+  it.
+
+  `check_i18n.py` enforces heading parity, the switcher, the sync date, and
+  native-script content. It does not compare badge URLs, opening lines, table
+  rows, or body prose, which is why this drift went unnoticed. The
+  Status-table rows the translations were still missing are closed separately,
+  below.
+- **The Gitee mirror now carries the release artifacts, mirrored by hand.**
+  `v1.0.5` is published on Gitee with the same 14 assets as GitHub — the six
+  platform archives, their SPDX SBOMs, the checksum file, and its cosign bundle
+  — byte-identical to the GitHub copies. GitHub remains the primary download
+  location and the Gitee release body says so; the Gitee copies exist for
+  convenience. `cosign verify-blob` succeeds against either copy, because the
+  certificate identity is bound to the release workflow at the tag ref rather
+  than to the host the file came from.
+
+  The mirror is performed manually after the GitHub release is published and is
+  deliberately **not** automated: an API step inside a workflow would put a
+  Gitee credential and a new supply-chain surface in this repository, which is a
+  worse trade than a manual step. No `GITEE_TOKEN` secret is held here and no
+  workflow contacts Gitee. The manual procedure is step 17 of
+  `docs/RELEASE_CHECKLIST.md`.
+- **The five README translations are now structurally identical to the English
+  one.** They were missing the `## Key Concepts` section entirely, two
+  table-of-contents entries, and four Status-table rows (OpenTelemetry, threat
+  model, enterprise CI, and the v-next layer) — and their "Migrating to v1.0"
+  section sat one position earlier than English's, which made the table of
+  contents disagree with the page order. Every file now has 16 headings, 19
+  Status rows and 14 contents entries, in English's order.
+
+  The v-next row links to the migration section, whose anchor is per-language.
+  The anchors used were read out of the heading ids GitHub actually generates
+  for each rendered file, not computed from the heading text.
+
+  `check_i18n.py` compares heading counts with a tolerance of 2, and the
+  translations were one heading short — inside the tolerance. It does not
+  compare table rows, badge URLs, opening lines, body prose, or contents
+  entries at all.
+- **The CHANGELOG has version sections for v1.0.1 through v1.0.5.** The file
+  jumped straight from `## [Unreleased]` to `## [1.0.0]`, so five releases had
+  no section and their content sat in `[Unreleased]` — misrepresenting the
+  release history in both directions. Seven bullets that had already shipped
+  were moved into the release that shipped them, and entries were written for
+  the commits that had none.
+
+## [1.0.5] - 2026-09-30
+
+**Public-readiness pass. No code changed.** This release is documentation and
+repository hygiene: the artifacts for regulated users, the trust boundary
+drawn out loud, and the honest caveat about what has and has not been
+validated.
+
+### Added
+
+- **`docs/DEPENDENCIES.md`** — every dependency listed, why it is needed, what
+  the `otel` build tag gates, and what actually links into the binary as
+  opposed to what `go list -m all` shows, with a compliance note for users in
+  regulated environments.
+- **`docs/security.md`** — the trust boundary as a Mermaid diagram: the SDK, the
+  local Gateway, and the HStong cloud, and what each link in that chain means
+  for the data that crosses it.
+- **`.github/CODEOWNERS`** — every pull request is reviewed by the maintainer.
+- **`.github/FUNDING.yml`** — a placeholder for GitHub Sponsors.
+
+### Documentation
+
+- **The README states the validation caveat explicitly**: the wire codec has
+  only been validated against the mock Gateway, and a full integration pass is
+  documented in `docs/integration-testing.md`.
+- **The `govulncheck` step documents why OTel transitive vulnerabilities appear
+  in its output.** The OTel packages are in `go.mod` — compile-time optional,
+  gated by `-tags otel` — but are not in the default build's call graph, so
+  those findings do not affect a binary built without the tag. See
+  `docs/DEPENDENCIES.md` §Compliance note.
+- **`docs/DEPENDENCIES.md` is added to the MkDocs reference navigation.**
+
+## [1.0.4] - 2026-09-30
+
+**A Hong Kong order was validated against the tick the caller chose.** The
+schedule's answer was read and then discarded, so the check could not fail
+for a reason the caller had not already accepted.
+
+### Added
+
+- **`domain.TickScheduleResolver`** — resolves an instrument's lot size and tick.
+  `ok false` means "no opinion", which callers must treat as unknown rather than
+  substituting a default; a fabricated grid is the defect this type exists to let
+  a caller replace.
+
+- **`domain.Price.ValidateOn(tick)`** — validates against a supplied tick.
+  `Price.Validate(step=true)` is unchanged and still tests against the price's own
+  tick, which is what `ChangeEntrust` and other caller-owned paths want.
+
+### Documentation
 
 - **Hong Kong order price validation now uses the instrument's tick, not the
   caller's.** `services.validatePriceForHK` consulted the tick schedule only to
@@ -53,30 +185,71 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   For HK stocks the default resolver now consults the **HKEX price-band tick
   table**, sourced from the exchange's published Phase 2 documentation rather
-  than recalled from memory (bands effective 2026-08-03). See the new entry
-  under Added.
+  than recalled from memory (bands effective 2026-08-03). The table itself
+  shipped after this release; see the entry under Unreleased.
+
+- **All documentation reconciled with the v1.0.3 surface.**
+  `docs/getting-started-live.md` (API application, RSA key, approval, Gateway
+  install, credential setup, live verification) and
+  `docs/integration-testing.md` (the `HSTONG_INTEGRATION` and
+  `HSTONG_PLACE_ORDERS` gates) are new. All six READMEs' quickstarts are
+  rewritten as a two-path version with an explicit first-order opt-in, and the
+  two deleted run folders are removed with their decisions preserved in the
+  ADRs — every dangling link to them fixed across 13 ADR files, `DESIGN.md` and
+  `RELEASE_CHECKLIST.md`. `docs/index.md` gains a numbered six-step "Start
+  Here" sequence with the mock alternative, and `ARCHITECTURE.md` §4.5's
+  `[REMOVED]` placeholder is replaced with the real
+  `readLoop → decodeNotification → dispatch` trace.
+
+## [1.0.3] - 2026-09-30
+
+**A gap that could only be closed by adding a credential is closed by declining
+it.** The Gitee artifact mirror was tracked as blocked pending a token in one
+place and called "not expected" in another, while all six READMEs claimed a
+Gitee release. One decision, recorded once, aligns the three.
+
+### Documentation
+
+- **The Gitee artifact mirror is declined, and the READMEs stop claiming a
+  Gitee release.** Source and every tag were already mirrored; only the
+  artifacts were not, and that gap is closed by decision rather than left
+  blocked. GoReleaser cannot target Gitee at all — it publishes to GitHub,
+  GitLab and Gitea, and a `gitee:` key is rejected with `field gitee not found
+  in type config.Release`. The only route was a hand-written Gitee REST step: a
+  new credential and a new supply-chain surface in exchange for download
+  convenience rather than a security boundary.
+
+  The backlog had drifted here. `docs/RELEASE_CHECKLIST.md` step 17 already
+  called the Gitee release "not expected", `next-phase.md` tracked it as blocked
+  pending a token, and all six READMEs claimed a Gitee release. Declining
+  aligns the three rather than leaving the checklist and the backlog in
+  opposition. Anyone who wants the artifacts there should treat it as a new
+  change with its own ADR, not a resumption of the old row.
+
+  **The decision was overtaken in practice on 2026-10-21 without being
+  reversed:** the artifacts are now mirrored to Gitee by hand, outside CI, and
+  GitHub remains the primary download location. The automated-mirror decision
+  stands — no `GITEE_TOKEN` secret is held in this repository and no workflow
+  contacts Gitee. See the entry under Unreleased and
+  `docs/RELEASE_CHECKLIST.md` step 17.
+
+## [1.0.2] - 2026-09-29
+
+**A CI guard failed on three of nine jobs for a reason that was not a defect in
+the code it guarded.** The register-citation check could not tell a citation
+that names nothing from one that predates a shallow clone's history window.
 
 ### Added
 
-- **HKEX price-band tick table for HK stock order prices.** `domain.TickSchedule`
-  now implements the new `domain.PricedTickScheduleResolver` interface, whose
-  `ScheduleForPrice(sym, price)` answers with the minimum increment HKEX
-  publishes for the order price's band — 0.001 at HKD ≤ 0.25 up to 5.000 at
-  (5 000, 9 995], inclusive at each band's upper bound. The table is sourced
-  from the HKEX Phase 2 FAQ (version 2026-05-08) and the December 2024
-  consultation conclusions; bands took effect 2026-08-03. ETFs, bonds, warrants
-  and CBBCs are outside the exchange's band scope and keep their fixed
-  `DataType` ticks. A price above the published ceiling (9 995) has no answer:
-  the check is skipped rather than validated against a coarser invented grid.
-  The table is a snapshot; inject a `PricedTickScheduleResolver` via
-  `services.WithTickSchedule` to override. Documented in `docs/trading.md`.
-- **`domain.TickScheduleResolver`** — resolves an instrument's lot size and tick.
-  `ok false` means "no opinion", which callers must treat as unknown rather than
-  substituting a default; a fabricated grid is the defect this type exists to let
-  a caller replace.
-- **`domain.Price.ValidateOn(tick)`** — validates against a supplied tick.
-  `Price.Validate(step=true)` is unchanged and still tests against the price's own
-  tick, which is what `ChangeEntrust` and other caller-owned paths want.
+- **ADR 0013 accepts SHA-1 push verification.** ADR 0005 decided that push
+  `bodySHA1` verification is opt-in but never recorded that the algorithm
+  itself is weak; the only acknowledgement anywhere was a `gosec` `#nosec`
+  annotation in `internal/push/verify.go`. The decision is that the SDK keeps
+  verifying with `SHA1WithRSA` because the Gateway is the signer and there is
+  no alternative to migrate to, that the residual risk is bounded by the
+  localhost trust model rather than by the hash, and that both `#nosec`
+  annotations now name the ADR. The annotation stays load-bearing: removing it
+  still fails `make gosec`.
 
 ### Fixed
 
@@ -91,6 +264,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   stays visible rather than looking like a pass. A dead `symbolRE` left behind by an
   earlier rewrite, which `golangci-lint` caught and the local build did not, is
   removed in the same commit.
+
+## [1.0.1] - 2026-09-29
+
+**Two security-register items closed, one of them a duplicate order waiting
+to happen.** A missing entry in the mutation set would have made an order
+mutation retryable, and a swallowed error told a caller it had logged in
+while holding a token that did not exist.
+
+### Added
+
+- **The mutation set is now proven to cover every mutation route.** A mutation
+  route missing from `internal/resilience.mutationSet` would be classified
+  `ClassQuery`, made retryable, and nothing else in the build would notice.
+  ADR 0003 requires order mutations to make exactly one attempt, so a missing
+  entry does not degrade a read path — it introduces a duplicate order.
+
+  Four properties are checked, not one, because a set can be wrong in two
+  directions: the exact 12 vendor mutation endpoints are pinned, every entry
+  must be a canonical route, query routes must not be in the set, and alias
+  forms of mutations must stay mutations. The test lives in an external test
+  package on purpose — `client` imports `internal/resilience`, so an in-package
+  test cannot import `client` to check the duplicated route list against the
+  real routes.
 
 ### Changed
 
@@ -111,65 +307,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   planted violation after the entry was removed.
   `TestOrderBookTickSizeKeepsTheWireDigits` pins the wire digits, including
   a value beyond `float64`'s exact range.
-
-### Documentation
-
-- **The six READMEs now agree with each other and with the release.** Two drifts
-  had accumulated. The five translations still carried the `Status-alpha-blue`
-  badge and the "unofficial and alpha" opening line that `364f6c9` removed from
-  the English README — so the badge read `alpha` in five languages and `stable`
-  in one. And the release row still said `v1.0.3` while v1.0.5 was the current
-  release.
-
-  The blockquote that explained what "alpha" meant is now **"What 'stable' does
-  and does not mean"**. The caveat it carried is still true and still matters —
-  the wire codec's `int64` representation in market payloads has only been tested
-  against the mock Gateway, not against a live one — so it was reframed rather
-  than deleted, and translated into all five languages, which had never carried
-  it.
-
-  `check_i18n.py` enforces heading parity, the switcher, the sync date, and
-  native-script content. It does not compare badge URLs, opening lines, table
-  rows, or body prose, which is why this drift went unnoticed. The three
-  Status-table rows the translations are still missing — threat model, enterprise
-  CI, and the v-next layer — are a separate, still-open gap.
-- **The Gitee mirror now carries the release artifacts, mirrored by hand.**
-  `v1.0.5` is published on Gitee with the same 14 assets as GitHub — the six
-  platform archives, their SPDX SBOMs, the checksum file, and its cosign bundle
-  — byte-identical to the GitHub copies. GitHub remains the primary download
-  location and the Gitee release body says so; the Gitee copies exist for
-  convenience. `cosign verify-blob` succeeds against either copy, because the
-  certificate identity is bound to the release workflow at the tag ref rather
-  than to the host the file came from.
-
-  The mirror is performed manually after the GitHub release is published and is
-  deliberately **not** automated: an API step inside a workflow would put a
-  Gitee credential and a new supply-chain surface in this repository, which is a
-  worse trade than a manual step. No `GITEE_TOKEN` secret is held here and no
-  workflow contacts Gitee. The manual procedure is step 17 of
-  `docs/RELEASE_CHECKLIST.md`.
-- **`ARCHITECTURE.md` §2 is regenerated from a fresh code graph.** The index had
-  drifted to **102 commits behind** (`eb00cbd` against `3b38e43`) and the section
-  was left stale rather than invented when E2 closed — the note explaining that
-  said regenerating it "needs `gitnexus analyze` to have run", which was a
-  follow-up, not a decision. It is now done: 408 files, 10,048 nodes, 35,458
-  edges, 297 clusters, 876 flows.
-
-  The rebuild changed a claim, not only counts. The section asserted that
-  `internal/errs.New` was the widest fan-in at 183 flows. With test files
-  indexed it is 160, behind `internal/metrics.RateLimitWait` at 306 and
-  `internal/metrics.Count` at 236. The old figure was measured on a smaller graph
-  that excluded the tests, so it was not wrong so much as incomplete.
-
-  It also surfaces a caveat the stale numbers hid: the index includes test files,
-  so test symbols outnumber production symbols in most areas — `push_test.go`
-  contributes 107 symbols in `pkg/services` against 66 for `push.go`. The totals
-  measure where logic and its verification live together, not production size.
-
-  Every current-tense citation of the old snapshot has been updated — the header,
-  §2, the flow-truncation limitations, `docs/VNEXT.md`, and the E2 tracker row.
-  Historical release notes are left as written.
-
 
 ### Fixed
 
@@ -205,6 +342,88 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   narrowing attempt from succeeding quietly. It is **inverted, not deleted**, and
   now asserts that 3 and 4 are refused with nothing sent on the wire.
 
+- **Concurrent logins are now coalesced, and a login no longer swallows the
+  error from its own post-save read.** `internal/auth` "declared behaviour it
+  lacked": the single-flight and refresh primitives existed with no caller.
+
+  Previously N concurrent callers each sent a login to the Gateway, which on a
+  money-moving path means N rate-limit-consuming attempts to obtain one
+  session. `TokenManager.beginLogin` hands leadership to exactly one caller
+  under a single lock, and `endLogin` deletes the flight entry before closing
+  its channel, so a `Login` arriving after the flight ends performs its own
+  request rather than reading a session that may already be expiring. Waiters
+  honour context cancellation.
+
+  The second half is the more serious defect. `Login` ended with
+  `sess, _, _ := GetSession(...)`, throwing away both the error and the found
+  flag. A store that saved the token and then failed the read produced a zero
+  `Session` and a nil error: the caller was told it had logged in while
+  holding a token that did not exist, and the failure surfaced later as an
+  opaque `not_logged_in` on an unrelated call. The error is now returned, with
+  a distinct `errSessionNotStored` for the "saved but absent" case.
+
+### Documentation
+
+- **`ARCHITECTURE.md` §2 is regenerated from a fresh code graph.** The index had
+  drifted to **102 commits behind** (`eb00cbd` against `3b38e43`) and the section
+  was left stale rather than invented when E2 closed — the note explaining that
+  said regenerating it "needs `gitnexus analyze` to have run", which was a
+  follow-up, not a decision. It is now done: 408 files, 10,048 nodes, 35,458
+  edges, 297 clusters, 876 flows.
+
+  The rebuild changed a claim, not only counts. The section asserted that
+  `internal/errs.New` was the widest fan-in at 183 flows. With test files
+  indexed it is 160, behind `internal/metrics.RateLimitWait` at 306 and
+  `internal/metrics.Count` at 236. The old figure was measured on a smaller graph
+  that excluded the tests, so it was not wrong so much as incomplete.
+
+  It also surfaces a caveat the stale numbers hid: the index includes test files,
+  so test symbols outnumber production symbols in most areas — `push_test.go`
+  contributes 107 symbols in `pkg/services` against 66 for `push.go`. The totals
+  measure where logic and its verification live together, not production size.
+
+  Every current-tense citation of the old snapshot has been updated — the header,
+  §2, the flow-truncation limitations, `docs/VNEXT.md`, and the E2 tracker row.
+  Historical release notes are left as written.
+
+- **R14 is closed in the security register, and two doc comments that had gone
+  false in the process are corrected.** `internal/auth/doc.go` still said the
+  package "is not yet wired into the released client", which stopped being true
+  when C13 made `pkg/services.SessionService` compose it, and
+  `pkg/services/session.go` claimed the inner flight did not exist.
+
+  The two exclusions are kept deliberately, and the difference between them is
+  reachability rather than capability. `SessionService.loginGate` owns
+  production coalescing; `TokenManager.beginLogin`/`endLogin` is real
+  capability that production traffic does not reach, kept as defence in depth
+  for a direct caller that does not exist yet, and unexported and
+  un-composed so it cannot become a second source of truth.
+
+  `internal/layering/auth_doc_test.go` is added so a status cannot drift again
+  unnoticed. It resolves call expressions by AST rather than grepping text,
+  because the distinction the disclosure draws is a method being called versus
+  merely mentioned, and it checks that every commit a fixed register row cites
+  exists. Both checks were proven to fire by planting a real production caller
+  for a disclosed method and by citing a nonexistent hash.
+
+- **The v1.0.0 tracker is closed with what was actually checked, and two
+  corrections are recorded rather than quietly fixed.** The eight-site
+  prediction for the deprecation markers was wrong — one site broke, because
+  SA1019 fires only where a deprecated identifier is *named*, and the examples
+  call `market.New(c)`. And the first cosign negative control was a false
+  pass: the tampered file was never written, because PowerShell rejected the
+  `-replace` expression, so cosign refused it for "file not found" rather than
+  for the tampering. Redone, and confirmed by byte comparison that 45 bytes of
+  the signed digest really differ, with cosign then rejecting it as an invalid
+  signature.
+
+  The translation review verified technical integrity mechanically — Go
+  statements identical across all six READMEs, every TOC anchor resolving,
+  every copyable identifier present — and that is not the same as a
+  native-speaker fluency pass, which is still outstanding and is not claimed.
+  The review did find a real defect: all five translations were missing the
+  closing paragraph pointing at `docs/VNEXT.md` and the CHANGELOG "does not
+  claim" list.
 
 ## [1.0.0] - 2026-09-29
 
