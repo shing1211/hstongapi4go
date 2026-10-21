@@ -9,9 +9,11 @@ go 1.26.0
 // crypto/tls, net/http, encoding/asn1 and others, all fixed in go1.26.6);
 // go1.26.6 through go1.26.8 carry further net/http, mime/multipart and
 // crypto/tls vulnerabilities (GO-2026-6610, 6608, 6607, 6605, 6603),
-// fixed in go1.26.9.
+// fixed in go1.26.9; go1.26.9 carries a crypto/x509 vulnerability
+// (GO-2026-6809, distrust compromised intermediate certificates) reachable
+// from push.ReadFrame's certificate verification, fixed in go1.26.10.
 // GOTOOLCHAIN=auto downloads it automatically, including in CI.
-toolchain go1.26.9
+toolchain go1.26.10
 
 require (
 	github.com/shopspring/decimal v1.5.0
