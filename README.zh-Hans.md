@@ -23,7 +23,7 @@
 [English](./README.md) · [简体中文](./README.zh-Hans.md) · [繁體中文](./README.zh-Hant.md) · [日本語](./README.ja.md) · [한국어](./README.ko.md) · [Español](./README.es.md)
 
 > 本文件是英文 [README](./README.md) 的社区翻译。**英文版本为准。**
-> 同步于 / Last synced: 2026-09-30
+> 同步于 / Last synced: 2026-10-21
 
 ## 目录
 
@@ -60,7 +60,7 @@
 | 文档（README、MkDocs 站点、ADR、SPEC、LEGACY） | 已实现 |
 | 离线测试 + 全端点 SDK 对 mock 的端到端测试 | 已实现 |
 | 针对真实 Gateway 的集成测试 | 已编写并按环境变量门控；待用户实际运行确认 |
-| 发布（GitHub；工件不在 Gitee 上，由决策决定） | v1.0.3 |
+| 发布（以 GitHub 为主；工件由人工镜像至 Gitee） | v1.0.3 |
 
 全部 51 个 HTTP 端点和 11 个行情推送主题均已实现。计数以
 [docs/SPEC.md](./docs/SPEC.md) 为准；请勿在其他地方手动修改。

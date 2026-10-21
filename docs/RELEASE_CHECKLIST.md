@@ -109,22 +109,37 @@ manager runs through this list before tagging and pushing.
     must fail. Only the checksums are signed, so one successful
     `verify-blob` covers every archive.
 
-- [ ] **17. Gitee release** — **not expected, and not a `gitee:` stanza.**
+- [ ] **17. Gitee release** — **mirrored by hand once the GitHub release from
+    step 15 exists. GitHub remains the primary download location.**
     GoReleaser publishes releases to GitHub, GitLab, and Gitea only, and accepts
     exactly one of those three in `release`; a `gitee:` key is rejected with
     `field gitee not found in type config.Release`. Gitee is a separate host, not
-    a Gitea deployment GoReleaser can be pointed at. Source and every tag are
-    already mirrored to Gitee by `git push`, so the only Gitee gap is the release
-    artifacts, and closing it would mean calling the Gitee REST API from a
-    workflow step — an ADR-level decision, not a config tweak. Do not add a
-    `gitee:` block expecting it to work.
-    **This is a decision, not a provisional note.** The gap was declined on
-    2026-09-29: a hand-written API step would add a credential and a
-    supply-chain surface in exchange for download convenience rather than a
-    security boundary. The rationale is recorded in
-    the v1.0 release decisions (archived; rationale preserved in this checklist)
-    Publishing artifacts there later is a new change with its own ADR, not a
-    resumption of the old backlog row.
+    a Gitea deployment GoReleaser can be pointed at. Do not add a `gitee:` block
+    expecting it to work.
+    **Automation stays declined.** A hand-written API step inside a workflow
+    would add a credential and a supply-chain surface to this repository in
+    exchange for download convenience rather than a security boundary, so no
+    `GITEE_TOKEN` secret is held here and no workflow contacts Gitee. That
+    decision was taken on 2026-09-29 and reaffirmed on 2026-10-21. Git push
+    credentials for the `gitee` remote are not a substitute for the API token:
+    those authenticate the git protocol, not the REST API.
+    **What happens instead, by hand**, using the maintainer's own Gitee
+    credential and running outside CI:
+
+    ```text
+    POST https://gitee.com/api/v5/repos/shing1211/hstongapi4go/releases
+      {tag_name, name, target_commitish, body}      # tag already exists on Gitee
+    POST https://gitee.com/api/v5/repos/shing1211/hstongapi4go/releases/{id}/attach_files
+      multipart field: file                          # once per GitHub release asset
+    ```
+
+    Verify before calling it done: every Gitee copy must hash-match its GitHub
+    counterpart, and one archive's SHA-256 must equal the value published in
+    `checksums.txt`. Say plainly in the release body that **GitHub is the primary
+    download location**; the Gitee copies are a convenience mirror. The cosign
+    bundle travels with the artifacts, so `verify-blob` succeeds against either
+    copy — the certificate identity is bound to the release workflow at the tag
+    ref, not to the host the file was downloaded from.
 
 ## Post-release
 

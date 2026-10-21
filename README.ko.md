@@ -24,7 +24,7 @@
 [English](./README.md) · [简体中文](./README.zh-Hans.md) · [繁體中文](./README.zh-Hant.md) · [日本語](./README.ja.md) · [한국어](./README.ko.md) · [Español](./README.es.md)
 
 > 이 문서는 영어 [README](./README.md)의 커뮤니티 번역입니다. **영어판이 정본입니다.**
-> 동기화 / Last synced: 2026-09-30
+> 동기화 / Last synced: 2026-10-21
 
 ## 목차
 
@@ -62,7 +62,7 @@
 | 문서(README, MkDocs 사이트, ADR, SPEC, LEGACY) | 구현됨 |
 | 오프라인 테스트 + 전 엔드포인트 SDK 대 모의 e2e | 구현됨 |
 | 실제 Gateway 대상 통합 테스트 | 작성됨·환경 변수로 게이트됨. 실사용 확인은 사용자 실행 대기 |
-| 릴리스(GitHub,工件는 Gitee에 배포되지 않음을 결정으로 결정) | v1.0.3 |
+| 릴리스(GitHub를 주 대상으로,工件는 수동으로 Gitee에 미러링) | v1.0.3 |
 
 51개 HTTP 엔드포인트와 11개 시세 푸시 토픽이 모두 구현되었습니다. 수치는
 [docs/SPEC.md](./docs/SPEC.md)가 정본입니다. 다른 곳에서 수동으로 편집하지 마세요.

@@ -26,7 +26,7 @@
 [English](./README.md) · [简体中文](./README.zh-Hans.md) · [繁體中文](./README.zh-Hant.md) · [日本語](./README.ja.md) · [한국어](./README.ko.md) · [Español](./README.es.md)
 
 > Este documento es una traducción comunitaria del [README](./README.md) en inglés.
-> **La versión en inglés es la autoritativa.** Sincronizado / Last synced: 2026-09-30
+> **La versión en inglés es la autoritativa.** Sincronizado / Last synced: 2026-10-21
 
 ## Tabla de contenidos
 
@@ -64,7 +64,7 @@
 | Documentación (READMEs, sitio MkDocs, ADR, SPEC, LEGACY) | Implementado |
 | Pruebas offline + e2e SDK-a-mock de todos los endpoints | Implementado |
 | Pruebas de integración contra una pasarela real | Escritas y condicionadas por entorno; confirmación en vivo pendiente de ejecución del usuario |
-| Publicación (GitHub, los artefactos no se distribuyen en Gitee por decisión) | v1.0.3 |
+| Publicación (GitHub como principal; artefactos reflejados a Gitee a mano) | v1.0.3 |
 
 Los 51 endpoints HTTP y los 11 temas de push de mercado están implementados. Los
 recuentos son canónicos en [docs/SPEC.md](./docs/SPEC.md); no los edites a mano en

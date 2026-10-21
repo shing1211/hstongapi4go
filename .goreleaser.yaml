@@ -65,12 +65,18 @@
 # host, not a Gitea deployment GoReleaser can be pointed at.
 #
 # The git repository itself is already mirrored to Gitee and every tag is pushed
-# there, so source is available on both hosts; only the release artifacts are
-# GitHub-only. Mirroring those would mean calling the Gitee REST API from a
-# separate workflow step, which is a supply-chain and failure-mode decision that
-# needs its own ADR, plus a GITEE_TOKEN API secret this repository does not hold.
-# Git push credentials for the gitee remote are not a substitute: those
-# authenticate the git protocol, not the REST API.
+# there, so source is available on both hosts. The release artifacts are mirrored
+# to Gitee too, but by hand after the GitHub release is published — not from this
+# pipeline. GitHub stays the primary download location; the Gitee copies are a
+# convenience mirror.
+#
+# Automating that mirror is declined. A hand-written API step inside a workflow
+# would add a credential and a supply-chain surface to this repository in
+# exchange for download convenience rather than a security boundary, so no
+# GITEE_TOKEN API secret is held here and no workflow contacts Gitee. Git push
+# credentials for the gitee remote are not a substitute: those authenticate the
+# git protocol, not the REST API. The manual procedure is step 17 of
+# docs/RELEASE_CHECKLIST.md.
 
 version: 2
 
