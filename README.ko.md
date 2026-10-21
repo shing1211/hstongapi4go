@@ -3,7 +3,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Go-1.26+-00ADD8?style=flat-square&logo=go" alt="Go">
   <img src="https://img.shields.io/badge/License-Apache%202.0-blue?style=flat-square" alt="라이선스">
-  <img src="https://img.shields.io/badge/Status-alpha-blue?style=flat-square" alt="상태">
+  <img src="https://img.shields.io/badge/Status-stable-green?style=flat-square" alt="상태">
   <img src="https://img.shields.io/badge/Gateway-v2.4.1-brightgreen?style=flat-square" alt="Gateway 버전">
   <img src="https://img.shields.io/badge/Protobuf-v2.2.0-blueviolet?style=flat-square" alt="Protobuf 패키지 버전">
   <img src="https://img.shields.io/badge/Endpoints-51-orange?style=flat-square" alt="HTTP 엔드포인트">
@@ -11,7 +11,7 @@
   <a href="https://shing1211.github.io/hstongapi4go/"><img src="https://img.shields.io/badge/Docs-GitHub%20Pages-97CAFF?style=flat-square&logo=github" alt="문서"></a>
 </p>
 
-> **비공식 & 알파.** `hstongapi4go`는 HStong(華盛) Quant OpenAPI **로컬 Gateway**를
+> **비공식.** `hstongapi4go`는 HStong(華盛) Quant OpenAPI **로컬 Gateway**를
 > 위한 커뮤니티 Go SDK입니다. HStong / 華盛 및 그 자회사와 **제휴·승인·보증·후원
 > 관계가 전혀 없습니다**. "HStong", "華盛", "華盛通" 및 관련 명칭과 상표는 각 소유자의
 > 자산이며 여기서는 설명 및 상호운용 목적으로만 사용됩니다.
@@ -62,10 +62,17 @@
 | 문서(README, MkDocs 사이트, ADR, SPEC, LEGACY) | 구현됨 |
 | 오프라인 테스트 + 전 엔드포인트 SDK 대 모의 e2e | 구현됨 |
 | 실제 Gateway 대상 통합 테스트 | 작성됨·환경 변수로 게이트됨. 실사용 확인은 사용자 실행 대기 |
-| 릴리스(GitHub를 주 대상으로,工件는 수동으로 Gitee에 미러링) | v1.0.3 |
+| 릴리스(GitHub를 주 대상으로,工件는 수동으로 Gitee에 미러링) | v1.0.5 |
 
 51개 HTTP 엔드포인트와 11개 시세 푸시 토픽이 모두 구현되었습니다. 수치는
 [docs/SPEC.md](./docs/SPEC.md)가 정본입니다. 다른 곳에서 수동으로 편집하지 마세요.
+
+> **"안정"이 뜻하는 것과 뜻하지 않는 것.** 이 SDK는 v1.0.5이며 API가 안정적
+> (semver)이라 타입과 와이어 형식이 예기치 않게 바뀌지 않습니다. 다만,
+> 와이어 코덱이 실제 HStong Gateway에 대해 검증되었다는 뜻은 아닙니다: 시세
+> 데이터의 `int64` 표현은 **모의 Gateway** 에 대해서만 테스트되었습니다. 실제
+> 계정으로 하는 전체 검증 절차는
+> [docs/integration-testing.md](./docs/integration-testing.md) 에 문서화되어 있습니다.
 
 ## 설치
 

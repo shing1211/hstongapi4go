@@ -3,7 +3,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Go-1.26+-00ADD8?style=flat-square&logo=go" alt="Go">
   <img src="https://img.shields.io/badge/License-Apache%202.0-blue?style=flat-square" alt="Licencia">
-  <img src="https://img.shields.io/badge/Status-alpha-blue?style=flat-square" alt="Estado">
+  <img src="https://img.shields.io/badge/Status-stable-green?style=flat-square" alt="Estado">
   <img src="https://img.shields.io/badge/Gateway-v2.4.1-brightgreen?style=flat-square" alt="Versión de Gateway">
   <img src="https://img.shields.io/badge/Protobuf-v2.2.0-blueviolet?style=flat-square" alt="Versión del paquete Protobuf">
   <img src="https://img.shields.io/badge/Endpoints-51-orange?style=flat-square" alt="Endpoints HTTP">
@@ -11,7 +11,7 @@
   <a href="https://shing1211.github.io/hstongapi4go/"><img src="https://img.shields.io/badge/Docs-GitHub%20Pages-97CAFF?style=flat-square&logo=github" alt="Documentación"></a>
 </p>
 
-> **No oficial y alpha.** `hstongapi4go` es un SDK de Go de la comunidad para la
+> **No oficial.** `hstongapi4go` es un SDK de Go de la comunidad para la
 > **pasarela local** de HStong (华盛) Quant OpenAPI. **No está afiliado, autorizado,
 > respaldado ni patrocinado por** HStong / 华盛 (Huasheng) ni ninguna de sus filiales.
 > "HStong", "华盛", "华盛通" y los nombres y marcas relacionados son propiedad de sus
@@ -64,11 +64,19 @@
 | Documentación (READMEs, sitio MkDocs, ADR, SPEC, LEGACY) | Implementado |
 | Pruebas offline + e2e SDK-a-mock de todos los endpoints | Implementado |
 | Pruebas de integración contra una pasarela real | Escritas y condicionadas por entorno; confirmación en vivo pendiente de ejecución del usuario |
-| Publicación (GitHub como principal; artefactos reflejados a Gitee a mano) | v1.0.3 |
+| Publicación (GitHub como principal; artefactos reflejados a Gitee a mano) | v1.0.5 |
 
 Los 51 endpoints HTTP y los 11 temas de push de mercado están implementados. Los
 recuentos son canónicos en [docs/SPEC.md](./docs/SPEC.md); no los edites a mano en
 otro lugar.
+
+> **Qué significa "estable" y qué no.** El SDK está en v1.0.5 con una API estable
+> (semver), lo que significa que los tipos y las formas de cable no cambiarán de
+> forma inesperada. No significa que el códec del cable haya sido validado contra
+> una pasarela HStong real: la representación `int64` de las cargas de mercado solo
+> se ha probado contra la **pasarela simulada**. Un pase de validación completo
+> contra una cuenta real está documentado en
+> [docs/integration-testing.md](./docs/integration-testing.md).
 
 ## Instalación
 

@@ -3,7 +3,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Go-1.26+-00ADD8?style=flat-square&logo=go" alt="Go">
   <img src="https://img.shields.io/badge/License-Apache%202.0-blue?style=flat-square" alt="许可证">
-  <img src="https://img.shields.io/badge/Status-alpha-blue?style=flat-square" alt="状态">
+  <img src="https://img.shields.io/badge/Status-stable-green?style=flat-square" alt="状态">
   <img src="https://img.shields.io/badge/Gateway-v2.4.1-brightgreen?style=flat-square" alt="Gateway 版本">
   <img src="https://img.shields.io/badge/Protobuf-v2.2.0-blueviolet?style=flat-square" alt="Protobuf 包版本">
   <img src="https://img.shields.io/badge/Endpoints-51-orange?style=flat-square" alt="HTTP 端点">
@@ -11,7 +11,7 @@
   <a href="https://shing1211.github.io/hstongapi4go/"><img src="https://img.shields.io/badge/Docs-GitHub%20Pages-97CAFF?style=flat-square&logo=github" alt="文档"></a>
 </p>
 
-> **非官方 & 早期预览版。** `hstongapi4go` 是面向 HStong（华盛）Quant OpenAPI
+> **非官方。** `hstongapi4go` 是面向 HStong（华盛）Quant OpenAPI
 > **本地 Gateway** 的社区 Go SDK。它**与** HStong / 华盛及其任何子公司**无隶属、
 > 授权、背书或赞助关系**。"HStong"、"华盛"、"华盛通"及相关名称和商标归各自所有者
 > 所有，此处仅用于描述性和互操作性目的。参见 [DISCLAIMER.md](./DISCLAIMER.md)。
@@ -60,10 +60,16 @@
 | 文档（README、MkDocs 站点、ADR、SPEC、LEGACY） | 已实现 |
 | 离线测试 + 全端点 SDK 对 mock 的端到端测试 | 已实现 |
 | 针对真实 Gateway 的集成测试 | 已编写并按环境变量门控；待用户实际运行确认 |
-| 发布（以 GitHub 为主；工件由人工镜像至 Gitee） | v1.0.3 |
+| 发布（以 GitHub 为主；工件由人工镜像至 Gitee） | v1.0.5 |
 
 全部 51 个 HTTP 端点和 11 个行情推送主题均已实现。计数以
 [docs/SPEC.md](./docs/SPEC.md) 为准；请勿在其他地方手动修改。
+
+> **“稳定”意味着什么、不意味着什么。** SDK 目前为 v1.0.5，API 稳定（semver），
+> 也就是说类型和线上格式不会意外改变。但这**不**表示线上编解码器已针对真实的
+> HStong Gateway 验证过：行情数据中的 `int64` 表示目前只针对 **Mock Gateway**
+> 测试过。针对真实账户的完整验证流程记录在
+> [docs/integration-testing.md](./docs/integration-testing.md)。
 
 ## 安装
 
