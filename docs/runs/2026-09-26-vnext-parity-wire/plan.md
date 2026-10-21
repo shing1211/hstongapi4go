@@ -20,8 +20,9 @@ the existing services, wiring v-next behind an opt-in constructor, deprecating
 `pkg/hstong/*` per ADR 0010/0011, and the documentation that ships with that.
 
 Out of scope: `frontend`, `data`, and `security` roles. This is a Go library. The
-Gitee artifact mirror is declined (no GoReleaser publisher exists; source and all
-13 tags are already mirrored).
+Gitee artifact mirror is not automated (no GoReleaser publisher exists; source and
+all 13 tags are already mirrored). Artifacts are mirrored by hand after
+publication — see `docs/RELEASE_CHECKLIST.md` step 17.
 
 ## Assumptions
 

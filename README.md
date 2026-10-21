@@ -26,7 +26,7 @@
 
 [English](./README.md) · [简体中文](./README.zh-Hans.md) · [繁體中文](./README.zh-Hant.md) · [日本語](./README.ja.md) · [한국어](./README.ko.md) · [Español](./README.es.md)
 
-> Canonical English source. Last synced: 2026-09-30
+> Canonical English source. Last synced: 2026-10-21
 
 ## Key Concepts
 
@@ -86,7 +86,7 @@ Before writing your first call, understand these SDK abstractions:
 | Threat model and risk register | [docs/threat-model.md](./docs/threat-model.md); 7 adversarial defects found and fixed |
 | Enterprise CI (lint, security, coverage gate, SBOM, GoReleaser config) | 13 jobs green |
 | v-next layer (`pkg/domain`, `pkg/services`, `pkg/transport`, `internal/auth`) | Implemented, tested, and **feature-complete at 51/51 endpoints** — opt in via [`services.NewStack`](#migrating-to-v10); `pkg/hstong/*` stays the default |
-| Release (GitHub only; artifacts declined on Gitee by decision) | v1.0.3 |
+| Release (GitHub primary; artifacts mirrored to Gitee by hand) | v1.0.3 |
 
 All 51 HTTP endpoints and 11 market push topics are implemented. Counts are
 canonical in [docs/SPEC.md](./docs/SPEC.md); do not hand-edit them elsewhere.

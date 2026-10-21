@@ -24,7 +24,7 @@
 [English](./README.md) · [简体中文](./README.zh-Hans.md) · [繁體中文](./README.zh-Hant.md) · [日本語](./README.ja.md) · [한국어](./README.ko.md) · [Español](./README.es.md)
 
 > 本書は英語版 [README](./README.md) のコミュニティ翻訳です。**英語版が正式です。**
-> 同期 / Last synced: 2026-09-30
+> 同期 / Last synced: 2026-10-21
 
 ## 目次
 
@@ -61,7 +61,7 @@
 | ドキュメント（README、MkDocs サイト、ADR、SPEC、LEGACY） | 実装済み |
 | オフラインテスト + 全エンドポイントの SDK 対モック e2e | 実装済み |
 | 実 Gateway に対する統合テスト | 作成済み・環境変数でゲート。実機確認はユーザー実行待ち |
-| リリース（GitHub、工件は Gitee には配布しないことを决定的に決定） | v1.0.3 |
+| リリース（GitHub を主とし、工件は手作業で Gitee にミラー） | v1.0.3 |
 
 51 の HTTP エンドポイントと 11 の相場配信トピックがすべて実装済みです。件数は
 [docs/SPEC.md](./docs/SPEC.md) が正式です。他の場所で手動編集しないでください。

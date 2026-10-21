@@ -114,6 +114,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Documentation
 
+- **The Gitee mirror now carries the release artifacts, mirrored by hand.**
+  `v1.0.5` is published on Gitee with the same 14 assets as GitHub — the six
+  platform archives, their SPDX SBOMs, the checksum file, and its cosign bundle
+  — byte-identical to the GitHub copies. GitHub remains the primary download
+  location and the Gitee release body says so; the Gitee copies exist for
+  convenience. `cosign verify-blob` succeeds against either copy, because the
+  certificate identity is bound to the release workflow at the tag ref rather
+  than to the host the file came from.
+
+  The mirror is performed manually after the GitHub release is published and is
+  deliberately **not** automated: an API step inside a workflow would put a
+  Gitee credential and a new supply-chain surface in this repository, which is a
+  worse trade than a manual step. No `GITEE_TOKEN` secret is held here and no
+  workflow contacts Gitee. The manual procedure is step 17 of
+  `docs/RELEASE_CHECKLIST.md`.
 - **`ARCHITECTURE.md` §2 is regenerated from a fresh code graph.** The index had
   drifted to **102 commits behind** (`eb00cbd` against `3b38e43`) and the section
   was left stale rather than invented when E2 closed — the note explaining that

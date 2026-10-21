@@ -4,6 +4,13 @@ This guide explains how to cryptographically verify that the binary archives
 published on the [GitHub Releases](https://github.com/shing1211/hstongapi4go/releases)
 page were built by this repository's CI and have not been tampered with.
 
+GitHub is the primary download location. The same artifacts are also mirrored to
+[Gitee](https://gitee.com/shing1211/hstongapi4go/releases) for convenience, and
+verification works identically there: the cosign certificate identity is bound to
+the release workflow at the tagged ref, not to the host the file came from. A
+successful verification therefore says the archive came from this repository's CI
+whichever host served it.
+
 ## What is signed
 
 Only the **checksums file** is signed. That file covers every archive produced
